@@ -1,17 +1,20 @@
 """Service layer for Codebase MCP Server.
 
 This module exports all service implementations for repository indexing,
-code chunking, and embedding generation.
+code chunking, embedding generation, semantic search, and task management.
 
 Service Organization:
 - scanner: File scanning with ignore pattern support
 - chunker: Tree-sitter AST-based code chunking
 - embedder: Ollama embedding generation with retry logic
+- searcher: Semantic code search with pgvector similarity
+- tasks: Task CRUD with git integration and status history
 
 Constitutional Compliance:
-- Principle IV: Performance (async operations, caching, batching)
-- Principle V: Production quality (error handling, retry logic, validation)
+- Principle IV: Performance (async operations, caching, batching, <500ms search)
+- Principle V: Production quality (error handling, retry logic, validation, audit trails)
 - Principle VIII: Type safety (full mypy --strict compliance)
+- Principle X: Git micro-commits (branch/commit tracking)
 """
 
 # Scanner service
@@ -39,6 +42,20 @@ from .embedder import (
     validate_ollama_connection,
 )
 
+# Searcher service
+from .searcher import SearchFilter, SearchResult, search_code
+
+# Tasks service
+from .tasks import (
+    InvalidCommitHashError,
+    InvalidStatusError,
+    TaskNotFoundError,
+    create_task,
+    get_task,
+    list_tasks,
+    update_task,
+)
+
 __all__ = [
     # Scanner
     "ChangeSet",
@@ -60,4 +77,16 @@ __all__ = [
     "validate_ollama_connection",
     "generate_embedding",
     "generate_embeddings",
+    # Searcher
+    "SearchFilter",
+    "SearchResult",
+    "search_code",
+    # Tasks
+    "TaskNotFoundError",
+    "InvalidStatusError",
+    "InvalidCommitHashError",
+    "create_task",
+    "get_task",
+    "list_tasks",
+    "update_task",
 ]
