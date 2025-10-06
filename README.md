@@ -32,7 +32,7 @@ The Codebase MCP Server provides semantic code search capabilities through a foc
 createdb codebase_mcp
 
 # Initialize schema
-psql -d codebase_mcp -f init_tables.sql
+psql -d codebase_mcp -f db/init_tables.sql
 ```
 
 ### 2. Install Dependencies
@@ -71,10 +71,10 @@ ollama pull nomic-embed-text
 ### 5. Test
 ```bash
 # Test database and tools
-uv run python test_tool_handlers.py
+uv run python tests/test_tool_handlers.py
 
 # Test repository indexing
-uv run python test_embeddings.py
+uv run python tests/test_embeddings.py
 ```
 
 ## Current Status
@@ -188,10 +188,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
 
 ## Documentation
 
-- **[MCP_SERVER_STATUS.md](MCP_SERVER_STATUS.md)** - Current status, test results, configuration
-- **[SESSION_HANDOFF.md](SESSION_HANDOFF.md)** - Recent problems solved, current working state
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions with troubleshooting
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and data flow
+- **[docs/status/MCP_SERVER_STATUS.md](docs/status/MCP_SERVER_STATUS.md)** - Current status, test results, configuration
+- **[docs/status/SESSION_HANDOFF.md](docs/status/SESSION_HANDOFF.md)** - Recent problems solved, current working state
+- **[docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md)** - Complete setup instructions with troubleshooting
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and data flow
 - **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
 
 ## Database Schema
@@ -205,7 +205,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
 - `tasks` - Development tasks with git tracking
 - `task_status_history` - Audit trail
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for complete schema documentation.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete schema documentation.
 
 ## Technology Stack
 
@@ -220,10 +220,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for complete schema documentation.
 ### Running Tests
 ```bash
 # Tool handlers
-uv run python test_tool_handlers.py
+uv run python tests/test_tool_handlers.py
 
 # Repository indexing
-uv run python test_embeddings.py
+uv run python tests/test_embeddings.py
 
 # Unit tests
 uv run pytest tests/ -v
@@ -710,7 +710,7 @@ EMBEDDING_BATCH_SIZE=25      # For constrained environments
    - Monitor query performance: See logs at LOG_FILE path
    - Adjust batch sizes and connection pool
 
-For detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md).
+For detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md) and [docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md).
 
 ## Contributing
 
