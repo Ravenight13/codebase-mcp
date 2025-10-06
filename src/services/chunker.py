@@ -27,7 +27,7 @@ from tree_sitter import Language, Node, Parser, Tree
 import tree_sitter_python
 import tree_sitter_javascript
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.models import CodeChunkCreate
 
 # ==============================================================================

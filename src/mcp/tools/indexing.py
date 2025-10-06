@@ -17,7 +17,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.mcp.server import OperationError, ValidationError as MCPValidationError
 from src.services.indexer import IndexResult, index_repository
 
@@ -33,9 +33,8 @@ logger = get_logger(__name__)
 
 
 async def index_repository_tool(
-    path: str,
-    name: str,
     db: AsyncSession,
+    repo_path: str,
     force_reindex: bool = False,
 ) -> dict[str, Any]:
     """Index a code repository for semantic search.
@@ -44,9 +43,8 @@ async def index_repository_tool(
     scanning, chunking, embedding generation, and storage.
 
     Args:
-        path: Absolute path to repository directory (required)
-        name: Display name for repository (required)
         db: Async database session (injected by dependency)
+        repo_path: Absolute path to repository directory (required)
         force_reindex: Force full re-index even if already indexed (default: False)
 
     Returns:
@@ -68,11 +66,15 @@ async def index_repository_tool(
         Target: <60 seconds for 10,000 files
         Uses batching for files (100/batch) and embeddings (50/batch)
     """
+    # Derive name from directory name
+    path_obj = Path(repo_path)
+    name = path_obj.name or "repository"
+    
     logger.info(
         "index_repository tool called",
         extra={
             "context": {
-                "path": path,
+                "repo_path": repo_path,
                 "name": name,
                 "force_reindex": force_reindex,
             }
@@ -82,62 +84,44 @@ async def index_repository_tool(
     # Validate input parameters
     try:
         # Validate path
-        if not path or not path.strip():
+        if not repo_path or not repo_path.strip():
             raise MCPValidationError(
                 "Repository path cannot be empty",
-                details={"parameter": "path", "value": path},
+                details={"parameter": "repo_path", "value": repo_path},
             )
 
-        repo_path = Path(path)
+        path_obj = Path(repo_path)
 
         # Check if path is absolute
-        if not repo_path.is_absolute():
+        if not path_obj.is_absolute():
             raise MCPValidationError(
-                f"Repository path must be absolute: {path}",
+                f"Repository path must be absolute: {repo_path}",
                 details={
-                    "parameter": "path",
-                    "value": path,
+                    "parameter": "repo_path",
+                    "value": repo_path,
                     "expected": "absolute path",
                 },
             )
 
         # Check if path exists
-        if not repo_path.exists():
+        if not path_obj.exists():
             raise MCPValidationError(
-                f"Repository path does not exist: {path}",
+                f"Repository path does not exist: {repo_path}",
                 details={
-                    "parameter": "path",
-                    "value": path,
+                    "parameter": "repo_path",
+                    "value": repo_path,
                     "error": "path not found",
                 },
             )
 
         # Check if path is a directory
-        if not repo_path.is_dir():
+        if not path_obj.is_dir():
             raise MCPValidationError(
-                f"Repository path must be a directory: {path}",
+                f"Repository path must be a directory: {repo_path}",
                 details={
-                    "parameter": "path",
-                    "value": path,
+                    "parameter": "repo_path",
+                    "value": repo_path,
                     "error": "not a directory",
-                },
-            )
-
-        # Validate name
-        if not name or not name.strip():
-            raise MCPValidationError(
-                "Repository name cannot be empty",
-                details={"parameter": "name", "value": name},
-            )
-
-        # Name length validation (reasonable limit)
-        if len(name) > 200:
-            raise MCPValidationError(
-                f"Repository name too long (max 200 characters): {len(name)}",
-                details={
-                    "parameter": "name",
-                    "length": len(name),
-                    "max_length": 200,
                 },
             )
 
@@ -150,7 +134,7 @@ async def index_repository_tool(
             "Unexpected error during input validation",
             extra={
                 "context": {
-                    "path": path,
+                    "repo_path": repo_path,
                     "name": name,
                     "error": str(e),
                 }
@@ -164,7 +148,7 @@ async def index_repository_tool(
     # Perform indexing
     try:
         result: IndexResult = await index_repository(
-            repo_path=repo_path,
+            repo_path=path_obj,
             name=name,
             db=db,
             force_reindex=force_reindex,
@@ -174,7 +158,7 @@ async def index_repository_tool(
             "Indexing operation failed critically",
             extra={
                 "context": {
-                    "path": path,
+                    "repo_path": repo_path,
                     "name": name,
                     "force_reindex": force_reindex,
                     "error": str(e),
@@ -184,7 +168,7 @@ async def index_repository_tool(
         raise OperationError(
             f"Failed to index repository: {e}",
             details={
-                "path": path,
+                "repo_path": repo_path,
                 "name": name,
                 "error": str(e),
             },

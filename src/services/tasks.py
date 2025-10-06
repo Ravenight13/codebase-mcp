@@ -22,7 +22,7 @@ Key Features:
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Final
 from uuid import UUID
 
@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.models import (
     Task,
     TaskBranchLink,
@@ -207,7 +207,7 @@ async def create_task(db: AsyncSession, task_data: TaskCreate) -> TaskResponse:
             task_id=task.id,
             from_status=None,
             to_status="need to be done",
-            changed_at=datetime.now(timezone.utc),
+            changed_at=datetime.utcnow(),
         )
         db.add(history)
 
@@ -482,7 +482,7 @@ async def update_task(
                 task_id=task.id,
                 from_status=old_status,
                 to_status=update_data.status,
-                changed_at=datetime.now(timezone.utc),
+                changed_at=datetime.utcnow(),
             )
             db.add(history)
 

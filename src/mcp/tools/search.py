@@ -19,7 +19,7 @@ from uuid import UUID
 from pydantic import Field, ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.mcp.server import ValidationError as MCPValidationError
 from src.services import SearchFilter, SearchResult, search_code
 
@@ -35,8 +35,8 @@ logger = get_logger(__name__)
 
 
 async def search_code_tool(
-    query: str,
     db: AsyncSession,
+    query: str,
     repository_id: str | None = None,
     file_type: str | None = None,
     directory: str | None = None,

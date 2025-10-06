@@ -20,9 +20,9 @@ from uuid import UUID
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.mcp.server import NotFoundError, ValidationError as MCPValidationError
-from src.models import Task
+from src.models import Task, TaskCreate, TaskResponse, TaskUpdate
 from src.services import (
     InvalidCommitHashError,
     InvalidStatusError,
@@ -47,34 +47,26 @@ VALID_STATUSES: set[str] = {"need to be done", "in-progress", "complete"}
 # ==============================================================================
 
 
-def _task_to_dict(task: Task) -> dict[str, Any]:
-    """Convert Task model to MCP contract dictionary.
+def _task_to_dict(task_response: TaskResponse) -> dict[str, Any]:
+    """Convert TaskResponse to MCP contract dictionary.
 
     Args:
-        task: Task model instance
+        task_response: TaskResponse Pydantic model
 
     Returns:
         Dictionary matching MCP contract Task definition
     """
     return {
-        "id": str(task.id),
-        "title": task.title,
-        "description": task.description,
-        "notes": task.notes,
-        "status": task.status,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
-        "planning_references": task.planning_references or [],
-        "branches": task.branches or [],
-        "commits": task.commits or [],
-        "status_history": [
-            {
-                "from_status": entry["from_status"],
-                "to_status": entry["to_status"],
-                "changed_at": entry["changed_at"],
-            }
-            for entry in (task.status_history or [])
-        ],
+        "id": str(task_response.id),
+        "title": task_response.title,
+        "description": task_response.description,
+        "notes": task_response.notes,
+        "status": task_response.status,
+        "created_at": task_response.created_at.isoformat(),
+        "updated_at": task_response.updated_at.isoformat(),
+        "planning_references": task_response.planning_references,
+        "branches": task_response.branches,
+        "commits": task_response.commits,
     }
 
 
@@ -84,8 +76,8 @@ def _task_to_dict(task: Task) -> dict[str, Any]:
 
 
 async def get_task_tool(
-    task_id: str,
     db: AsyncSession,
+    task_id: str,
 ) -> dict[str, Any]:
     """Retrieve a development task by ID.
 
@@ -126,7 +118,7 @@ async def get_task_tool(
 
     # Retrieve task
     try:
-        task = await get_task(task_uuid, db)
+        task_response = await get_task(db, task_uuid)
     except TaskNotFoundError as e:
         raise NotFoundError(
             f"Task not found: {task_id}",
@@ -139,8 +131,15 @@ async def get_task_tool(
         )
         raise
 
+    # Check if task exists
+    if task_response is None:
+        raise NotFoundError(
+            f"Task not found: {task_id}",
+            details={"task_id": task_id},
+        )
+
     # Convert to response format
-    response = _task_to_dict(task)
+    response = _task_to_dict(task_response)
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -263,8 +262,8 @@ async def list_tasks_tool(
 
 
 async def create_task_tool(
-    title: str,
     db: AsyncSession,
+    title: str,
     description: str | None = None,
     notes: str | None = None,
     planning_references: list[str] | None = None,
@@ -318,15 +317,23 @@ async def create_task_tool(
             },
         )
 
-    # Create task
+    # Construct TaskCreate model
     try:
-        task = await create_task(
-            db=db,
+        task_data = TaskCreate(
             title=title,
             description=description,
             notes=notes,
-            planning_references=planning_references,
+            planning_references=planning_references or [],
         )
+    except PydanticValidationError as e:
+        raise MCPValidationError(
+            f"Invalid task data: {e}",
+            details={"validation_errors": e.errors()},
+        ) from e
+
+    # Create task
+    try:
+        task_response = await create_task(db=db, task_data=task_data)
     except Exception as e:
         logger.error(
             "Failed to create task",
@@ -340,7 +347,7 @@ async def create_task_tool(
         raise
 
     # Convert to response format
-    response = _task_to_dict(task)
+    response = _task_to_dict(task_response)
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -348,7 +355,7 @@ async def create_task_tool(
         "create_task completed successfully",
         extra={
             "context": {
-                "task_id": str(task.id),
+                "task_id": str(task_response.id),
                 "title": title[:100],
                 "latency_ms": latency_ms,
             }
@@ -359,8 +366,8 @@ async def create_task_tool(
 
 
 async def update_task_tool(
-    task_id: str,
     db: AsyncSession,
+    task_id: str,
     title: str | None = None,
     description: str | None = None,
     notes: str | None = None,
@@ -448,15 +455,26 @@ async def update_task_tool(
             },
         )
 
-    # Update task
+    # Construct TaskUpdate model
     try:
-        task = await update_task(
-            task_id=task_uuid,
-            db=db,
+        task_update = TaskUpdate(
             title=title,
             description=description,
             notes=notes,
             status=status_literal,
+        )
+    except PydanticValidationError as e:
+        raise MCPValidationError(
+            f"Invalid task update data: {e}",
+            details={"validation_errors": e.errors()},
+        ) from e
+
+    # Update task
+    try:
+        task_response = await update_task(
+            db=db,
+            task_id=task_uuid,
+            update_data=task_update,
             branch=branch,
             commit=commit,
         )
@@ -488,7 +506,7 @@ async def update_task_tool(
         raise
 
     # Convert to response format
-    response = _task_to_dict(task)
+    response = _task_to_dict(task_response)
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 

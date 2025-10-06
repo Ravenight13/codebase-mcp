@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.config.settings import get_settings
-from src.mcp.logging import configure_logging, get_logger
+from src.mcp.mcp_logging import configure_logging, get_logger
 from src.mcp.server import (
     MCPError,
     NotFoundError,

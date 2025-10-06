@@ -24,7 +24,7 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import Tool
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 
 # ==============================================================================
 # Constants

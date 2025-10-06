@@ -32,7 +32,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.mcp.server import MCPError, NotFoundError, OperationError, ValidationError
 
 # ==============================================================================

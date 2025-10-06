@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Final, Iterator, Literal, Sequence, TypeVar
 from uuid import UUID
@@ -36,7 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.models import (
     ChangeEvent,
     CodeChunk,
@@ -232,7 +232,7 @@ async def _create_code_files(
         # Get file metadata
         stat = file_path.stat()
         size_bytes = stat.st_size
-        modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        modified_at = datetime.utcfromtimestamp(stat.st_mtime)
 
         # Compute content hash
         content_hash = await compute_file_hash(file_path)
@@ -256,7 +256,7 @@ async def _create_code_files(
             existing_file.size_bytes = size_bytes
             existing_file.language = language
             existing_file.modified_at = modified_at
-            existing_file.indexed_at = datetime.now(timezone.utc)
+            existing_file.indexed_at = datetime.utcnow()
             existing_file.is_deleted = False
             existing_file.deleted_at = None
             file_ids.append(existing_file.id)
@@ -280,7 +280,7 @@ async def _create_code_files(
                 size_bytes=size_bytes,
                 language=language,
                 modified_at=modified_at,
-                indexed_at=datetime.now(timezone.utc),
+                indexed_at=datetime.utcnow(),
                 is_deleted=False,
             )
             db.add(code_file)
@@ -341,7 +341,7 @@ async def _mark_files_deleted(
 
         if code_file is not None:
             code_file.is_deleted = True
-            code_file.deleted_at = datetime.now(timezone.utc)
+            code_file.deleted_at = datetime.utcnow()
 
             logger.debug(
                 f"Marked file as deleted: {file_path}",
@@ -384,7 +384,7 @@ async def _create_change_events(
             event = ChangeEvent(
                 code_file_id=code_file.id,
                 event_type="added",
-                detected_at=datetime.now(timezone.utc),
+                detected_at=datetime.utcnow(),
                 processed=True,  # Already processed by indexer
             )
             db.add(event)
@@ -406,7 +406,7 @@ async def _create_change_events(
             event = ChangeEvent(
                 code_file_id=code_file.id,
                 event_type="modified",
-                detected_at=datetime.now(timezone.utc),
+                detected_at=datetime.utcnow(),
                 processed=True,
             )
             db.add(event)
@@ -427,7 +427,7 @@ async def _create_change_events(
             event = ChangeEvent(
                 code_file_id=code_file.id,
                 event_type="deleted",
-                detected_at=datetime.now(timezone.utc),
+                detected_at=datetime.utcnow(),
                 processed=True,
             )
             db.add(event)
@@ -464,7 +464,7 @@ async def _create_embedding_metadata(
         model_version=None,  # TODO: Get from Ollama API if available
         dimensions=768,  # nomic-embed-text output dimension
         generation_time_ms=avg_time_ms,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.utcnow(),
     )
     db.add(metadata)
 
@@ -593,7 +593,7 @@ async def index_repository(
             )
 
             # Update repository metadata
-            repository.last_indexed_at = datetime.now(timezone.utc)
+            repository.last_indexed_at = datetime.utcnow()
             await db.commit()
 
             duration = time.perf_counter() - start_time
@@ -769,7 +769,7 @@ async def index_repository(
             )
 
         # 7. Update repository metadata
-        repository.last_indexed_at = datetime.now(timezone.utc)
+        repository.last_indexed_at = datetime.utcnow()
 
         # 8. Commit transaction
         await db.commit()

@@ -26,7 +26,7 @@ import httpx
 from pydantic import BaseModel, Field, field_validator
 
 from src.config.settings import get_settings
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 
 # ==============================================================================
 # Constants

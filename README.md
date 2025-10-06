@@ -24,6 +24,233 @@ The Codebase MCP Server provides semantic code search capabilities through a foc
 5. **create_task**: Create a new development task
 6. **update_task**: Update task status with git integration
 
+## Quick Start
+
+### 1. Database Setup
+```bash
+# Create database
+createdb codebase_mcp
+
+# Initialize schema
+psql -d codebase_mcp -f init_tables.sql
+```
+
+### 2. Install Dependencies
+```bash
+uv sync
+```
+
+### 3. Configure Claude Desktop
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "codebase-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "anthropic-mcp",
+        "python",
+        "/absolute/path/to/codebase-mcp/src/mcp/mcp_stdio_server_v3.py"
+      ]
+    }
+  }
+}
+```
+
+**Important:** Use absolute paths!
+
+### 4. Start Ollama
+```bash
+ollama serve
+ollama pull nomic-embed-text
+```
+
+### 5. Test
+```bash
+# Test database and tools
+uv run python test_tool_handlers.py
+
+# Test repository indexing
+uv run python test_embeddings.py
+```
+
+## Current Status
+
+### Working Tools (6/6) ✅
+
+| Tool | Status | Description |
+|------|--------|-------------|
+| `create_task` | ✅ Working | Create development tasks with planning references |
+| `get_task` | ✅ Working | Retrieve task by ID |
+| `list_tasks` | ✅ Working | List tasks with filters (status, branch) |
+| `update_task` | ✅ Working | Update tasks with git tracking (branch, commit) |
+| `index_repository` | ✅ Working | Index code repositories with semantic chunking |
+| `search_code` | ✅ Working | Semantic code search with pgvector similarity |
+
+### Recent Fixes (Oct 6, 2025)
+- ✅ Parameter passing architecture (Pydantic models)
+- ✅ MCP schema mismatches (status enums, missing parameters)
+- ✅ Timezone/datetime compatibility (PostgreSQL)
+- ✅ Binary file filtering (images, cache dirs)
+
+### Test Results
+```
+✅ Task Management: 7/7 tests passed
+✅ Repository Indexing: 2 files indexed, 6 chunks created
+✅ Embeddings: 100% coverage (768-dim vectors)
+✅ Database: Connection pooling, async operations working
+```
+
+## Tool Usage Examples
+
+### Create a Task
+In Claude Desktop:
+```
+Create a task called "Implement user authentication" with description "Add JWT-based authentication to the API"
+```
+
+Response:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Implement user authentication",
+  "description": "Add JWT-based authentication to the API",
+  "status": "need to be done",
+  "created_at": "2025-10-06T21:30:00",
+  "planning_references": []
+}
+```
+
+### Index a Repository
+```
+Index the repository at /Users/username/projects/myapp
+```
+
+Response:
+```json
+{
+  "repository_id": "abc123...",
+  "files_indexed": 234,
+  "chunks_created": 1456,
+  "duration_seconds": 12.5,
+  "status": "success"
+}
+```
+
+### Search Code
+```
+Search for "authentication middleware" in Python files
+```
+
+Response:
+```json
+{
+  "results": [
+    {
+      "file_path": "src/middleware/auth.py",
+      "content": "def authenticate_request(request):\n    ...",
+      "start_line": 45,
+      "similarity_score": 0.92
+    }
+  ],
+  "total_count": 5,
+  "latency_ms": 250
+}
+```
+
+### Track Task with Git
+```
+Update task abc123 to status "in-progress" and link it to branch "feature/auth"
+```
+
+Response:
+```json
+{
+  "id": "abc123...",
+  "status": "in-progress",
+  "branches": ["feature/auth"],
+  "commits": []
+}
+```
+
+## Architecture
+
+```
+Claude Desktop ↔ MCP Server ↔ Tool Handlers ↔ Services ↔ PostgreSQL
+                                                    ↓
+                                                 Ollama (embeddings)
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
+
+## Documentation
+
+- **[MCP_SERVER_STATUS.md](MCP_SERVER_STATUS.md)** - Current status, test results, configuration
+- **[SESSION_HANDOFF.md](SESSION_HANDOFF.md)** - Recent problems solved, current working state
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions with troubleshooting
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and data flow
+- **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
+
+## Database Schema
+
+11 tables with pgvector for semantic search:
+
+**Core Tables:**
+- `repositories` - Indexed repositories
+- `code_files` - Source files with metadata
+- `code_chunks` - Semantic chunks with embeddings (vector(768))
+- `tasks` - Development tasks with git tracking
+- `task_status_history` - Audit trail
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for complete schema documentation.
+
+## Technology Stack
+
+- **Server:** Python 3.13+, MCP SDK, FastAPI patterns
+- **Database:** PostgreSQL 14+ with pgvector extension
+- **Embeddings:** Ollama (nomic-embed-text, 768 dimensions)
+- **ORM:** SQLAlchemy 2.0 (async), Pydantic for validation
+- **Type Safety:** Full mypy --strict compliance
+
+## Development
+
+### Running Tests
+```bash
+# Tool handlers
+uv run python test_tool_handlers.py
+
+# Repository indexing
+uv run python test_embeddings.py
+
+# Unit tests
+uv run pytest tests/ -v
+```
+
+### Code Structure
+```
+src/
+├── mcp/
+│   ├── mcp_stdio_server_v3.py    # MCP server entry point
+│   └── tools/                     # Tool handlers
+│       ├── tasks.py               # Task management
+│       ├── indexing.py            # Repository indexing
+│       └── search.py              # Semantic search
+├── services/                      # Business logic layer
+│   ├── tasks.py                   # Task CRUD + git tracking
+│   ├── indexer.py                 # Indexing orchestration
+│   ├── scanner.py                 # File discovery
+│   ├── chunker.py                 # AST-based chunking
+│   ├── embedder.py                # Ollama integration
+│   └── searcher.py                # pgvector similarity search
+└── models/                        # Database models + Pydantic schemas
+    ├── task.py                    # Task, TaskCreate, TaskUpdate
+    ├── code_chunk.py              # CodeChunk
+    └── ...
+```
+
 ## Prerequisites
 
 ### System Requirements

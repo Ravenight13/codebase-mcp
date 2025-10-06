@@ -1,5 +1,31 @@
 #!/usr/bin/env python3
-"""MCP Server with stdio transport (JSON-RPC over stdin/stdout).
+"""
+===============================================================================
+⚠️  DEPRECATED - DO NOT USE THIS FILE ⚠️
+===============================================================================
+
+This file is kept for reference only. It was an attempt to build a custom
+JSON-RPC server, but it does NOT speak the MCP protocol correctly.
+
+✅ USE INSTEAD: src/mcp/mcp_stdio_server.py
+
+WHY THIS FAILS:
+1. Protocol Mismatch - Claude Desktop expects MCP protocol (initialize, 
+   tools/list, tools/call), but this only handles raw method names
+2. No Tool Discovery - Claude can't see what tools are available
+3. Broken DB Sessions - Misuses async generators, sessions leak
+4. Missing Features - No parameter validation, error handling, etc.
+
+READ THESE DOCS:
+- EXECUTIVE_SUMMARY.md - Quick overview of the fix
+- MCP_STDIO_FIX.md - Detailed troubleshooting guide  
+- WRONG_VS_RIGHT.md - Side-by-side comparison of mistakes
+
+===============================================================================
+
+ORIGINAL DOCSTRING (for reference):
+
+MCP Server with stdio transport (JSON-RPC over stdin/stdout).
 
 This module provides stdio transport for the MCP server, allowing CLI and
 command-line clients to interact via JSON-RPC 2.0 over stdin/stdout.
@@ -31,7 +57,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db, init_db_connection
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.mcp.tools import (
     create_task_tool,
     get_task_tool,

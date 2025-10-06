@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from src.mcp.logging import (
+from src.mcp.mcp_logging import (
     JSONFormatter,
     LoggerManager,
     StructuredLogger,

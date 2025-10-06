@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.mcp.logging import get_logger, get_structured_logger
+from src.mcp.mcp_logging import get_logger, get_structured_logger
 
 
 def example_basic_logging() -> None:
@@ -76,7 +76,7 @@ def example_performance_logging() -> None:
 
 def example_custom_configuration() -> None:
     """Example: Custom logging configuration."""
-    from src.mcp.logging import configure_logging
+    from src.mcp.mcp_logging import configure_logging
     import logging
 
     # Configure with custom settings

@@ -278,7 +278,7 @@ def get_logger(name: str) -> logging.Logger:
         Configured logger instance with structured JSON output
 
     Example:
-        >>> from src.mcp.logging import get_logger
+        >>> from src.mcp.mcp_logging import get_logger
         >>> logger = get_logger(__name__)
         >>> logger.info("Repository indexed", extra={"context": {"repo_id": "123"}})
     """

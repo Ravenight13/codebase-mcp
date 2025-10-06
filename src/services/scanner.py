@@ -31,7 +31,7 @@ from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.models import CodeFile
 
 # ==============================================================================
@@ -42,20 +42,61 @@ logger = get_logger(__name__)
 
 # Default ignore patterns (always applied)
 DEFAULT_IGNORE_PATTERNS: Final[list[str]] = [
+    # Python bytecode and cache
     "__pycache__/",
     "*.pyc",
     "*.pyo",
     "*.pyd",
+    # Version control
     ".git/",
     ".svn/",
     ".hg/",
+    # Dependencies
     "node_modules/",
     ".venv/",
     "venv/",
     ".env",
     "*.egg-info/",
+    # Build artifacts
     "build/",
     "dist/",
+    # Cache and coverage
+    ".ruff_cache/",
+    ".pytest_cache/",
+    "htmlcov/",
+    ".coverage",
+    ".coverage.*",
+    # Binary files - Images
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.webp",
+    "*.ico",
+    "*.bmp",
+    "*.svg",
+    # Binary files - Compiled/Native
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.exe",
+    "*.bin",
+    "*.obj",
+    "*.o",
+    # Binary files - Archives
+    "*.zip",
+    "*.tar",
+    "*.tar.gz",
+    "*.tgz",
+    "*.rar",
+    "*.7z",
+    # Binary files - Media
+    "*.mp4",
+    "*.mp3",
+    "*.wav",
+    "*.avi",
+    "*.mov",
+    # System files
     ".DS_Store",
     "Thumbs.db",
 ]

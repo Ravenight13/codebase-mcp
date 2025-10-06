@@ -30,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
-from src.mcp.logging import get_logger
+from src.mcp.mcp_logging import get_logger
 from src.models import CodeChunk, CodeFile
 from src.services.embedder import generate_embedding
 
