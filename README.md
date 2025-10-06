@@ -11,7 +11,7 @@ The Codebase MCP Server provides semantic code search capabilities through a foc
 - **Semantic Code Search**: Natural language queries across indexed repositories
 - **Repository Indexing**: Fast scanning and chunking with tree-sitter parsers
 - **Task Management**: Development task tracking with git integration
-- **MCP Protocol**: Six focused tools via Server-Sent Events (SSE)
+- **MCP Protocol**: Six focused tools via Server-Sent Events (SSE) and stdio (JSON-RPC)
 - **Performance Guaranteed**: 60-second indexing for 10K files, 500ms p95 search latency
 - **Production Ready**: Comprehensive error handling, structured logging, type safety
 
@@ -125,7 +125,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp
 
 # Ollama Configuration
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_EMBEDDING_MODEL=embeddinggemma
 
 # Performance Tuning
 EMBEDDING_BATCH_SIZE=50        # Batch size for embedding generation
@@ -200,6 +200,64 @@ uvicorn src.main:app --host 0.0.0.0 --port 3000 --workers 4
 # With gunicorn (recommended for production)
 gunicorn src.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:3000
 ```
+
+### stdio Transport (CLI Mode)
+
+The MCP server supports stdio transport for CLI clients via JSON-RPC 2.0 over stdin/stdout. This is ideal for command-line tools and scripted interactions.
+
+```bash
+# Start stdio server (reads JSON-RPC from stdin)
+python -m src.mcp.stdio_server
+
+# Echo a single request
+echo '{"jsonrpc":"2.0","id":1,"method":"list_tasks","params":{"limit":5}}' | python -m src.mcp.stdio_server
+
+# Pipe requests from a file (one JSON-RPC request per line)
+cat requests.jsonl | python -m src.mcp.stdio_server
+
+# Interactive mode (type JSON-RPC requests manually)
+python -m src.mcp.stdio_server
+{"jsonrpc":"2.0","id":1,"method":"get_task","params":{"task_id":"..."}}
+```
+
+**JSON-RPC 2.0 Request Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "search_code",
+  "params": {
+    "query": "async def",
+    "limit": 10
+  }
+}
+```
+
+**JSON-RPC 2.0 Response Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "results": [...],
+    "total_count": 42,
+    "latency_ms": 250
+  }
+}
+```
+
+**Available Methods:**
+- `search_code` - Semantic code search
+- `index_repository` - Index a repository
+- `get_task` - Get task by ID
+- `list_tasks` - List tasks with filters
+- `create_task` - Create new task
+- `update_task` - Update task status
+
+**Logging:**
+All logs go to `/tmp/codebase-mcp.log` (configurable via `LOG_FILE` env var). No stdout/stderr pollution - only JSON-RPC protocol messages on stdout.
 
 ### Health Check
 

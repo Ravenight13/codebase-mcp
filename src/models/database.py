@@ -146,7 +146,8 @@ async def init_database(engine: AsyncEngine) -> None:
     """
     async with engine.begin() as conn:
         # Enable pgvector extension
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        from sqlalchemy import text
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
