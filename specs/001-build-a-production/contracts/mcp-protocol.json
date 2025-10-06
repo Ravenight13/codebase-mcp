@@ -1,0 +1,383 @@
+{
+  "contract_name": "MCP Protocol Contract",
+  "version": "1.0.0",
+  "description": "MCP Server-Sent Events (SSE) protocol contract for tool registration and execution",
+  "transport": "SSE",
+  "base_url": "http://localhost:3000",
+
+  "tools": [
+    {
+      "name": "search_code",
+      "description": "Semantic code search across indexed repositories",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language search query"
+          },
+          "repository_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional repository filter"
+          },
+          "file_type": {
+            "type": "string",
+            "description": "Optional file extension filter (e.g., 'py', 'js')"
+          },
+          "directory": {
+            "type": "string",
+            "description": "Optional directory path filter"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "Maximum number of results"
+          }
+        },
+        "required": ["query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "chunk_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "file_path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "start_line": {
+                  "type": "integer"
+                },
+                "end_line": {
+                  "type": "integer"
+                },
+                "similarity_score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "context_before": {
+                  "type": "string",
+                  "description": "10 lines before the chunk"
+                },
+                "context_after": {
+                  "type": "string",
+                  "description": "10 lines after the chunk"
+                }
+              },
+              "required": ["chunk_id", "file_path", "content", "start_line", "end_line", "similarity_score"]
+            }
+          },
+          "total_count": {
+            "type": "integer",
+            "description": "Total matching chunks (before limit)"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "description": "Query execution time in milliseconds"
+          }
+        },
+        "required": ["results", "total_count", "latency_ms"]
+      }
+    },
+    {
+      "name": "index_repository",
+      "description": "Index a code repository for semantic search",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute path to repository"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name for repository"
+          },
+          "force_reindex": {
+            "type": "boolean",
+            "default": false,
+            "description": "Force full re-index even if already indexed"
+          }
+        },
+        "required": ["path", "name"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "repository_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "files_indexed": {
+            "type": "integer"
+          },
+          "chunks_created": {
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["success", "partial", "failed"]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["repository_id", "files_indexed", "chunks_created", "duration_seconds", "status"]
+      }
+    },
+    {
+      "name": "get_task",
+      "description": "Retrieve a development task by ID",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["task_id"]
+      },
+      "output_schema": {
+        "$ref": "#/definitions/Task"
+      }
+    },
+    {
+      "name": "list_tasks",
+      "description": "List development tasks with optional filters",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["need to be done", "in-progress", "complete"],
+            "description": "Filter by task status"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Filter by git branch name"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Task"
+            }
+          },
+          "total_count": {
+            "type": "integer"
+          }
+        },
+        "required": ["tasks", "total_count"]
+      }
+    },
+    {
+      "name": "create_task",
+      "description": "Create a new development task",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "planning_references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Relative paths to planning documents"
+          }
+        },
+        "required": ["title"]
+      },
+      "output_schema": {
+        "$ref": "#/definitions/Task"
+      }
+    },
+    {
+      "name": "update_task",
+      "description": "Update an existing development task",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["need to be done", "in-progress", "complete"]
+          },
+          "branch": {
+            "type": "string",
+            "description": "Git branch name to associate"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$",
+            "description": "Git commit hash to associate"
+          }
+        },
+        "required": ["task_id"]
+      },
+      "output_schema": {
+        "$ref": "#/definitions/Task"
+      }
+    }
+  ],
+
+  "definitions": {
+    "Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["need to be done", "in-progress", "complete"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "planning_references": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from_status": {
+                "type": "string"
+              },
+              "to_status": {
+                "type": "string"
+              },
+              "changed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "required": ["id", "title", "status", "created_at", "updated_at"]
+    }
+  },
+
+  "protocol_requirements": {
+    "transport": "Server-Sent Events (SSE)",
+    "content_type": "text/event-stream",
+    "message_format": "JSON",
+    "logging": {
+      "destination": "/tmp/codebase-mcp.log",
+      "format": "structured JSON",
+      "no_stdout_stderr": true
+    },
+    "error_handling": {
+      "format": "MCP error response",
+      "include_context": true,
+      "user_actionable": true
+    }
+  },
+
+  "performance_requirements": {
+    "search_code": {
+      "p95_latency_ms": 500,
+      "max_latency_ms": 2000
+    },
+    "index_repository": {
+      "target_duration_10k_files_seconds": 60,
+      "max_duration_10k_files_seconds": 120
+    },
+    "get_task": {
+      "p95_latency_ms": 100
+    },
+    "list_tasks": {
+      "p95_latency_ms": 200
+    },
+    "create_task": {
+      "p95_latency_ms": 150
+    },
+    "update_task": {
+      "p95_latency_ms": 150
+    }
+  }
+}

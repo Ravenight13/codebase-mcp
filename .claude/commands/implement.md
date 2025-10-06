@@ -24,27 +24,35 @@ $ARGUMENTS
    - **Task details**: ID, description, file paths, parallel markers [P]
    - **Execution flow**: Order and dependency requirements
 
-4. Execute implementation following the task plan:
+4. Execute implementation following the task plan with subagent orchestration:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
-   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together  
+   - **Orchestration approach**: Delegate code-writing tasks to specialized subagents using Task tool
+   - **Sequential tasks**: Launch one subagent, wait for completion, validate, mark [X], proceed
+   - **Parallel tasks [P]**: Launch multiple subagents concurrently with Task tool in single message
+   - **Subagent context**: Provide each subagent with task ID, description, file paths, spec, plan, relevant contracts
    - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
 
 5. Implementation execution rules:
    - **Setup first**: Initialize project structure, dependencies, configuration
-   - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
-   - **Core development**: Implement models, services, CLI commands, endpoints
-   - **Integration work**: Database connections, middleware, logging, external services
+   - **Tests before code**: Write tests for contracts, entities, and integration scenarios (delegated to subagents)
+   - **Core development**: Implement models, services, CLI commands, endpoints (delegated to subagents)
+   - **Integration work**: Database connections, middleware, logging, external services (delegated to subagents)
    - **Polish and validation**: Unit tests, performance optimization, documentation
+   - **Orchestrator role**: Coordinate subagents, resolve conflicts, validate results, mark tasks complete
 
-6. Progress tracking and error handling:
-   - Report progress after each completed task
+6. Subagent orchestration and progress tracking:
+   - Identify parallel task groups from `[P]` markers in tasks.md
+   - Launch parallel subagents in single message using multiple Task tool calls
+   - Monitor subagent completion and collect results
+   - Validate subagent output against acceptance criteria before marking [X]
+   - Resolve integration conflicts when parallel tasks complete
+   - **IMPORTANT**: Only mark tasks as [X] after validation passes
    - Halt execution if any non-parallel task fails
    - For parallel tasks [P], continue with successful tasks, report failed ones
    - Provide clear error messages with context for debugging
    - Suggest next steps if implementation cannot proceed
-   - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
 
 7. Completion validation:
    - Verify all required tasks are completed
