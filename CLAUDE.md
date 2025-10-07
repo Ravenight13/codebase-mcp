@@ -101,12 +101,13 @@ This project's constitution (`.specify/memory/constitution.md`) defines non-nego
 8. **Pydantic-Based Type Safety** - All models use Pydantic, mypy --strict
 9. **Orchestrated Subagent Execution** - Parallel implementation via specialized subagents
 10. **Git Micro-Commit Strategy** - Atomic commits after each task, branch-per-feature, Conventional Commits
+11. **FastMCP and Python SDK Foundation** - Use FastMCP framework with MCP Python SDK for all MCP implementations
 
 **Key behaviors:**
 - Constitution violations are flagged as CRITICAL in `/analyze`
 - `/plan` validates against constitution at Phase 0 (before research) and after Phase 1 (after design)
 - Complexity deviations must be justified in plan.md's Complexity Tracking section
-- Technical stack is NON-NEGOTIABLE: Python 3.11+, PostgreSQL 14+, FastAPI, Ollama
+- Technical stack is NON-NEGOTIABLE: Python 3.11+, PostgreSQL 14+, FastMCP with MCP Python SDK, Ollama
 
 ## Important Workflow Rules
 

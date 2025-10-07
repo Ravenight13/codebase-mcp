@@ -1,19 +1,19 @@
 <!--
 Sync Impact Report:
-- Version change: 2.0.0 → 2.1.0 (MINOR - new principle added)
+- Version change: 2.1.0 → 2.2.0 (MINOR - new principle added)
 - Principles added:
-  * X. Git Micro-Commit Strategy (version control discipline)
-- Sections added:
-  * Version Control Standards (under Quality Standards)
-  * Git workflow guidance (under Implementation Phase)
-- Modified sections: None (additions only)
+  * XI. FastMCP and Python SDK Foundation (MCP server implementation framework)
+- Sections modified:
+  * Technical Constraints → Required Stack (updated MCP framework dependencies)
+  * Architectural Decisions (added FastMCP design pattern requirement)
 - Removed sections: None
 - Templates requiring updates:
-  * ✅ .specify/templates/tasks-template.md - Already mentions "Commit after each task"
-  * ✅ .claude/commands/implement.md - Already aligned with task-based commits
-  * ⚠ Future task breakdowns should explicitly note commit points
+  * ✅ .specify/templates/plan-template.md - Technical Context includes MCP dependencies
+  * ✅ .specify/templates/spec-template.md - No changes needed (tech-agnostic)
+  * ⚠ Future plans should validate against FastMCP decorative patterns
 - Follow-up TODOs: None
 - Previous version history:
+  * 2.0.0 → 2.1.0: Added Git Micro-Commit Strategy principle
   * 1.1.0 → 2.0.0: Project identity change from Specify Template to Codebase MCP Server
   * 1.0.0 → 1.1.0: Added Pydantic and Orchestration principles
   * Initial: 1.0.0 - Specify Template constitution
@@ -93,6 +93,12 @@ Every feature MUST be developed on a dedicated branch created from main. Commits
 
 **Rationale**: Micro-commits create granular history enabling precise debugging and rollback. Branch-per-feature isolates work and enables parallel development. Atomic commits ensure bisectability. Conventional Commits enable automated changelog generation and semantic versioning.
 
+### XI. FastMCP and Python SDK Foundation
+
+All MCP server implementations MUST be built using FastMCP (https://github.com/jlowin/fastmcp) as the primary framework and the official MCP Python SDK (https://github.com/modelcontextprotocol/python-sdk) for protocol compliance. FastMCP's decorative patterns MUST be used for tool, resource, and prompt registration. The server MUST leverage FastMCP's built-in context injection, automatic schema generation from type hints, and transport abstraction. Direct protocol handling MUST be avoided in favor of FastMCP's high-level API.
+
+**Rationale**: FastMCP provides the shortest path from implementation to production while maintaining protocol compliance. Automatic schema generation from type hints ensures consistency between code and API contracts. Framework-level transport abstraction prevents protocol violations. Decorator patterns keep tool implementations clean and focused. Using established frameworks prevents reinventing protocol machinery and reduces maintenance burden.
+
 ## Technical Constraints
 
 ### Required Stack
@@ -100,8 +106,8 @@ Every feature MUST be developed on a dedicated branch created from main. Commits
 - **Python**: 3.11+ (required for modern type hints and async features)
 - **Database**: PostgreSQL 14+ with pgvector extension
 - **Embeddings**: Ollama with nomic-embed-text model (768 dimensions)
-- **MCP**: MCP SDK for Python with SSE transport
-- **Web Framework**: FastAPI (async-native, modern)
+- **MCP Framework**: FastMCP with MCP Python SDK for protocol compliance
+- **Web Framework**: FastAPI patterns (FastMCP compatible)
 - **Database ORM**: SQLAlchemy with AsyncPG driver
 - **Code Parsing**: Tree-sitter for AST-based chunking
 
@@ -114,6 +120,7 @@ Every feature MUST be developed on a dedicated branch created from main. Commits
 - **Direct HTTP**: Ollama HTTP API over Python SDK (simpler, more reliable)
 - **Structured Logging**: JSON logs to file, never stdout/stderr
 - **Standard Schema**: PostgreSQL schema compatible with other tools
+- **FastMCP Decorators**: Use @mcp.tool(), @mcp.resource(), @mcp.prompt() for registration
 
 ## Quality Standards
 
@@ -242,4 +249,4 @@ When implementation requires complexity:
 - Ensure complexity serves a constitutional principle
 - Get approval before implementation begins
 
-**Version**: 2.1.0 | **Ratified**: 2025-10-06 | **Last Amended**: 2025-10-06
+**Version**: 2.2.0 | **Ratified**: 2025-10-06 | **Last Amended**: 2025-10-06
