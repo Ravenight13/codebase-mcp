@@ -20,7 +20,7 @@ from fastmcp import Context
 
 from src.database import SessionLocal
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server_fastmcp import mcp
+from src.mcp.server_fastmcp import mcp, _db_init_task
 from src.services.indexer import IndexResult
 from src.services.indexer import index_repository as index_repository_service
 
@@ -29,6 +29,25 @@ from src.services.indexer import index_repository as index_repository_service
 # ==============================================================================
 
 logger = get_logger(__name__)
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+
+async def _ensure_db_ready() -> None:
+    """Wait for background database initialization to complete.
+
+    FastAPI non-blocking pattern: Database initializes in background,
+    first tool call waits if needed.
+
+    Performance: Usually completes in <1 second, often already done by first call.
+    """
+    if _db_init_task and not _db_init_task.done():
+        logger.info("Waiting for database initialization to complete...")
+        await _db_init_task
+        logger.info("Database initialization complete")
+
 
 # ==============================================================================
 # Tool Implementation
@@ -70,6 +89,9 @@ async def index_repository(
         Target: <60 seconds for 10,000 files
         Uses batching for files (100/batch) and embeddings (50/batch)
     """
+    # Wait for background database initialization if needed
+    await _ensure_db_ready()
+
     # Context logging (to MCP client)
     if ctx:
         await ctx.info(f"Indexing repository: {repo_path}")

@@ -73,6 +73,13 @@ logger.info(f"Log file: {LOG_FILE}")
 logger.info("=" * 80)
 
 # ==============================================================================
+# Module-Level State (Database Initialization Tracking)
+# ==============================================================================
+
+# Module-level variable to track database initialization task
+_db_init_task: asyncio.Task[None] | None = None
+
+# ==============================================================================
 # FastMCP Lifespan (Database Initialization)
 # ==============================================================================
 
@@ -82,8 +89,13 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     """Lifespan context manager for FastMCP server.
 
     Manages server startup and shutdown lifecycle:
-    - Startup: Initialize database connection pool
+    - Startup: Initialize database in background (non-blocking)
     - Shutdown: Close database connections gracefully
+
+    Non-Blocking Pattern:
+    - Uses asyncio.create_task() to start DB init in background
+    - Tools become visible immediately (FastAPI best practice)
+    - First tool call waits for init completion if needed
 
     Constitutional Compliance:
     - Principle V: Production Quality (proper initialization order, error handling)
@@ -101,29 +113,40 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     # Import database connection management
     from src.database import close_db_connection, init_db_connection
 
-    # Startup: Initialize database before accepting connections
+    global _db_init_task
+
+    # Startup: Initialize database in background (non-blocking)
+    # FastAPI pattern: Use create_task() to avoid blocking tool visibility
     try:
-        logger.info("Initializing database connection pool...")
-        await init_db_connection()
-        logger.info("Database initialized successfully")
+        logger.info("Starting database initialization in background...")
+        _db_init_task = asyncio.create_task(init_db_connection())
+        logger.info("Database initialization task started (non-blocking)")
     except Exception as e:
         logger.critical(
-            f"Failed to initialize database: {e}",
+            f"Failed to start database initialization: {e}",
             exc_info=True,
         )
-        raise RuntimeError(f"Database initialization failed: {e}") from e
+        raise RuntimeError(f"Database initialization task failed: {e}") from e
 
-    # Yield control to FastMCP server
+    # Yield control to FastMCP server (tools are visible NOW)
     yield
 
-    # Shutdown: Close database connections
+    # Shutdown: Ensure init completed, then close
     try:
+        logger.info("Shutting down server...")
+
+        # Wait for database initialization to complete if still running
+        if _db_init_task and not _db_init_task.done():
+            logger.info("Waiting for database initialization to complete...")
+            await _db_init_task
+
+        # Close database connection pool
         logger.info("Closing database connection pool...")
         await close_db_connection()
         logger.info("Database closed successfully")
     except Exception as e:
         logger.error(
-            f"Error closing database connection: {e}",
+            f"Error during shutdown: {e}",
             exc_info=True,
         )
 
@@ -133,6 +156,9 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
 # ==============================================================================
 
 mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
+
+# Export for tool access
+__all__ = ["mcp", "_db_init_task"]
 
 
 # ==============================================================================

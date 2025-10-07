@@ -22,7 +22,7 @@ from pydantic import Field, ValidationError as PydanticValidationError
 
 from src.database import SessionLocal
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server_fastmcp import mcp
+from src.mcp.server_fastmcp import _db_init_task, mcp
 from src.services import SearchFilter, SearchResult
 from src.services.searcher import search_code as search_code_service
 
@@ -31,6 +31,25 @@ from src.services.searcher import search_code as search_code_service
 # ==============================================================================
 
 logger = get_logger(__name__)
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+
+async def _ensure_db_ready() -> None:
+    """Wait for background database initialization to complete.
+
+    FastAPI non-blocking pattern: Database initializes in background,
+    first tool call waits if needed.
+
+    Performance: Usually completes in <1 second, often already done by first call.
+    """
+    if _db_init_task and not _db_init_task.done():
+        logger.info("Waiting for database initialization to complete...")
+        await _db_init_task
+        logger.info("Database initialization complete")
+
 
 # ==============================================================================
 # Tool Implementation
@@ -88,6 +107,9 @@ async def search_code(
     Performance:
         Target: <500ms p95 latency (includes embedding generation and search)
     """
+    # Wait for background database initialization if needed
+    await _ensure_db_ready()
+
     start_time = time.perf_counter()
 
     # Dual logging: Context logging for MCP client + file logging for server
