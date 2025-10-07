@@ -161,6 +161,14 @@ try:
     import src.mcp.tools.search  # noqa: F401, E402
     import src.mcp.tools.tasks  # noqa: F401, E402
     logger.info("✓ Tool modules imported successfully")
+
+    # CRITICAL FIX: Re-setup handlers after tools are imported
+    # FastMCP calls _setup_handlers() in __init__, but our tools are imported after
+    # the instance is created. We need to re-register the handlers so that
+    # FastMCP's _mcp_list_tools() is used instead of the default empty handler.
+    mcp._setup_handlers()
+    logger.info("✓ MCP protocol handlers re-registered with tools")
+
 except ImportError as e:
     logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
     sys.stderr.write(f"FATAL: Failed to import tool modules: {e}\n")
