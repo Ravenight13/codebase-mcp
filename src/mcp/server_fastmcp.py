@@ -79,16 +79,6 @@ mcp = FastMCP("codebase-mcp")
 
 
 # ==============================================================================
-# Tool Registration
-# ==============================================================================
-
-# Tool handlers will be imported from dedicated modules in subsequent tasks:
-# - search_code -> src/mcp/tools/search.py
-# - index_repository -> src/mcp/tools/indexing.py
-# - create_task, get_task, list_tasks, update_task -> src/mcp/tools/tasks.py
-
-
-# ==============================================================================
 # Startup Validation
 # ==============================================================================
 
@@ -165,6 +155,20 @@ async def validate_server_startup(mcp_server: FastMCP) -> None:
     # Log successful validation
     logger.info(f"Server startup validation passed: {len(registered_tools_dict)} tools registered")
     logger.info(f"Registered tools: {sorted(registered_tools)}")
+
+
+# ==============================================================================
+# Tool Registration (Import After MCP Instance Creation)
+# ==============================================================================
+
+# Import tool handlers to register them with FastMCP via @mcp.tool() decorator
+# These imports must come after mcp = FastMCP() to avoid circular imports
+# Import directly from modules (not __init__.py) to avoid dependency issues
+import src.mcp.tools.indexing  # noqa: F401, E402
+import src.mcp.tools.search  # noqa: F401, E402
+
+# Tool handlers will be imported from dedicated modules in subsequent tasks:
+# - create_task, get_task, list_tasks, update_task -> src/mcp/tools/tasks.py
 
 
 # ==============================================================================

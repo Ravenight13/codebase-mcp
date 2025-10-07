@@ -8,6 +8,7 @@ Constitutional Compliance:
 - Principle IV: Performance (60s target for 10K files)
 - Principle V: Production Quality (comprehensive validation, error handling)
 - Principle VIII: Type Safety (mypy --strict compliance)
+- Principle XI: FastMCP Foundation (FastMCP decorator-based tool)
 """
 
 from __future__ import annotations
@@ -15,11 +16,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastmcp import Context
 
+from src.database import SessionLocal
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server import OperationError, ValidationError as MCPValidationError
-from src.services.indexer import IndexResult, index_repository
+from src.mcp.server_fastmcp import mcp
+from src.services.indexer import IndexResult
+from src.services.indexer import index_repository as index_repository_service
 
 # ==============================================================================
 # Constants
@@ -32,20 +35,21 @@ logger = get_logger(__name__)
 # ==============================================================================
 
 
-async def index_repository_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def index_repository(
     repo_path: str,
     force_reindex: bool = False,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Index a code repository for semantic search.
 
-    MCP tool handler that orchestrates the complete repository indexing workflow:
-    scanning, chunking, embedding generation, and storage.
+    Orchestrates the complete repository indexing workflow: scanning,
+    chunking, embedding generation, and storage in PostgreSQL with pgvector.
 
     Args:
-        db: Async database session (injected by dependency)
         repo_path: Absolute path to repository directory (required)
         force_reindex: Force full re-index even if already indexed (default: False)
+        ctx: FastMCP context for progress reporting (optional)
 
     Returns:
         Dictionary with indexing results matching MCP contract:
@@ -59,17 +63,22 @@ async def index_repository_tool(
         }
 
     Raises:
-        MCPValidationError: If input validation fails
-        OperationError: If indexing operation fails critically
+        ValueError: If input validation fails
+        RuntimeError: If indexing operation fails critically
 
     Performance:
         Target: <60 seconds for 10,000 files
         Uses batching for files (100/batch) and embeddings (50/batch)
     """
+    # Context logging (to MCP client)
+    if ctx:
+        await ctx.info(f"Indexing repository: {repo_path}")
+
     # Derive name from directory name
     path_obj = Path(repo_path)
     name = path_obj.name or "repository"
-    
+
+    # File logging (to /tmp/codebase-mcp.log)
     logger.info(
         "index_repository tool called",
         extra={
@@ -82,77 +91,54 @@ async def index_repository_tool(
     )
 
     # Validate input parameters
-    try:
-        # Validate path
-        if not repo_path or not repo_path.strip():
-            raise MCPValidationError(
-                "Repository path cannot be empty",
-                details={"parameter": "repo_path", "value": repo_path},
-            )
+    # Validate path
+    if not repo_path or not repo_path.strip():
+        raise ValueError("Repository path cannot be empty")
 
-        path_obj = Path(repo_path)
+    path_obj = Path(repo_path)
 
-        # Check if path is absolute
-        if not path_obj.is_absolute():
-            raise MCPValidationError(
-                f"Repository path must be absolute: {repo_path}",
-                details={
-                    "parameter": "repo_path",
-                    "value": repo_path,
-                    "expected": "absolute path",
-                },
-            )
+    # Check if path is absolute
+    if not path_obj.is_absolute():
+        raise ValueError(f"Repository path must be absolute: {repo_path}")
 
-        # Check if path exists
-        if not path_obj.exists():
-            raise MCPValidationError(
-                f"Repository path does not exist: {repo_path}",
-                details={
-                    "parameter": "repo_path",
-                    "value": repo_path,
-                    "error": "path not found",
-                },
-            )
+    # Check if path exists
+    if not path_obj.exists():
+        raise ValueError(f"Repository path does not exist: {repo_path}")
 
-        # Check if path is a directory
-        if not path_obj.is_dir():
-            raise MCPValidationError(
-                f"Repository path must be a directory: {repo_path}",
-                details={
-                    "parameter": "repo_path",
-                    "value": repo_path,
-                    "error": "not a directory",
-                },
-            )
+    # Check if path is a directory
+    if not path_obj.is_dir():
+        raise ValueError(f"Repository path must be a directory: {repo_path}")
 
-    except MCPValidationError:
-        # Re-raise MCP validation errors
-        raise
-    except Exception as e:
-        # Wrap unexpected validation errors
-        logger.error(
-            "Unexpected error during input validation",
-            extra={
-                "context": {
-                    "repo_path": repo_path,
-                    "name": name,
-                    "error": str(e),
-                }
-            },
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
         )
-        raise MCPValidationError(
-            f"Input validation failed: {e}",
-            details={"error": str(e)},
-        ) from e
 
     # Perform indexing
     try:
-        result: IndexResult = await index_repository(
-            repo_path=path_obj,
-            name=name,
-            db=db,
-            force_reindex=force_reindex,
-        )
+        async with SessionLocal() as db:
+            # Progress callback for real-time updates via Context
+            async def progress_callback(message: str) -> None:
+                if ctx:
+                    await ctx.info(message)
+
+            result: IndexResult = await index_repository_service(
+                repo_path=path_obj,
+                name=name,
+                db=db,
+                force_reindex=force_reindex,
+            )
+            await db.commit()
+
+            # Send completion notification
+            if ctx:
+                await ctx.info(
+                    f"Indexed {result.files_indexed} files, "
+                    f"created {result.chunks_created} chunks in "
+                    f"{result.duration_seconds:.1f}s"
+                )
+
     except Exception as e:
         logger.error(
             "Indexing operation failed critically",
@@ -165,14 +151,9 @@ async def index_repository_tool(
                 }
             },
         )
-        raise OperationError(
-            f"Failed to index repository: {e}",
-            details={
-                "repo_path": repo_path,
-                "name": name,
-                "error": str(e),
-            },
-        ) from e
+        if ctx:
+            await ctx.error(f"Indexing failed: {str(e)[:100]}")
+        raise RuntimeError(f"Failed to index repository: {e}") from e
 
     # Format response according to MCP contract
     response: dict[str, Any] = {
@@ -223,4 +204,9 @@ async def index_repository_tool(
 # Module Exports
 # ==============================================================================
 
-__all__ = ["index_repository_tool"]
+__all__ = ["index_repository"]
+
+
+# Legacy export for backwards compatibility during migration
+# This will be removed after all references are updated
+index_repository_tool = index_repository
