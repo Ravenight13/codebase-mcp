@@ -42,6 +42,7 @@ dependencies = [
 
     # MCP Protocol
     "mcp>=0.9.0",
+    "fastmcp>=0.1.0",
 
     # Code Parsing
     "tree-sitter>=0.21.0",
