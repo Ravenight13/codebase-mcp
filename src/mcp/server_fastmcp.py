@@ -73,13 +73,6 @@ logger.info(f"Log file: {LOG_FILE}")
 logger.info("=" * 80)
 
 # ==============================================================================
-# Module-Level State (Database Initialization Tracking)
-# ==============================================================================
-
-# Module-level variable to track database initialization task
-_db_init_task: asyncio.Task[None] | None = None
-
-# ==============================================================================
 # FastMCP Lifespan (Database Initialization)
 # ==============================================================================
 
@@ -89,13 +82,13 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     """Lifespan context manager for FastMCP server.
 
     Manages server startup and shutdown lifecycle:
-    - Startup: Initialize database in background (non-blocking)
+    - Startup: Initialize database (blocking to ensure ready before serving)
     - Shutdown: Close database connections gracefully
 
-    Non-Blocking Pattern:
-    - Uses asyncio.create_task() to start DB init in background
-    - Tools become visible immediately (FastAPI best practice)
-    - First tool call waits for init completion if needed
+    Blocking Pattern:
+    - Wait for DB to be ready before accepting connections from Claude Desktop
+    - Ensures tools can access DB immediately when called
+    - Prevents race conditions with early tool invocations
 
     Constitutional Compliance:
     - Principle V: Production Quality (proper initialization order, error handling)
@@ -113,34 +106,29 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     # Import database connection management
     from src.database import close_db_connection, init_db_connection
 
-    global _db_init_task
-
-    # Startup: Initialize database in background (non-blocking)
-    # FastAPI pattern: Use create_task() to avoid blocking tool visibility
+    # Startup: Initialize database (blocking to ensure ready before serving)
+    # Wait for DB to be ready before accepting connections from Claude Desktop
     try:
-        logger.info("Starting database initialization in background...")
-        _db_init_task = asyncio.create_task(init_db_connection())
-        logger.info("Database initialization task started (non-blocking)")
+        logger.info("Initializing database connection pool...")
+        sys.stderr.write("INFO: Initializing database...\n")
+        await init_db_connection()  # BLOCKING - wait for completion
+        logger.info("✓ Database initialized successfully")
+        sys.stderr.write("INFO: Database initialized successfully\n")
     except Exception as e:
         logger.critical(
-            f"Failed to start database initialization: {e}",
+            f"Failed to initialize database: {e}",
             exc_info=True,
         )
-        raise RuntimeError(f"Database initialization task failed: {e}") from e
+        sys.stderr.write(f"FATAL: Database initialization failed: {e}\n")
+        sys.stderr.write("FIX: Check PostgreSQL is running and DATABASE_URL is correct\n")
+        raise RuntimeError(f"Database initialization failed: {e}") from e
 
     # Yield control to FastMCP server (tools are visible NOW)
     yield
 
-    # Shutdown: Ensure init completed, then close
+    # Shutdown: Close database connection pool gracefully
     try:
         logger.info("Shutting down server...")
-
-        # Wait for database initialization to complete if still running
-        if _db_init_task and not _db_init_task.done():
-            logger.info("Waiting for database initialization to complete...")
-            await _db_init_task
-
-        # Close database connection pool
         logger.info("Closing database connection pool...")
         await close_db_connection()
         logger.info("Database closed successfully")
@@ -158,8 +146,29 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
 mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
 
 # Export for tool access
-__all__ = ["mcp", "_db_init_task"]
+__all__ = ["mcp"]
 
+# ==============================================================================
+# Tool Registration (Module-Level Import for Decorator Execution)
+# ==============================================================================
+
+# Import tool modules at module level to execute @mcp.tool() decorators
+# This must happen AFTER mcp instance is created but BEFORE main() runs
+# Decorators register tools synchronously at import time
+
+try:
+    logger.info("Importing tool modules...")
+    import src.mcp.tools.indexing  # noqa: F401, E402
+    import src.mcp.tools.search  # noqa: F401, E402
+    import src.mcp.tools.tasks  # noqa: F401, E402
+    logger.info("✓ Tool modules imported successfully")
+except ImportError as e:
+    logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
+    sys.stderr.write(f"FATAL: Failed to import tool modules: {e}\n")
+    sys.stderr.write("FIX: Check that all dependencies are installed (uv sync)\n")
+    sys.stderr.write("LOG: See /tmp/codebase-mcp.log for details\n")
+    # Exit immediately - no point continuing without tools
+    sys.exit(1)
 
 # ==============================================================================
 # Startup Validation
@@ -226,35 +235,18 @@ async def validate_server_startup(mcp_server: FastMCP) -> None:
 
     # Validate tool schemas are present
     for tool_name, tool_obj in registered_tools_dict.items():
-        # Check if tool has a schema (FastMCP generates schemas automatically)
-        # Tool objects should have proper signatures
-        if not hasattr(tool_obj, "__call__"):
-            logger.error(f"VALIDATION FAILED: Tool '{tool_name}' is not callable")
+        # Check if tool has proper callable function (FastMCP FunctionTool pattern)
+        # FastMCP returns FunctionTool objects with 'fn' attribute containing the callable
+        if not (hasattr(tool_obj, "fn") and callable(tool_obj.fn)):
+            logger.error(f"VALIDATION FAILED: Tool '{tool_name}' does not have callable function")
             raise ValueError(
-                f"Server validation failed: Tool '{tool_name}' is not callable.\n"
-                f"Fix: Ensure tool is properly registered with @mcp.tool decorator."
+                f"Server validation failed: Tool '{tool_name}' does not have callable function.\n"
+                f"Fix: Ensure tool is properly registered with @mcp.tool() decorator."
             )
 
     # Log successful validation
     logger.info(f"Server startup validation passed: {len(registered_tools_dict)} tools registered")
     logger.info(f"Registered tools: {sorted(registered_tools)}")
-
-
-# ==============================================================================
-# Tool Registration (Import After MCP Instance Creation)
-# ==============================================================================
-
-# Import tool handlers to register them with FastMCP via @mcp.tool() decorator
-# These imports must come after mcp = FastMCP() to avoid circular imports
-# Import directly from modules (not __init__.py) to avoid dependency issues
-try:
-    import src.mcp.tools.indexing  # noqa: F401, E402
-    import src.mcp.tools.search  # noqa: F401, E402
-    import src.mcp.tools.tasks  # noqa: F401, E402
-    logger.info("Tool modules imported successfully")
-except ImportError as e:
-    logger.error(f"Failed to import tool modules: {e}", exc_info=True)
-    raise
 
 
 # ==============================================================================
@@ -266,33 +258,64 @@ def main() -> None:
 
     Runs the server with stdio transport for Claude Desktop compatibility.
 
+    Startup sequence:
+    1. Validate tool registration (fail-fast)
+    2. Log diagnostic information
+    3. Start stdio transport server
+    4. Handle graceful shutdown on errors
+
+    Note: Tool imports happen at MODULE LEVEL before main() runs,
+    so decorators have already registered all tools.
+
     Logging behavior:
     - File logging: All server events -> /tmp/codebase-mcp.log
+    - Stderr logging: Critical errors -> Claude Desktop debugging
     - Context logging: Tool execution events -> MCP client (via ctx.info())
-
-    Startup sequence:
-    1. Validate server configuration (fail-fast)
-    2. Start stdio transport server
-    3. Handle graceful shutdown on errors
     """
     try:
-        logger.info("Starting FastMCP server with stdio transport")
-        logger.info("Tool registration complete, starting server...")
+        logger.info("=" * 80)
+        logger.info("FastMCP Server Startup")
+        logger.info("=" * 80)
 
-        # Start server with stdio transport (default)
-        # This is compatible with Claude Desktop out-of-the-box
+        # Step 1: Validate tool registration
+        logger.info("Validating tool registration...")
+        sys.stderr.write("INFO: Validating tool registration...\n")
+
+        asyncio.run(validate_server_startup(mcp))
+        logger.info("✓ Server validation passed")
+        sys.stderr.write("INFO: Server validation passed\n")
+
+        # Step 2: Log diagnostic information
+        logger.info("=" * 80)
+        logger.info("Pre-flight Diagnostics:")
+
+        tools = asyncio.run(mcp.get_tools())
+        logger.info(f"  Tools registered: {len(tools)}")
+        sys.stderr.write(f"INFO: {len(tools)} tools registered\n")
+
+        for name in sorted(tools.keys()):
+            logger.info(f"    - {name}")
+
+        logger.info("=" * 80)
+
+        # Step 3: Start server
+        logger.info("Starting FastMCP server with stdio transport")
+        sys.stderr.write("INFO: Starting FastMCP server...\n")
+
         mcp.run()
 
     except (RuntimeError, ValueError) as e:
         # Validation errors - provide clear error messages
         logger.critical(f"Server validation failed: {e}", exc_info=True)
         sys.stderr.write(f"FATAL: Server validation failed: {e}\n")
+        sys.stderr.write(f"LOG: See /tmp/codebase-mcp.log for details\n")
         sys.exit(1)
 
     except Exception as e:
         # Unexpected errors during startup
         logger.critical(f"Server startup failed: {e}", exc_info=True)
         sys.stderr.write(f"FATAL: Server startup failed: {e}\n")
+        sys.stderr.write(f"LOG: See /tmp/codebase-mcp.log for details\n")
         sys.exit(1)
 
 

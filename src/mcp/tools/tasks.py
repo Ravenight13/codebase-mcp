@@ -23,7 +23,7 @@ from fastmcp import Context
 from pydantic import ValidationError as PydanticValidationError
 
 from src.database import SessionLocal
-from src.mcp.server_fastmcp import mcp, _db_init_task
+from src.mcp.server_fastmcp import mcp
 from src.models import Task, TaskCreate, TaskResponse, TaskUpdate
 from src.services import (
     InvalidCommitHashError,
@@ -48,20 +48,6 @@ VALID_STATUSES: set[str] = {"need to be done", "in-progress", "complete"}
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
-
-
-async def _ensure_db_ready() -> None:
-    """Wait for background database initialization to complete.
-
-    FastAPI non-blocking pattern: Database initializes in background,
-    first tool call waits if needed.
-
-    Performance: Usually completes in <1 second, often already done by first call.
-    """
-    if _db_init_task and not _db_init_task.done():
-        logger.info("Waiting for database initialization to complete...")
-        await _db_init_task
-        logger.info("Database initialization complete")
 
 
 def _task_to_dict(task_response: TaskResponse) -> dict[str, Any]:
@@ -115,7 +101,6 @@ async def get_task(
     Performance:
         Target: <100ms p95 latency
     """
-    await _ensure_db_ready()
     start_time = time.perf_counter()
 
     # Dual logging pattern
@@ -207,7 +192,6 @@ async def list_tasks(
     Performance:
         Target: <200ms p95 latency
     """
-    await _ensure_db_ready()
     start_time = time.perf_counter()
 
     # Dual logging pattern
@@ -312,7 +296,6 @@ async def create_task(
     Performance:
         Target: <150ms p95 latency
     """
-    await _ensure_db_ready()
     start_time = time.perf_counter()
 
     # Dual logging pattern
@@ -416,7 +399,6 @@ async def update_task(
     Performance:
         Target: <150ms p95 latency
     """
-    await _ensure_db_ready()
     start_time = time.perf_counter()
 
     # Dual logging pattern
