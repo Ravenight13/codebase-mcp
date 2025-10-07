@@ -21,15 +21,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.config.settings import get_settings
+from src.mcp.errors import MCPError, NotFoundError, OperationError, ValidationError
+from src.mcp.legacy.server import create_mcp_server, get_sse_transport
 from src.mcp.mcp_logging import configure_logging, get_logger
-from src.mcp.server import (
-    MCPError,
-    NotFoundError,
-    OperationError,
-    ValidationError,
-    create_mcp_server,
-    get_sse_transport,
-)
 from src.mcp.tools import (
     create_task_tool,
     get_task_tool,
