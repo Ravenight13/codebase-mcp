@@ -7,25 +7,16 @@ Constitutional Compliance:
 - Principle III: Protocol Compliance (MCP-compliant tool handlers)
 - Principle V: Production Quality (comprehensive validation, error handling)
 - Principle VIII: Type Safety (mypy --strict compliance)
+- Principle XI: FastMCP Foundation (FastMCP decorator-based tools)
+
+Note:
+    Tools are registered via @mcp.tool() decorators in their respective modules.
+    They are imported in server_fastmcp.py after the mcp instance is created.
 """
 
-from .indexing import index_repository_tool
-from .search import search_code_tool
-from .tasks import (
-    create_task_tool,
-    get_task_tool,
-    list_tasks_tool,
-    update_task_tool,
-)
+# Legacy imports (will be removed after full FastMCP migration)
+# from .indexing import index_repository_tool
+# from .search import search_code
+# from .tasks import (create_task, get_task, list_tasks, update_task)
 
-__all__ = [
-    # Search
-    "search_code_tool",
-    # Indexing
-    "index_repository_tool",
-    # Tasks
-    "get_task_tool",
-    "list_tasks_tool",
-    "create_task_tool",
-    "update_task_tool",
-]
+__all__: list[str] = []

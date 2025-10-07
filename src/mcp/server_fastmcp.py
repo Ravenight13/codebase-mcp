@@ -166,9 +166,7 @@ async def validate_server_startup(mcp_server: FastMCP) -> None:
 # Import directly from modules (not __init__.py) to avoid dependency issues
 import src.mcp.tools.indexing  # noqa: F401, E402
 import src.mcp.tools.search  # noqa: F401, E402
-
-# Tool handlers will be imported from dedicated modules in subsequent tasks:
-# - create_task, get_task, list_tasks, update_task -> src/mcp/tools/tasks.py
+import src.mcp.tools.tasks  # noqa: F401, E402
 
 
 # ==============================================================================

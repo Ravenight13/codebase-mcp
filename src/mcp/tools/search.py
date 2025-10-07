@@ -8,6 +8,7 @@ Constitutional Compliance:
 - Principle IV: Performance (<500ms p95 latency target)
 - Principle V: Production Quality (comprehensive validation, error handling)
 - Principle VIII: Type Safety (mypy --strict compliance)
+- Principle XI: FastMCP Foundation (FastMCP decorator-based tool)
 """
 
 from __future__ import annotations
@@ -16,12 +17,14 @@ import time
 from typing import Any
 from uuid import UUID
 
+from fastmcp import Context
 from pydantic import Field, ValidationError as PydanticValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database import SessionLocal
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server import ValidationError as MCPValidationError
-from src.services import SearchFilter, SearchResult, search_code
+from src.mcp.server_fastmcp import mcp
+from src.services import SearchFilter, SearchResult
+from src.services.searcher import search_code as search_code_service
 
 # ==============================================================================
 # Constants
@@ -34,26 +37,30 @@ logger = get_logger(__name__)
 # ==============================================================================
 
 
-async def search_code_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def search_code(
     query: str,
     repository_id: str | None = None,
     file_type: str | None = None,
     directory: str | None = None,
     limit: int = 10,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
-    """Semantic code search across indexed repositories.
+    """Search codebase using semantic similarity.
 
-    MCP tool handler that performs semantic search using embeddings and pgvector
-    similarity matching.
+    Performs semantic code search across indexed repositories using embeddings
+    and pgvector similarity matching. Supports filtering by repository, file type,
+    and directory.
+
+    Performance target: <500ms p95 latency
 
     Args:
         query: Natural language search query (required)
-        db: Async database session (injected by dependency)
         repository_id: Optional UUID string to filter by repository
         file_type: Optional file extension filter (e.g., "py", "js")
         directory: Optional directory path filter (supports wildcards)
         limit: Maximum number of results (1-50, default: 10)
+        ctx: FastMCP context for client logging (injected automatically)
 
     Returns:
         Dictionary with search results matching MCP contract:
@@ -75,7 +82,7 @@ async def search_code_tool(
         }
 
     Raises:
-        MCPValidationError: If input validation fails
+        ValueError: If input validation fails
         Exception: If search operation fails
 
     Performance:
@@ -83,8 +90,12 @@ async def search_code_tool(
     """
     start_time = time.perf_counter()
 
+    # Dual logging: Context logging for MCP client + file logging for server
+    if ctx:
+        await ctx.info(f"Searching for: {query[:100]}")
+
     logger.info(
-        "search_code tool called",
+        "search_code called",
         extra={
             "context": {
                 "query": query[:100],  # Truncate for logging
@@ -100,17 +111,11 @@ async def search_code_tool(
     try:
         # Validate query
         if not query or not query.strip():
-            raise MCPValidationError(
-                "Search query cannot be empty",
-                details={"parameter": "query", "value": query},
-            )
+            raise ValueError("Search query cannot be empty")
 
         # Validate limit
         if limit < 1 or limit > 50:
-            raise MCPValidationError(
-                f"Limit must be between 1 and 50, got {limit}",
-                details={"parameter": "limit", "value": limit, "min": 1, "max": 50},
-            )
+            raise ValueError(f"Limit must be between 1 and 50, got {limit}")
 
         # Validate repository_id format (UUID)
         repo_uuid: UUID | None = None
@@ -118,25 +123,14 @@ async def search_code_tool(
             try:
                 repo_uuid = UUID(repository_id)
             except (ValueError, AttributeError) as e:
-                raise MCPValidationError(
-                    f"Invalid repository_id format: {repository_id}",
-                    details={
-                        "parameter": "repository_id",
-                        "value": repository_id,
-                        "expected_format": "UUID",
-                        "error": str(e),
-                    },
+                raise ValueError(
+                    f"Invalid repository_id format: {repository_id}"
                 ) from e
 
         # Validate file_type (no leading dot)
         if file_type is not None and file_type.startswith("."):
-            raise MCPValidationError(
-                "file_type should not include leading dot (use 'py' not '.py')",
-                details={
-                    "parameter": "file_type",
-                    "value": file_type,
-                    "expected_format": "extension without dot",
-                },
+            raise ValueError(
+                "file_type should not include leading dot (use 'py' not '.py')"
             )
 
         # Create search filters
@@ -148,13 +142,10 @@ async def search_code_tool(
                 limit=limit,
             )
         except PydanticValidationError as e:
-            raise MCPValidationError(
-                f"Invalid search filters: {e}",
-                details={"validation_errors": e.errors()},
-            ) from e
+            raise ValueError(f"Invalid search filters: {e}") from e
 
-    except MCPValidationError:
-        # Re-raise MCP validation errors
+    except ValueError:
+        # Re-raise validation errors (FastMCP handles them automatically)
         raise
     except Exception as e:
         # Wrap unexpected validation errors
@@ -167,14 +158,19 @@ async def search_code_tool(
                 }
             },
         )
-        raise MCPValidationError(
-            f"Input validation failed: {e}",
-            details={"error": str(e)},
-        ) from e
+        raise ValueError(f"Input validation failed: {e}") from e
+
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
+        )
 
     # Perform semantic search
     try:
-        results: list[SearchResult] = await search_code(query, db, filters)
+        async with SessionLocal() as db:
+            results: list[SearchResult] = await search_code_service(query, db, filters)
+            await db.commit()
     except Exception as e:
         logger.error(
             "Search operation failed",
@@ -186,7 +182,9 @@ async def search_code_tool(
                 }
             },
         )
-        raise  # Let FastAPI handle the error response
+        if ctx:
+            await ctx.error(f"Search failed: {str(e)[:100]}")
+        raise  # Let FastMCP handle the error response
 
     # Calculate latency
     latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -234,6 +232,11 @@ async def search_code_tool(
             },
         )
 
+    if ctx:
+        await ctx.info(
+            f"Found {len(results)} results in {latency_ms}ms"
+        )
+
     return response
 
 
@@ -241,4 +244,4 @@ async def search_code_tool(
 # Module Exports
 # ==============================================================================
 
-__all__ = ["search_code_tool"]
+__all__ = ["search_code"]
