@@ -406,6 +406,25 @@ python -c "from src.database import Database; import asyncio; asyncio.run(Databa
 alembic current
 ```
 
+### 4. Database Reset & Cleanup
+
+During development, you may need to reset your database. See [DATABASE_RESET.md](DATABASE_RESET.md) for three reset options:
+
+- **scripts/clear_data.sh** - Clear all data, keep schema (fastest, no restart needed)
+- **scripts/reset_database.sh** - Drop and recreate all tables (recommended for schema changes)
+- **scripts/nuclear_reset.sh** - Drop entire database (requires Claude Desktop restart)
+
+```bash
+# Quick data wipe (keeps schema)
+./scripts/clear_data.sh
+
+# Full table reset (recommended)
+./scripts/reset_database.sh
+
+# Nuclear option (drops database)
+./scripts/nuclear_reset.sh
+```
+
 ## Running the Server
 
 ### Development Mode
