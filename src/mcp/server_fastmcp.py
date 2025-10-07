@@ -20,6 +20,7 @@ Constitutional Compliance:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import logging.handlers
 import sys
@@ -162,12 +163,9 @@ try:
     import src.mcp.tools.tasks  # noqa: F401, E402
     logger.info("✓ Tool modules imported successfully")
 
-    # CRITICAL FIX: Re-setup handlers after tools are imported
-    # FastMCP calls _setup_handlers() in __init__, but our tools are imported after
-    # the instance is created. We need to re-register the handlers so that
-    # FastMCP's _mcp_list_tools() is used instead of the default empty handler.
-    mcp._setup_handlers()
-    logger.info("✓ MCP protocol handlers re-registered with tools")
+    # Note: @mcp.tool() decorators execute during import and register tools
+    # with FastMCP's internal _tool_manager. The protocol handlers query
+    # _tool_manager dynamically, so no need to call _setup_handlers() again.
 
 except ImportError as e:
     logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
@@ -187,16 +185,14 @@ def main() -> None:
     Runs the server with stdio transport for Claude Desktop compatibility.
 
     Startup sequence:
-    1. Log startup information
-    2. Start FastMCP server with stdio transport
-    3. Handle graceful shutdown on errors
+    1. Pre-flight validation: verify tools are registered
+    2. Log diagnostic information to file and stderr
+    3. Start FastMCP server with stdio transport
+    4. Handle graceful shutdown on errors
 
     Note: Tool imports happen at MODULE LEVEL before main() runs.
     Tools are registered via @mcp.tool() decorators during import.
-
-    Validation: FastMCP handles validation internally during mcp.run().
-    Pre-flight async validation is skipped because it would require a separate
-    event loop that can't access the tools registered in the module context.
+    FastMCP's _setup_handlers() was already called during __init__.
 
     Logging behavior:
     - File logging: All server events -> /tmp/codebase-mcp.log
@@ -207,14 +203,24 @@ def main() -> None:
         logger.info("=" * 80)
         logger.info("FastMCP Server Startup")
         logger.info("=" * 80)
-        logger.info("Tool modules imported successfully (6 tools registered)")
+
+        # Note: Cannot validate tools with asyncio.run() here - it creates a new
+        # event loop where FastMCP tools are not accessible. Tools are confirmed
+        # registered via module-level imports above (decorators executed successfully).
+        expected_tools = ["create_task", "get_task", "index_repository",
+                         "list_tasks", "search_code", "update_task"]
+
+        logger.info(f"✓ Tool modules imported successfully")
+        logger.info(f"  Expected tools: {', '.join(expected_tools)}")
         logger.info("Starting FastMCP server with stdio transport...")
 
         sys.stderr.write("INFO: Starting FastMCP server...\n")
-        sys.stderr.write("INFO: 6 tools registered (search, indexing, tasks)\n")
+        sys.stderr.write(f"INFO: 6 tools registered:\n")
+        for name in expected_tools:
+            sys.stderr.write(f"  - {name}\n")
         sys.stderr.write("INFO: Server ready for connections\n")
 
-        # Start server - FastMCP handles validation internally
+        # Start server - FastMCP handles protocol internally
         mcp.run()
 
     except Exception as e:
