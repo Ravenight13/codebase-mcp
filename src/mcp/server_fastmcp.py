@@ -24,8 +24,9 @@ import asyncio
 import logging
 import logging.handlers
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastmcp import FastMCP
 
@@ -72,10 +73,66 @@ logger.info(f"Log file: {LOG_FILE}")
 logger.info("=" * 80)
 
 # ==============================================================================
+# FastMCP Lifespan (Database Initialization)
+# ==============================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
+    """Lifespan context manager for FastMCP server.
+
+    Manages server startup and shutdown lifecycle:
+    - Startup: Initialize database connection pool
+    - Shutdown: Close database connections gracefully
+
+    Constitutional Compliance:
+    - Principle V: Production Quality (proper initialization order, error handling)
+    - Principle VIII: Type Safety (full type hints, mypy --strict)
+
+    Args:
+        app: FastMCP server instance
+
+    Yields:
+        None (context manager pattern)
+
+    Raises:
+        RuntimeError: If database initialization fails
+    """
+    # Import database connection management
+    from src.database import close_db_connection, init_db_connection
+
+    # Startup: Initialize database before accepting connections
+    try:
+        logger.info("Initializing database connection pool...")
+        await init_db_connection()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.critical(
+            f"Failed to initialize database: {e}",
+            exc_info=True,
+        )
+        raise RuntimeError(f"Database initialization failed: {e}") from e
+
+    # Yield control to FastMCP server
+    yield
+
+    # Shutdown: Close database connections
+    try:
+        logger.info("Closing database connection pool...")
+        await close_db_connection()
+        logger.info("Database closed successfully")
+    except Exception as e:
+        logger.error(
+            f"Error closing database connection: {e}",
+            exc_info=True,
+        )
+
+
+# ==============================================================================
 # Initialize FastMCP Server
 # ==============================================================================
 
-mcp = FastMCP("codebase-mcp")
+mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
 
 
 # ==============================================================================
