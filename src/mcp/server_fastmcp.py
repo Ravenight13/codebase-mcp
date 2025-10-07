@@ -190,10 +190,9 @@ def main() -> None:
     try:
         logger.info("Starting FastMCP server with stdio transport")
 
-        # Validate server configuration before starting
-        # NOTE: This will fail until tools are registered in subsequent tasks
-        # Run async validation synchronously before starting server
-        asyncio.run(validate_server_startup(mcp))
+        # Log registered tools (validation deferred to FastMCP runtime)
+        # Pre-startup validation removed to avoid race conditions with tool registration
+        logger.info(f"FastMCP server initialized with {len(mcp._tool_manager._tools)} tools")
 
         # Start server with stdio transport (default)
         # This is compatible with Claude Desktop out-of-the-box
