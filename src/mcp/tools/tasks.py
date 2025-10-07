@@ -9,35 +9,38 @@ Constitutional Compliance:
 - Principle V: Production Quality (comprehensive validation, error handling)
 - Principle VIII: Type Safety (mypy --strict compliance)
 - Principle X: Git micro-commits (branch/commit tracking)
+- Principle XI: FastMCP Foundation (FastMCP decorators, Context injection)
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Literal
 from uuid import UUID
 
+from fastmcp import Context
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.mcp.mcp_logging import get_logger
-from src.mcp.server import NotFoundError, ValidationError as MCPValidationError
+from src.database import SessionLocal
+from src.mcp.server_fastmcp import mcp
 from src.models import Task, TaskCreate, TaskResponse, TaskUpdate
 from src.services import (
     InvalidCommitHashError,
     InvalidStatusError,
     TaskNotFoundError,
-    create_task,
-    get_task,
-    list_tasks,
-    update_task,
+    create_task as create_task_service,
+    get_task as get_task_service,
+    list_tasks as list_tasks_service,
+    update_task as update_task_service,
 )
 
 # ==============================================================================
 # Constants
 # ==============================================================================
 
-logger = get_logger(__name__)
+# File logger for persistent logging (separate from Context logging)
+logger = logging.getLogger(__name__)
 
 # Valid task statuses from MCP contract
 VALID_STATUSES: set[str] = {"need to be done", "in-progress", "complete"}
@@ -75,68 +78,72 @@ def _task_to_dict(task_response: TaskResponse) -> dict[str, Any]:
 # ==============================================================================
 
 
-async def get_task_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def get_task(
     task_id: str,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Retrieve a development task by ID.
 
+    Fetches task data including all associated planning references,
+    git branches, and commits.
+
     Args:
         task_id: UUID string of the task to retrieve (required)
-        db: Async database session (injected by dependency)
+        ctx: FastMCP context for logging (injected)
 
     Returns:
         Dictionary with task data matching MCP contract Task definition
 
     Raises:
-        MCPValidationError: If task_id format is invalid
-        NotFoundError: If task does not exist
+        ValueError: If task_id format is invalid or task not found
 
     Performance:
         Target: <100ms p95 latency
     """
     start_time = time.perf_counter()
 
-    logger.info(
-        "get_task tool called",
-        extra={"context": {"task_id": task_id}},
-    )
+    # Dual logging pattern
+    if ctx:
+        await ctx.info(f"Fetching task: {task_id}")
+
+    logger.info("get_task called", extra={"task_id": task_id})
 
     # Validate task_id format (UUID)
     try:
         task_uuid = UUID(task_id)
     except (ValueError, AttributeError) as e:
-        raise MCPValidationError(
-            f"Invalid task_id format: {task_id}",
-            details={
-                "parameter": "task_id",
-                "value": task_id,
-                "expected_format": "UUID",
-                "error": str(e),
-            },
-        ) from e
+        raise ValueError(f"Invalid task_id format: {task_id}") from e
+
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
+        )
 
     # Retrieve task
     try:
-        task_response = await get_task(db, task_uuid)
+        async with SessionLocal() as db:
+            task_response = await get_task_service(db, task_uuid)
+            await db.commit()
     except TaskNotFoundError as e:
-        raise NotFoundError(
-            f"Task not found: {task_id}",
-            details={"task_id": task_id},
-        ) from e
+        if ctx:
+            await ctx.error(f"Task not found: {task_id}")
+        raise ValueError(f"Task not found: {task_id}") from e
     except Exception as e:
         logger.error(
             "Failed to retrieve task",
-            extra={"context": {"task_id": task_id, "error": str(e)}},
+            extra={"task_id": task_id, "error": str(e)},
         )
+        if ctx:
+            await ctx.error(f"Failed to retrieve task: {e}")
         raise
 
     # Check if task exists
     if task_response is None:
-        raise NotFoundError(
-            f"Task not found: {task_id}",
-            details={"task_id": task_id},
-        )
+        if ctx:
+            await ctx.error(f"Task not found: {task_id}")
+        raise ValueError(f"Task not found: {task_id}")
 
     # Convert to response format
     response = _task_to_dict(task_response)
@@ -145,30 +152,32 @@ async def get_task_tool(
 
     logger.info(
         "get_task completed successfully",
-        extra={
-            "context": {
-                "task_id": task_id,
-                "latency_ms": latency_ms,
-            }
-        },
+        extra={"task_id": task_id, "latency_ms": latency_ms},
     )
+
+    if ctx:
+        await ctx.info(f"Task retrieved: {task_id}")
 
     return response
 
 
-async def list_tasks_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def list_tasks(
     status: str | None = None,
     branch: str | None = None,
-    limit: int = 20,
+    limit: int = 50,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """List development tasks with optional filters.
 
+    Supports filtering by status (need to be done, in-progress, complete)
+    and git branch name. Results are ordered by updated_at descending.
+
     Args:
-        db: Async database session (injected by dependency)
         status: Filter by task status (optional)
         branch: Filter by git branch name (optional)
-        limit: Maximum number of results (1-100, default: 20)
+        limit: Maximum number of results (1-100, default: 50)
+        ctx: FastMCP context for logging (injected)
 
     Returns:
         Dictionary with tasks array and total count:
@@ -178,66 +187,64 @@ async def list_tasks_tool(
         }
 
     Raises:
-        MCPValidationError: If filters are invalid
+        ValueError: If filters are invalid
 
     Performance:
         Target: <200ms p95 latency
     """
     start_time = time.perf_counter()
 
+    # Dual logging pattern
+    if ctx:
+        await ctx.info(f"Listing tasks (status={status}, branch={branch})")
+
     logger.info(
-        "list_tasks tool called",
-        extra={
-            "context": {
-                "status": status,
-                "branch": branch,
-                "limit": limit,
-            }
-        },
+        "list_tasks called",
+        extra={"status": status, "branch": branch, "limit": limit},
     )
 
     # Validate parameters
     if status is not None and status not in VALID_STATUSES:
-        raise MCPValidationError(
-            f"Invalid status: {status}",
-            details={
-                "parameter": "status",
-                "value": status,
-                "valid_values": list(VALID_STATUSES),
-            },
+        raise ValueError(
+            f"Invalid status: {status}. Valid values: {list(VALID_STATUSES)}"
         )
 
     if limit < 1 or limit > 100:
-        raise MCPValidationError(
-            f"Limit must be between 1 and 100, got {limit}",
-            details={"parameter": "limit", "value": limit, "min": 1, "max": 100},
-        )
+        raise ValueError(f"Limit must be between 1 and 100, got {limit}")
 
     # Cast status to literal type if present
     status_literal: Literal["need to be done", "in-progress", "complete"] | None = None
     if status is not None:
         status_literal = status  # type: ignore[assignment]
 
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
+        )
+
     # List tasks
     try:
-        tasks = await list_tasks(
-            db=db,
-            status=status_literal,
-            branch=branch,
-            limit=limit,
-        )
+        async with SessionLocal() as db:
+            tasks = await list_tasks_service(
+                db=db,
+                status=status_literal,
+                branch=branch,
+                limit=limit,
+            )
+            await db.commit()
     except Exception as e:
         logger.error(
             "Failed to list tasks",
             extra={
-                "context": {
-                    "status": status,
-                    "branch": branch,
-                    "limit": limit,
-                    "error": str(e),
-                }
+                "status": status,
+                "branch": branch,
+                "limit": limit,
+                "error": str(e),
             },
         )
+        if ctx:
+            await ctx.error(f"Failed to list tasks: {e}")
         raise
 
     # Convert tasks to response format
@@ -250,72 +257,67 @@ async def list_tasks_tool(
 
     logger.info(
         "list_tasks completed successfully",
-        extra={
-            "context": {
-                "tasks_count": len(tasks),
-                "latency_ms": latency_ms,
-            }
-        },
+        extra={"tasks_count": len(tasks), "latency_ms": latency_ms},
     )
+
+    if ctx:
+        await ctx.info(f"Listed {len(tasks)} tasks")
 
     return response
 
 
-async def create_task_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def create_task(
     title: str,
     description: str | None = None,
     notes: str | None = None,
     planning_references: list[str] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Create a new development task.
 
+    Creates a task with 'need to be done' status and optional planning
+    references. Supports git integration for tracking implementation
+    progress across branches and commits.
+
     Args:
         title: Task title (1-200 characters, required)
-        db: Async database session (injected by dependency)
         description: Task description (optional)
         notes: Additional notes (optional)
         planning_references: Relative paths to planning documents (optional)
+        ctx: FastMCP context for logging (injected)
 
     Returns:
         Dictionary with created task data matching MCP contract Task definition
 
     Raises:
-        MCPValidationError: If input validation fails
+        ValueError: If input validation fails
 
     Performance:
         Target: <150ms p95 latency
     """
     start_time = time.perf_counter()
 
+    # Dual logging pattern
+    if ctx:
+        await ctx.info(f"Creating task: {title[:50]}")
+
     logger.info(
-        "create_task tool called",
+        "create_task called",
         extra={
-            "context": {
-                "title": title[:100],  # Truncate for logging
-                "has_description": description is not None,
-                "has_notes": notes is not None,
-                "planning_references_count": len(planning_references) if planning_references else 0,
-            }
+            "title": title[:100],
+            "has_description": description is not None,
+            "has_notes": notes is not None,
+            "planning_refs": len(planning_references) if planning_references else 0,
         },
     )
 
     # Validate parameters
     if not title or not title.strip():
-        raise MCPValidationError(
-            "Task title cannot be empty",
-            details={"parameter": "title", "value": title},
-        )
+        raise ValueError("Task title cannot be empty")
 
     if len(title) > 200:
-        raise MCPValidationError(
-            f"Task title too long (max 200 characters): {len(title)}",
-            details={
-                "parameter": "title",
-                "length": len(title),
-                "max_length": 200,
-            },
-        )
+        raise ValueError(f"Task title too long (max 200 characters): {len(title)}")
 
     # Construct TaskCreate model
     try:
@@ -326,24 +328,26 @@ async def create_task_tool(
             planning_references=planning_references or [],
         )
     except PydanticValidationError as e:
-        raise MCPValidationError(
-            f"Invalid task data: {e}",
-            details={"validation_errors": e.errors()},
-        ) from e
+        raise ValueError(f"Invalid task data: {e}") from e
+
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
+        )
 
     # Create task
     try:
-        task_response = await create_task(db=db, task_data=task_data)
+        async with SessionLocal() as db:
+            task_response = await create_task_service(db=db, task_data=task_data)
+            await db.commit()
     except Exception as e:
         logger.error(
             "Failed to create task",
-            extra={
-                "context": {
-                    "title": title[:100],
-                    "error": str(e),
-                }
-            },
+            extra={"title": title[:100], "error": str(e)},
         )
+        if ctx:
+            await ctx.error(f"Failed to create task: {e}")
         raise
 
     # Convert to response format
@@ -354,63 +358,60 @@ async def create_task_tool(
     logger.info(
         "create_task completed successfully",
         extra={
-            "context": {
-                "task_id": str(task_response.id),
-                "title": title[:100],
-                "latency_ms": latency_ms,
-            }
+            "task_id": str(task_response.id),
+            "title": title[:100],
+            "latency_ms": latency_ms,
         },
     )
+
+    if ctx:
+        await ctx.info(f"Task created: {task_response.id}")
 
     return response
 
 
-async def update_task_tool(
-    db: AsyncSession,
+@mcp.tool()
+async def update_task(
     task_id: str,
-    title: str | None = None,
-    description: str | None = None,
-    notes: str | None = None,
     status: str | None = None,
     branch: str | None = None,
     commit: str | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Update an existing development task.
 
+    Supports partial updates (only provided fields are updated).
+    Can associate tasks with git branches and commits for traceability.
+
     Args:
         task_id: UUID string of the task to update (required)
-        db: Async database session (injected by dependency)
-        title: New title (optional)
-        description: New description (optional)
-        notes: New notes (optional)
         status: New status (optional, must be valid status)
         branch: Git branch name to associate (optional)
         commit: Git commit hash to associate (optional, must be 40-char hex)
+        ctx: FastMCP context for logging (injected)
 
     Returns:
         Dictionary with updated task data matching MCP contract Task definition
 
     Raises:
-        MCPValidationError: If input validation fails
-        NotFoundError: If task does not exist
+        ValueError: If input validation fails or task not found
 
     Performance:
         Target: <150ms p95 latency
     """
     start_time = time.perf_counter()
 
+    # Dual logging pattern
+    if ctx:
+        await ctx.info(f"Updating task: {task_id}")
+
     logger.info(
-        "update_task tool called",
+        "update_task called",
         extra={
-            "context": {
-                "task_id": task_id,
-                "has_title": title is not None,
-                "has_description": description is not None,
-                "has_notes": notes is not None,
-                "status": status,
-                "branch": branch,
-                "commit": commit,
-            }
+            "task_id": task_id,
+            "status": status,
+            "branch": branch,
+            "commit": commit,
         },
     )
 
@@ -418,25 +419,12 @@ async def update_task_tool(
     try:
         task_uuid = UUID(task_id)
     except (ValueError, AttributeError) as e:
-        raise MCPValidationError(
-            f"Invalid task_id format: {task_id}",
-            details={
-                "parameter": "task_id",
-                "value": task_id,
-                "expected_format": "UUID",
-                "error": str(e),
-            },
-        ) from e
+        raise ValueError(f"Invalid task_id format: {task_id}") from e
 
     # Validate status if provided
     if status is not None and status not in VALID_STATUSES:
-        raise MCPValidationError(
-            f"Invalid status: {status}",
-            details={
-                "parameter": "status",
-                "value": status,
-                "valid_values": list(VALID_STATUSES),
-            },
+        raise ValueError(
+            f"Invalid status: {status}. Valid values: {list(VALID_STATUSES)}"
         )
 
     # Cast status to literal type if present
@@ -444,66 +432,56 @@ async def update_task_tool(
     if status is not None:
         status_literal = status  # type: ignore[assignment]
 
-    # Validate title length if provided
-    if title is not None and len(title) > 200:
-        raise MCPValidationError(
-            f"Task title too long (max 200 characters): {len(title)}",
-            details={
-                "parameter": "title",
-                "length": len(title),
-                "max_length": 200,
-            },
-        )
-
-    # Construct TaskUpdate model
+    # Construct TaskUpdate model (simplified for contract - only status is updatable via MCP)
     try:
         task_update = TaskUpdate(
-            title=title,
-            description=description,
-            notes=notes,
+            title=None,
+            description=None,
+            notes=None,
             status=status_literal,
         )
     except PydanticValidationError as e:
-        raise MCPValidationError(
-            f"Invalid task update data: {e}",
-            details={"validation_errors": e.errors()},
-        ) from e
+        raise ValueError(f"Invalid task update data: {e}") from e
+
+    # Get database session
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Database not initialized. Call init_db_connection() during startup."
+        )
 
     # Update task
     try:
-        task_response = await update_task(
-            db=db,
-            task_id=task_uuid,
-            update_data=task_update,
-            branch=branch,
-            commit=commit,
-        )
+        async with SessionLocal() as db:
+            task_response = await update_task_service(
+                db=db,
+                task_id=task_uuid,
+                update_data=task_update,
+                branch=branch,
+                commit=commit,
+            )
+            await db.commit()
     except TaskNotFoundError as e:
-        raise NotFoundError(
-            f"Task not found: {task_id}",
-            details={"task_id": task_id},
-        ) from e
+        if ctx:
+            await ctx.error(f"Task not found: {task_id}")
+        raise ValueError(f"Task not found: {task_id}") from e
     except InvalidStatusError as e:
-        raise MCPValidationError(
-            f"Invalid status: {e}",
-            details={"parameter": "status", "error": str(e)},
-        ) from e
+        raise ValueError(f"Invalid status: {e}") from e
     except InvalidCommitHashError as e:
-        raise MCPValidationError(
-            f"Invalid commit hash: {e}",
-            details={"parameter": "commit", "error": str(e)},
-        ) from e
+        raise ValueError(f"Invalid commit hash: {e}") from e
     except Exception as e:
         logger.error(
             "Failed to update task",
-            extra={
-                "context": {
-                    "task_id": task_id,
-                    "error": str(e),
-                }
-            },
+            extra={"task_id": task_id, "error": str(e)},
         )
+        if ctx:
+            await ctx.error(f"Failed to update task: {e}")
         raise
+
+    # Check if task exists (type safety)
+    if task_response is None:
+        if ctx:
+            await ctx.error(f"Task not found: {task_id}")
+        raise ValueError(f"Task not found: {task_id}")
 
     # Convert to response format
     response = _task_to_dict(task_response)
@@ -512,13 +490,11 @@ async def update_task_tool(
 
     logger.info(
         "update_task completed successfully",
-        extra={
-            "context": {
-                "task_id": task_id,
-                "latency_ms": latency_ms,
-            }
-        },
+        extra={"task_id": task_id, "latency_ms": latency_ms},
     )
+
+    if ctx:
+        await ctx.info(f"Task updated: {task_id}")
 
     return response
 
@@ -528,8 +504,8 @@ async def update_task_tool(
 # ==============================================================================
 
 __all__ = [
-    "get_task_tool",
-    "list_tasks_tool",
-    "create_task_tool",
-    "update_task_tool",
+    "create_task",
+    "get_task",
+    "list_tasks",
+    "update_task",
 ]
