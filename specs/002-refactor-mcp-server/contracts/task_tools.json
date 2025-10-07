@@ -1,0 +1,313 @@
+{
+  "tools": [
+    {
+      "name": "create_task",
+      "description": "Create a new development task.\n\nCreates a task with 'need to be done' status and optional planning references. Supports git integration for tracking implementation progress across branches and commits.\n\nPerformance target: <150ms p95 latency",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Task title",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed task description",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional notes or context",
+            "nullable": true
+          },
+          "planning_references": {
+            "type": "array",
+            "description": "Relative paths to planning documents",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "required": ["title"]
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/TaskResponse"
+      }
+    },
+    {
+      "name": "get_task",
+      "description": "Retrieve a development task by ID.\n\nFetches task data including all associated planning references, git branches, and commits.\n\nPerformance target: <100ms p95 latency",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "UUID string of the task",
+            "format": "uuid"
+          }
+        },
+        "required": ["task_id"]
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/TaskResponse"
+      }
+    },
+    {
+      "name": "list_tasks",
+      "description": "List development tasks with optional filters.\n\nSupports filtering by status (need to be done, in-progress, complete) and git branch name. Results are ordered by updated_at descending.\n\nPerformance target: <200ms p95 latency",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Filter by task status",
+            "enum": ["need to be done", "in-progress", "complete"],
+            "nullable": true
+          },
+          "branch": {
+            "type": "string",
+            "description": "Filter by git branch name",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "description": "Task list",
+            "items": {
+              "$ref": "#/definitions/TaskResponse"
+            }
+          },
+          "total_count": {
+            "type": "integer",
+            "description": "Total number of tasks",
+            "minimum": 0
+          }
+        },
+        "required": ["tasks", "total_count"]
+      }
+    },
+    {
+      "name": "update_task",
+      "description": "Update an existing development task.\n\nSupports partial updates (only provided fields are updated). Can associate tasks with git branches and commits for traceability.\n\nPerformance target: <150ms p95 latency",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "UUID string of the task",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "New title",
+            "minLength": 1,
+            "maxLength": 200,
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "New description",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "New notes",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "New status",
+            "enum": ["need to be done", "in-progress", "complete"],
+            "nullable": true
+          },
+          "branch": {
+            "type": "string",
+            "description": "Git branch name to associate",
+            "nullable": true
+          },
+          "commit": {
+            "type": "string",
+            "description": "Git commit hash (40-char hex)",
+            "pattern": "^[a-f0-9]{40}$",
+            "nullable": true
+          }
+        },
+        "required": ["task_id"]
+      },
+      "outputSchema": {
+        "$ref": "#/definitions/TaskResponse"
+      }
+    }
+  ],
+  "definitions": {
+    "TaskResponse": {
+      "type": "object",
+      "description": "Task data with metadata",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "UUID of the task",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string",
+          "description": "Task title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Task description",
+          "nullable": true
+        },
+        "notes": {
+          "type": "string",
+          "description": "Task notes",
+          "nullable": true
+        },
+        "status": {
+          "type": "string",
+          "description": "Task status",
+          "enum": ["need to be done", "in-progress", "complete"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp",
+          "format": "date-time"
+        },
+        "planning_references": {
+          "type": "array",
+          "description": "Planning document file paths",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "branches": {
+          "type": "array",
+          "description": "Associated git branches",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "commits": {
+          "type": "array",
+          "description": "Associated git commit hashes",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "created_at",
+        "updated_at"
+      ]
+    }
+  },
+  "examples": {
+    "create_task": {
+      "input": {
+        "title": "Implement user authentication",
+        "description": "Add JWT-based authentication to API endpoints",
+        "planning_references": ["specs/001-auth-system/spec.md"]
+      },
+      "output": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Implement user authentication",
+        "description": "Add JWT-based authentication to API endpoints",
+        "notes": null,
+        "status": "need to be done",
+        "created_at": "2025-10-06T10:30:00Z",
+        "updated_at": "2025-10-06T10:30:00Z",
+        "planning_references": ["specs/001-auth-system/spec.md"],
+        "branches": [],
+        "commits": []
+      }
+    },
+    "get_task": {
+      "input": {
+        "task_id": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "output": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Implement user authentication",
+        "description": "Add JWT-based authentication to API endpoints",
+        "notes": "Working on middleware integration",
+        "status": "in-progress",
+        "created_at": "2025-10-06T10:30:00Z",
+        "updated_at": "2025-10-06T11:45:00Z",
+        "planning_references": ["specs/001-auth-system/spec.md"],
+        "branches": ["001-auth-system"],
+        "commits": ["a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"]
+      }
+    },
+    "list_tasks": {
+      "input": {
+        "status": "in-progress",
+        "limit": 10
+      },
+      "output": {
+        "tasks": [
+          {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "title": "Implement user authentication",
+            "description": "Add JWT-based authentication to API endpoints",
+            "notes": "Working on middleware integration",
+            "status": "in-progress",
+            "created_at": "2025-10-06T10:30:00Z",
+            "updated_at": "2025-10-06T11:45:00Z",
+            "planning_references": ["specs/001-auth-system/spec.md"],
+            "branches": ["001-auth-system"],
+            "commits": ["a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"]
+          }
+        ],
+        "total_count": 1
+      }
+    },
+    "update_task": {
+      "input": {
+        "task_id": "550e8400-e29b-41d4-a716-446655440000",
+        "status": "complete",
+        "notes": "Authentication middleware implemented and tested",
+        "commit": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0a1"
+      },
+      "output": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Implement user authentication",
+        "description": "Add JWT-based authentication to API endpoints",
+        "notes": "Authentication middleware implemented and tested",
+        "status": "complete",
+        "created_at": "2025-10-06T10:30:00Z",
+        "updated_at": "2025-10-06T14:20:00Z",
+        "planning_references": ["specs/001-auth-system/spec.md"],
+        "branches": ["001-auth-system"],
+        "commits": [
+          "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+          "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0a1"
+        ]
+      }
+    }
+  }
+}

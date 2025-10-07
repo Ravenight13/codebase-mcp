@@ -1,0 +1,134 @@
+{
+  "name": "search_code",
+  "description": "Search codebase using semantic similarity.\n\nPerforms semantic code search across indexed repositories using embeddings and pgvector similarity matching. Supports filtering by repository, file type, and directory.\n\nPerformance target: <500ms p95 latency",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "repository_id": {
+        "type": "string",
+        "description": "Optional UUID string to filter by repository",
+        "format": "uuid",
+        "nullable": true
+      },
+      "file_type": {
+        "type": "string",
+        "description": "Optional file extension filter (e.g., 'py', 'js')",
+        "nullable": true
+      },
+      "directory": {
+        "type": "string",
+        "description": "Optional directory path filter (supports wildcards)",
+        "nullable": true
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of results",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 10
+      }
+    },
+    "required": ["query"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "chunk_id": {
+              "type": "string",
+              "description": "UUID of the code chunk",
+              "format": "uuid"
+            },
+            "file_path": {
+              "type": "string",
+              "description": "Relative path to the file"
+            },
+            "content": {
+              "type": "string",
+              "description": "Code snippet content"
+            },
+            "start_line": {
+              "type": "integer",
+              "description": "Starting line number",
+              "minimum": 1
+            },
+            "end_line": {
+              "type": "integer",
+              "description": "Ending line number",
+              "minimum": 1
+            },
+            "similarity_score": {
+              "type": "number",
+              "description": "Similarity score (0.0-1.0)",
+              "minimum": 0.0,
+              "maximum": 1.0
+            },
+            "context_before": {
+              "type": "string",
+              "description": "Lines before the chunk",
+              "default": ""
+            },
+            "context_after": {
+              "type": "string",
+              "description": "Lines after the chunk",
+              "default": ""
+            }
+          },
+          "required": [
+            "chunk_id",
+            "file_path",
+            "content",
+            "start_line",
+            "end_line",
+            "similarity_score"
+          ]
+        }
+      },
+      "total_count": {
+        "type": "integer",
+        "description": "Total number of results",
+        "minimum": 0
+      },
+      "latency_ms": {
+        "type": "integer",
+        "description": "Search latency in milliseconds",
+        "minimum": 0
+      }
+    },
+    "required": ["results", "total_count", "latency_ms"]
+  },
+  "examples": [
+    {
+      "input": {
+        "query": "authentication middleware",
+        "limit": 5
+      },
+      "output": {
+        "results": [
+          {
+            "chunk_id": "550e8400-e29b-41d4-a716-446655440000",
+            "file_path": "src/middleware/auth.py",
+            "content": "async def authenticate_user(token: str) -> User:\n    ...",
+            "start_line": 15,
+            "end_line": 20,
+            "similarity_score": 0.95,
+            "context_before": "from models import User\n",
+            "context_after": "\n# Token validation logic"
+          }
+        ],
+        "total_count": 1,
+        "latency_ms": 250
+      }
+    }
+  ]
+}

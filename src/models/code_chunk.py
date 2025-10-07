@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -123,7 +123,7 @@ class CodeChunkCreate(BaseModel):
 
     @field_validator("end_line")
     @classmethod
-    def validate_line_order(cls, v: int, info: dict) -> int:
+    def validate_line_order(cls, v: int, info: ValidationInfo) -> int:
         """Validate that end_line >= start_line."""
         if "start_line" in info.data and v < info.data["start_line"]:
             raise ValueError("end_line must be >= start_line")

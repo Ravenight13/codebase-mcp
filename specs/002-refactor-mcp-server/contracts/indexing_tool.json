@@ -1,0 +1,97 @@
+{
+  "name": "index_repository",
+  "description": "Index a code repository for semantic search.\n\nOrchestrates the complete repository indexing workflow: scanning, chunking, embedding generation, and storage in PostgreSQL with pgvector.\n\nPerformance target: <60 seconds for 10,000 files",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "repo_path": {
+        "type": "string",
+        "description": "Absolute path to repository directory"
+      },
+      "force_reindex": {
+        "type": "boolean",
+        "description": "Force full re-index even if already indexed",
+        "default": false
+      }
+    },
+    "required": ["repo_path"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "repository_id": {
+        "type": "string",
+        "description": "UUID of the indexed repository",
+        "format": "uuid"
+      },
+      "files_indexed": {
+        "type": "integer",
+        "description": "Number of files indexed",
+        "minimum": 0
+      },
+      "chunks_created": {
+        "type": "integer",
+        "description": "Number of code chunks created",
+        "minimum": 0
+      },
+      "duration_seconds": {
+        "type": "number",
+        "description": "Indexing duration in seconds",
+        "minimum": 0
+      },
+      "status": {
+        "type": "string",
+        "description": "Indexing status",
+        "enum": ["success", "partial", "failed"]
+      },
+      "errors": {
+        "type": "array",
+        "description": "Error messages if any",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      }
+    },
+    "required": [
+      "repository_id",
+      "files_indexed",
+      "chunks_created",
+      "duration_seconds",
+      "status"
+    ]
+  },
+  "examples": [
+    {
+      "input": {
+        "repo_path": "/Users/dev/projects/myapp",
+        "force_reindex": false
+      },
+      "output": {
+        "repository_id": "123e4567-e89b-12d3-a456-426614174000",
+        "files_indexed": 1234,
+        "chunks_created": 5678,
+        "duration_seconds": 45.2,
+        "status": "success",
+        "errors": []
+      }
+    },
+    {
+      "input": {
+        "repo_path": "/Users/dev/projects/large-repo",
+        "force_reindex": true
+      },
+      "output": {
+        "repository_id": "987fcdeb-51a2-43f7-b890-123456789abc",
+        "files_indexed": 9800,
+        "chunks_created": 45000,
+        "duration_seconds": 58.7,
+        "status": "partial",
+        "errors": [
+          "Failed to parse file: src/legacy/old_script.py (encoding error)",
+          "Failed to parse file: tests/fixtures/malformed.js (syntax error)"
+        ]
+      }
+    }
+  ]
+}
