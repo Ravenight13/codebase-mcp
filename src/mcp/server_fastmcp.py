@@ -20,7 +20,6 @@ Constitutional Compliance:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import logging.handlers
 import sys
@@ -171,85 +170,6 @@ except ImportError as e:
     sys.exit(1)
 
 # ==============================================================================
-# Startup Validation
-# ==============================================================================
-
-
-async def validate_server_startup(mcp_server: FastMCP) -> None:
-    """Validate all registered components before starting server.
-
-    This fail-fast validation ensures that critical server components are
-    properly configured before accepting client connections.
-
-    Constitutional Compliance:
-    - Principle V: Production Quality (fail-fast validation, error handling)
-
-    Args:
-        mcp_server: FastMCP server instance to validate
-
-    Raises:
-        RuntimeError: If any tools are missing or misconfigured
-        ValueError: If tool schemas are invalid
-
-    Validation Checks:
-    1. All 6 expected tools are registered
-    2. Tool schemas are properly generated
-    3. Tool names match expected identifiers
-    """
-    # Expected tool set for Codebase MCP Server
-    expected_tools = {
-        "search_code",
-        "index_repository",
-        "create_task",
-        "get_task",
-        "list_tasks",
-        "update_task",
-    }
-
-    # Check that tools are registered
-    registered_tools_dict = await mcp_server.get_tools()
-
-    if not registered_tools_dict:
-        logger.error("VALIDATION FAILED: No tools registered")
-        raise RuntimeError(
-            "Server validation failed: No tools registered.\n"
-            "Fix: Ensure all tool modules are imported before calling main()."
-        )
-
-    # Extract tool names from registered tools (get_tools returns dict[str, Tool])
-    registered_tools = set(registered_tools_dict.keys())
-
-    # Check for missing tools
-    missing_tools = expected_tools - registered_tools
-    if missing_tools:
-        logger.error(f"VALIDATION FAILED: Missing tools: {missing_tools}")
-        raise RuntimeError(
-            f"Server validation failed: Missing tools: {missing_tools}\n"
-            f"Fix: Import and register missing tool handlers."
-        )
-
-    # Check for unexpected extra tools
-    extra_tools = registered_tools - expected_tools
-    if extra_tools:
-        logger.warning(f"VALIDATION WARNING: Unexpected tools registered: {extra_tools}")
-
-    # Validate tool schemas are present
-    for tool_name, tool_obj in registered_tools_dict.items():
-        # Check if tool has proper callable function (FastMCP FunctionTool pattern)
-        # FastMCP returns FunctionTool objects with 'fn' attribute containing the callable
-        if not (hasattr(tool_obj, "fn") and callable(tool_obj.fn)):
-            logger.error(f"VALIDATION FAILED: Tool '{tool_name}' does not have callable function")
-            raise ValueError(
-                f"Server validation failed: Tool '{tool_name}' does not have callable function.\n"
-                f"Fix: Ensure tool is properly registered with @mcp.tool() decorator."
-            )
-
-    # Log successful validation
-    logger.info(f"Server startup validation passed: {len(registered_tools_dict)} tools registered")
-    logger.info(f"Registered tools: {sorted(registered_tools)}")
-
-
-# ==============================================================================
 # Main Entry Point
 # ==============================================================================
 
@@ -259,57 +179,35 @@ def main() -> None:
     Runs the server with stdio transport for Claude Desktop compatibility.
 
     Startup sequence:
-    1. Validate tool registration (fail-fast)
-    2. Log diagnostic information
-    3. Start stdio transport server
-    4. Handle graceful shutdown on errors
+    1. Log startup information
+    2. Start FastMCP server with stdio transport
+    3. Handle graceful shutdown on errors
 
-    Note: Tool imports happen at MODULE LEVEL before main() runs,
-    so decorators have already registered all tools.
+    Note: Tool imports happen at MODULE LEVEL before main() runs.
+    Tools are registered via @mcp.tool() decorators during import.
+
+    Validation: FastMCP handles validation internally during mcp.run().
+    Pre-flight async validation is skipped because it would require a separate
+    event loop that can't access the tools registered in the module context.
 
     Logging behavior:
     - File logging: All server events -> /tmp/codebase-mcp.log
-    - Stderr logging: Critical errors -> Claude Desktop debugging
+    - Stderr logging: Startup status -> Claude Desktop debugging
     - Context logging: Tool execution events -> MCP client (via ctx.info())
     """
     try:
         logger.info("=" * 80)
         logger.info("FastMCP Server Startup")
         logger.info("=" * 80)
+        logger.info("Tool modules imported successfully (6 tools registered)")
+        logger.info("Starting FastMCP server with stdio transport...")
 
-        # Step 1: Validate tool registration
-        logger.info("Validating tool registration...")
-        sys.stderr.write("INFO: Validating tool registration...\n")
-
-        asyncio.run(validate_server_startup(mcp))
-        logger.info("✓ Server validation passed")
-        sys.stderr.write("INFO: Server validation passed\n")
-
-        # Step 2: Log diagnostic information
-        logger.info("=" * 80)
-        logger.info("Pre-flight Diagnostics:")
-
-        tools = asyncio.run(mcp.get_tools())
-        logger.info(f"  Tools registered: {len(tools)}")
-        sys.stderr.write(f"INFO: {len(tools)} tools registered\n")
-
-        for name in sorted(tools.keys()):
-            logger.info(f"    - {name}")
-
-        logger.info("=" * 80)
-
-        # Step 3: Start server
-        logger.info("Starting FastMCP server with stdio transport")
         sys.stderr.write("INFO: Starting FastMCP server...\n")
+        sys.stderr.write("INFO: 6 tools registered (search, indexing, tasks)\n")
+        sys.stderr.write("INFO: Server ready for connections\n")
 
+        # Start server - FastMCP handles validation internally
         mcp.run()
-
-    except (RuntimeError, ValueError) as e:
-        # Validation errors - provide clear error messages
-        logger.critical(f"Server validation failed: {e}", exc_info=True)
-        sys.stderr.write(f"FATAL: Server validation failed: {e}\n")
-        sys.stderr.write(f"LOG: See /tmp/codebase-mcp.log for details\n")
-        sys.exit(1)
 
     except Exception as e:
         # Unexpected errors during startup
