@@ -20,7 +20,7 @@ from uuid import UUID
 from fastmcp import Context
 from pydantic import Field, ValidationError as PydanticValidationError
 
-from src.database import SessionLocal
+from src.database import get_session_factory
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import mcp
 from src.services import SearchFilter, SearchResult
@@ -160,15 +160,9 @@ async def search_code(
         )
         raise ValueError(f"Input validation failed: {e}") from e
 
-    # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
     # Perform semantic search
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             results: list[SearchResult] = await search_code_service(query, db, filters)
             await db.commit()
     except Exception as e:

@@ -237,6 +237,47 @@ async def check_db_health() -> bool:
 
 
 # ==============================================================================
+# Session Factory Access
+# ==============================================================================
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Get the initialized session factory.
+
+    Provides access to the global SessionLocal factory for creating database
+    sessions outside of FastAPI dependency injection context (e.g., in MCP tools).
+
+    Returns:
+        async_sessionmaker[AsyncSession]: Initialized session factory
+
+    Raises:
+        RuntimeError: If database is not initialized
+
+    Example:
+        >>> # In MCP tool:
+        >>> factory = get_session_factory()
+        >>> async with factory() as db:
+        ...     result = await db.execute(select(Repository))
+        ...     await db.commit()
+
+    Note:
+        This function does NOT create a session - it returns the factory.
+        Call the returned factory to create a session: `factory()`
+    """
+    if SessionLocal is None:
+        error_msg = (
+            "Database not initialized. Call init_db_connection() during startup."
+        )
+        logger.error(
+            "Session factory requested before initialization",
+            extra={"context": {"operation": "get_session_factory", "error": error_msg}},
+        )
+        raise RuntimeError(error_msg)
+
+    return SessionLocal
+
+
+# ==============================================================================
 # FastAPI Dependency
 # ==============================================================================
 
@@ -333,6 +374,7 @@ __all__ = [
     "init_db_connection",
     "close_db_connection",
     "check_db_health",
+    "get_session_factory",
     "get_db",
     "SessionLocal",
 ]

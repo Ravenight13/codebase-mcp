@@ -18,7 +18,7 @@ from typing import Any
 
 from fastmcp import Context
 
-from src.database import SessionLocal
+from src.database import get_session_factory
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import mcp
 from src.services.indexer import IndexResult
@@ -109,15 +109,9 @@ async def index_repository(
     if not path_obj.is_dir():
         raise ValueError(f"Repository path must be a directory: {repo_path}")
 
-    # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
     # Perform indexing
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             # Progress callback for real-time updates via Context
             async def progress_callback(message: str) -> None:
                 if ctx:

@@ -149,33 +149,6 @@ mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
 __all__ = ["mcp"]
 
 # ==============================================================================
-# Tool Registration (Module-Level Import for Decorator Execution)
-# ==============================================================================
-
-# Import tool modules at module level to execute @mcp.tool() decorators
-# This must happen AFTER mcp instance is created but BEFORE main() runs
-# Decorators register tools synchronously at import time
-
-try:
-    logger.info("Importing tool modules...")
-    import src.mcp.tools.indexing  # noqa: F401, E402
-    import src.mcp.tools.search  # noqa: F401, E402
-    import src.mcp.tools.tasks  # noqa: F401, E402
-    logger.info("✓ Tool modules imported successfully")
-
-    # Note: @mcp.tool() decorators execute during import and register tools
-    # with FastMCP's internal _tool_manager. The protocol handlers query
-    # _tool_manager dynamically, so no need to call _setup_handlers() again.
-
-except ImportError as e:
-    logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
-    sys.stderr.write(f"FATAL: Failed to import tool modules: {e}\n")
-    sys.stderr.write("FIX: Check that all dependencies are installed (uv sync)\n")
-    sys.stderr.write("LOG: See /tmp/codebase-mcp.log for details\n")
-    # Exit immediately - no point continuing without tools
-    sys.exit(1)
-
-# ==============================================================================
 # Main Entry Point
 # ==============================================================================
 
@@ -185,28 +158,45 @@ def main() -> None:
     Runs the server with stdio transport for Claude Desktop compatibility.
 
     Startup sequence:
-    1. Pre-flight validation: verify tools are registered
-    2. Log diagnostic information to file and stderr
-    3. Start FastMCP server with stdio transport
-    4. Handle graceful shutdown on errors
+    1. Import tool modules FIRST (inside main()) to register with correct mcp instance
+    2. Pre-flight validation: verify tools are registered
+    3. Log diagnostic information to file and stderr
+    4. Start FastMCP server with stdio transport
+    5. Handle graceful shutdown on errors
 
-    Note: Tool imports happen at MODULE LEVEL before main() runs.
-    Tools are registered via @mcp.tool() decorators during import.
-    FastMCP's _setup_handlers() was already called during __init__.
+    CRITICAL: Tool imports MUST happen inside main() to avoid double-import issue:
+    - When run as `python -m src.mcp.server_fastmcp`, module loads as `__main__`
+    - Module-level imports create tools on `__main__.mcp` instance
+    - But FastMCP protocol handlers look at `src.mcp.server_fastmcp.mcp` instance
+    - Result: Tools registered but protocol returns empty tools list
+    - Solution: Import tools inside main() so they register with the active mcp instance
 
     Logging behavior:
     - File logging: All server events -> /tmp/codebase-mcp.log
     - Stderr logging: Startup status -> Claude Desktop debugging
     - Context logging: Tool execution events -> MCP client (via ctx.info())
     """
+    # CRITICAL: Import tools FIRST, inside main(), so they register with the
+    # correct mcp instance (the one that will be used by the protocol handlers)
+    try:
+        logger.info("Importing tool modules...")
+        import src.mcp.tools.indexing  # noqa: F401
+        import src.mcp.tools.search  # noqa: F401
+        import src.mcp.tools.tasks  # noqa: F401
+        logger.info("✓ Tool modules imported successfully")
+    except ImportError as e:
+        logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
+        sys.stderr.write(f"FATAL: Failed to import tool modules: {e}\n")
+        sys.stderr.write("FIX: Check that all dependencies are installed (uv sync)\n")
+        sys.stderr.write("LOG: See /tmp/codebase-mcp.log for details\n")
+        sys.exit(1)
+
     try:
         logger.info("=" * 80)
         logger.info("FastMCP Server Startup")
         logger.info("=" * 80)
 
-        # Note: Cannot validate tools with asyncio.run() here - it creates a new
-        # event loop where FastMCP tools are not accessible. Tools are confirmed
-        # registered via module-level imports above (decorators executed successfully).
+        # List expected tools for diagnostics
         expected_tools = ["create_task", "get_task", "index_repository",
                          "list_tasks", "search_code", "update_task"]
 

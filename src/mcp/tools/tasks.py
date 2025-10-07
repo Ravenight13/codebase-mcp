@@ -22,7 +22,7 @@ from uuid import UUID
 from fastmcp import Context
 from pydantic import ValidationError as PydanticValidationError
 
-from src.database import SessionLocal
+from src.database import get_session_factory
 from src.mcp.server_fastmcp import mcp
 from src.models import Task, TaskCreate, TaskResponse, TaskUpdate
 from src.services import (
@@ -116,14 +116,8 @@ async def get_task(
         raise ValueError(f"Invalid task_id format: {task_id}") from e
 
     # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
-    # Retrieve task
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             task_response = await get_task_service(db, task_uuid)
             await db.commit()
     except TaskNotFoundError as e:
@@ -217,15 +211,9 @@ async def list_tasks(
     if status is not None:
         status_literal = status  # type: ignore[assignment]
 
-    # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
     # List tasks
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             tasks = await list_tasks_service(
                 db=db,
                 status=status_literal,
@@ -330,15 +318,9 @@ async def create_task(
     except PydanticValidationError as e:
         raise ValueError(f"Invalid task data: {e}") from e
 
-    # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
     # Create task
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             task_response = await create_task_service(db=db, task_data=task_data)
             await db.commit()
     except Exception as e:
@@ -443,15 +425,9 @@ async def update_task(
     except PydanticValidationError as e:
         raise ValueError(f"Invalid task update data: {e}") from e
 
-    # Get database session
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not initialized. Call init_db_connection() during startup."
-        )
-
     # Update task
     try:
-        async with SessionLocal() as db:
+        async with get_session_factory()() as db:
             task_response = await update_task_service(
                 db=db,
                 task_id=task_uuid,
