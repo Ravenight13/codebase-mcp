@@ -164,9 +164,14 @@ async def validate_server_startup(mcp_server: FastMCP) -> None:
 # Import tool handlers to register them with FastMCP via @mcp.tool() decorator
 # These imports must come after mcp = FastMCP() to avoid circular imports
 # Import directly from modules (not __init__.py) to avoid dependency issues
-import src.mcp.tools.indexing  # noqa: F401, E402
-import src.mcp.tools.search  # noqa: F401, E402
-import src.mcp.tools.tasks  # noqa: F401, E402
+try:
+    import src.mcp.tools.indexing  # noqa: F401, E402
+    import src.mcp.tools.search  # noqa: F401, E402
+    import src.mcp.tools.tasks  # noqa: F401, E402
+    logger.info("Tool modules imported successfully")
+except ImportError as e:
+    logger.error(f"Failed to import tool modules: {e}", exc_info=True)
+    raise
 
 
 # ==============================================================================
@@ -189,10 +194,7 @@ def main() -> None:
     """
     try:
         logger.info("Starting FastMCP server with stdio transport")
-
-        # Log registered tools (validation deferred to FastMCP runtime)
-        # Pre-startup validation removed to avoid race conditions with tool registration
-        logger.info(f"FastMCP server initialized with {len(mcp._tool_manager._tools)} tools")
+        logger.info("Tool registration complete, starting server...")
 
         # Start server with stdio transport (default)
         # This is compatible with Claude Desktop out-of-the-box
