@@ -37,8 +37,19 @@ psql -d codebase_mcp -f db/init_tables.sql
 
 ### 2. Install Dependencies
 ```bash
+# Install dependencies including FastMCP framework
 uv sync
+
+# Or with pip
+pip install -r requirements.txt
 ```
+
+**Key Dependencies:**
+- `fastmcp>=0.1.0` - Modern MCP framework with decorator-based tools
+- `anthropic-mcp` - MCP protocol implementation
+- `sqlalchemy>=2.0` - Async ORM
+- `pgvector` - PostgreSQL vector extension
+- `ollama` - Embedding generation
 
 ### 3. Configure Claude Desktop
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -51,16 +62,19 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": [
         "run",
         "--with",
-        "anthropic-mcp",
+        "fastmcp",
         "python",
-        "/absolute/path/to/codebase-mcp/src/mcp/mcp_stdio_server_v3.py"
+        "/absolute/path/to/codebase-mcp/server_fastmcp.py"
       ]
     }
   }
 }
 ```
 
-**Important:** Use absolute paths!
+**Important:**
+- Use absolute paths!
+- Server uses FastMCP framework with decorator-based tool definitions
+- All logs go to `/tmp/codebase-mcp.log` (no stdout/stderr pollution)
 
 ### 4. Start Ollama
 ```bash
@@ -179,10 +193,16 @@ Response:
 ## Architecture
 
 ```
-Claude Desktop ↔ MCP Server ↔ Tool Handlers ↔ Services ↔ PostgreSQL
-                                                    ↓
-                                                 Ollama (embeddings)
+Claude Desktop ↔ FastMCP Server ↔ Tool Handlers ↔ Services ↔ PostgreSQL
+                                                        ↓
+                                                     Ollama (embeddings)
 ```
+
+**MCP Framework**: Built with [FastMCP](https://github.com/jlowin/fastmcp) - a modern, decorator-based framework for building MCP servers with:
+- Type-safe tool definitions via `@mcp.tool()` decorators
+- Automatic JSON Schema generation from Pydantic models
+- Dual logging (file + MCP protocol) without stdout pollution
+- Async/await support throughout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
 
@@ -209,10 +229,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete schema documentati
 
 ## Technology Stack
 
-- **Server:** Python 3.13+, MCP SDK, FastAPI patterns
+- **MCP Framework:** FastMCP 0.1+ (decorator-based tool definitions)
+- **Server:** Python 3.13+, FastAPI patterns, async/await
 - **Database:** PostgreSQL 14+ with pgvector extension
 - **Embeddings:** Ollama (nomic-embed-text, 768 dimensions)
-- **ORM:** SQLAlchemy 2.0 (async), Pydantic for validation
+- **ORM:** SQLAlchemy 2.0 (async), Pydantic V2 for validation
 - **Type Safety:** Full mypy --strict compliance
 
 ## Development
@@ -231,25 +252,35 @@ uv run pytest tests/ -v
 
 ### Code Structure
 ```
-src/
-├── mcp/
-│   ├── mcp_stdio_server_v3.py    # MCP server entry point
-│   └── tools/                     # Tool handlers
-│       ├── tasks.py               # Task management
-│       ├── indexing.py            # Repository indexing
-│       └── search.py              # Semantic search
-├── services/                      # Business logic layer
-│   ├── tasks.py                   # Task CRUD + git tracking
-│   ├── indexer.py                 # Indexing orchestration
-│   ├── scanner.py                 # File discovery
-│   ├── chunker.py                 # AST-based chunking
-│   ├── embedder.py                # Ollama integration
-│   └── searcher.py                # pgvector similarity search
-└── models/                        # Database models + Pydantic schemas
-    ├── task.py                    # Task, TaskCreate, TaskUpdate
-    ├── code_chunk.py              # CodeChunk
-    └── ...
+codebase-mcp/
+├── server_fastmcp.py              # FastMCP server entry point (NEW)
+├── src/
+│   ├── mcp/
+│   │   └── tools/                 # Tool handlers with service integration
+│   │       ├── tasks.py           # Task management
+│   │       ├── indexing.py        # Repository indexing
+│   │       └── search.py          # Semantic search
+│   ├── services/                  # Business logic layer
+│   │   ├── tasks.py               # Task CRUD + git tracking
+│   │   ├── indexer.py             # Indexing orchestration
+│   │   ├── scanner.py             # File discovery
+│   │   ├── chunker.py             # AST-based chunking
+│   │   ├── embedder.py            # Ollama integration
+│   │   └── searcher.py            # pgvector similarity search
+│   └── models/                    # Database models + Pydantic schemas
+│       ├── task.py                # Task, TaskCreate, TaskUpdate
+│       ├── code_chunk.py          # CodeChunk
+│       └── ...
+└── tests/
+    ├── test_tool_handlers.py      # Integration tests
+    └── test_embeddings.py         # Embedding validation
 ```
+
+**FastMCP Server Architecture:**
+- `server_fastmcp.py` - Main entry point using `@mcp.tool()` decorators
+- Tool handlers in `src/mcp/tools/` provide service integration
+- Services in `src/services/` contain all business logic
+- Dual logging: file (`/tmp/codebase-mcp.log`) + MCP protocol
 
 ## Prerequisites
 
@@ -327,12 +358,22 @@ source .venv/bin/activate
 ### 3. Install Dependencies
 
 ```bash
-# Install production dependencies
+# Install production dependencies (includes FastMCP)
 pip install -r requirements.txt
 
 # For development (includes testing and linting tools)
 pip install -r requirements-dev.txt
+
+# Or with uv (recommended)
+uv sync
 ```
+
+**Key Dependencies Installed:**
+- `fastmcp>=0.1.0` - Modern MCP framework
+- `sqlalchemy>=2.0` - Async database ORM
+- `pgvector` - PostgreSQL vector extension Python bindings
+- `ollama` - Embedding generation client
+- `pydantic>=2.0` - Data validation and settings
 
 ### 4. Configure Environment
 
@@ -427,17 +468,36 @@ During development, you may need to reset your database. See [DATABASE_RESET.md]
 
 ## Running the Server
 
-### Development Mode
+### FastMCP Server (Recommended)
+
+The primary way to run the server is via Claude Desktop or other MCP clients:
 
 ```bash
-# Start with auto-reload
+# Via Claude Desktop (configured in claude_desktop_config.json)
+# Server starts automatically when Claude Desktop launches
+
+# Manual testing with FastMCP CLI
+uv run --with fastmcp python server_fastmcp.py
+
+# With custom log level
+LOG_LEVEL=DEBUG uv run --with fastmcp python server_fastmcp.py
+```
+
+**Server Entry Point**: `server_fastmcp.py` in repository root
+
+**Logging**: All output goes to `/tmp/codebase-mcp.log` (configurable via `LOG_FILE` env var)
+
+### Development Mode (Legacy FastAPI)
+
+```bash
+# Start with auto-reload (if FastAPI server exists)
 uvicorn src.main:app --reload --host 127.0.0.1 --port 3000
 
 # With custom log level
 LOG_LEVEL=DEBUG uvicorn src.main:app --reload
 ```
 
-### Production Mode
+### Production Mode (Legacy)
 
 ```bash
 # Start production server
@@ -447,9 +507,9 @@ uvicorn src.main:app --host 0.0.0.0 --port 3000 --workers 4
 gunicorn src.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:3000
 ```
 
-### stdio Transport (CLI Mode)
+### stdio Transport (Legacy CLI Mode)
 
-The MCP server supports stdio transport for CLI clients via JSON-RPC 2.0 over stdin/stdout. This is ideal for command-line tools and scripted interactions.
+The legacy MCP server supports stdio transport for CLI clients via JSON-RPC 2.0 over stdin/stdout.
 
 ```bash
 # Start stdio server (reads JSON-RPC from stdin)
@@ -773,6 +833,80 @@ git push origin 001-feature-name
 
 See [.specify/memory/constitution.md](.specify/memory/constitution.md) for full principles.
 
+## FastMCP Migration (Oct 2025)
+
+**Migration Complete**: The server has been successfully migrated from the legacy MCP SDK to the modern FastMCP framework.
+
+### What Changed
+
+**Before (MCP SDK):**
+```python
+# Old: Manual tool registration with JSON schemas
+class MCPServer:
+    def __init__(self):
+        self.tools = {
+            "search_code": {
+                "name": "search_code",
+                "description": "...",
+                "inputSchema": {...}
+            }
+        }
+```
+
+**After (FastMCP):**
+```python
+# New: Decorator-based tool definitions
+@mcp.tool()
+async def search_code(query: str, limit: int = 10) -> dict[str, Any]:
+    """Semantic code search with natural language queries."""
+    # Implementation
+```
+
+### Key Benefits
+
+1. **Simpler Tool Definitions**: Decorators replace manual JSON schema creation
+2. **Type Safety**: Automatic schema generation from Pydantic models
+3. **Dual Logging**: File logging + MCP protocol without stdout pollution
+4. **Better Error Handling**: Structured error responses with context
+5. **Cleaner Architecture**: Separation of tool interface from business logic
+
+### Server Files
+
+- **New Entry Point**: `server_fastmcp.py` (root directory)
+- **Legacy Server**: `src/mcp/mcp_stdio_server_v3.py` (deprecated, will be removed)
+- **Tool Handlers**: `src/mcp/tools/*.py` (unchanged, reused by FastMCP)
+- **Services**: `src/services/*.py` (unchanged, business logic intact)
+
+### Configuration Update Required
+
+**Update your Claude Desktop config** to use the new server:
+
+```json
+{
+  "mcpServers": {
+    "codebase-mcp": {
+      "command": "uv",
+      "args": ["run", "--with", "fastmcp", "python", "/path/to/server_fastmcp.py"]
+    }
+  }
+}
+```
+
+### Migration Notes
+
+- All 6 MCP tools remain functional (100% backward compatible)
+- No database schema changes required
+- Tool signatures and responses unchanged
+- Logging now goes exclusively to `/tmp/codebase-mcp.log`
+- All tests pass with FastMCP implementation
+
+### Performance
+
+FastMCP maintains performance targets:
+- Repository indexing: <60 seconds for 10K files
+- Code search: <500ms p95 latency
+- Async/await throughout for optimal concurrency
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
@@ -785,7 +919,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
+- MCP framework powered by [FastMCP](https://github.com/jlowin/fastmcp)
 - Built with FastAPI, SQLAlchemy, and Pydantic
-- Vector search powered by pgvector
-- Embeddings via Ollama and nomic-embed-text
+- Vector search powered by [pgvector](https://github.com/pgvector/pgvector)
+- Embeddings via [Ollama](https://ollama.com/) and nomic-embed-text
 - Code parsing with tree-sitter
+- MCP protocol by [Anthropic](https://modelcontextprotocol.io/)
