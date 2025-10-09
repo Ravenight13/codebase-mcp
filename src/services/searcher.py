@@ -289,7 +289,7 @@ async def search_code(
             CodeFile.relative_path,
             # Cosine distance (0 = identical, 2 = opposite)
             # Convert to similarity score: 1 - distance/2 gives [0, 1] range
-            (1 - CodeChunk.embedding.cosine_distance(query_embedding)).label("similarity"),
+            (1 - (CodeChunk.embedding.cosine_distance(query_embedding) / 2)).label("similarity"),
         )
         .join(CodeFile, CodeChunk.code_file_id == CodeFile.id)
         .where(CodeChunk.embedding.isnot(None))  # Only chunks with embeddings
