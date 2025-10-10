@@ -29,6 +29,8 @@ from typing import Any
 from uuid import UUID
 
 from fastmcp import Context
+from sqlalchemy import inspect as sqlalchemy_inspect
+from sqlalchemy.orm.attributes import NEVER_SET  # type: ignore[attr-defined]
 
 from src.database import get_session_factory
 from src.mcp.server_fastmcp import mcp
@@ -91,8 +93,12 @@ logger = logging.getLogger(__name__)
 def _work_item_to_dict(work_item: Any) -> dict[str, Any]:
     """Convert WorkItem SQLAlchemy model to MCP contract dictionary.
 
+    Safely handles both attached (session-bound) and detached SQLAlchemy objects.
+    Only includes lazy-loaded relationships (children, dependencies) if they were
+    already loaded before the session closed.
+
     Args:
-        work_item: WorkItem SQLAlchemy model instance
+        work_item: WorkItem SQLAlchemy model instance (attached or detached)
 
     Returns:
         Dictionary matching MCP contract WorkItem definition
@@ -116,22 +122,45 @@ def _work_item_to_dict(work_item: Any) -> dict[str, Any]:
         "created_by": work_item.created_by,
     }
 
-    # Include children if present (from hierarchical query)
-    if hasattr(work_item, "children") and work_item.children:
-        result["children"] = [_work_item_to_dict(child) for child in work_item.children]
+    # SQLAlchemy session safety: Only include lazy-loaded relationships if they're
+    # already loaded. This prevents "Parent instance is not bound to a Session"
+    # errors when accessing relationships on detached objects.
+    #
+    # CRITICAL: Must use inspect() to check load state WITHOUT triggering lazy-load.
+    # Even hasattr() will trigger lazy-load on detached objects and raise DetachedInstanceError.
+    inspector = sqlalchemy_inspect(work_item)
 
-    # Include dependencies if present
-    if hasattr(work_item, "dependencies") and work_item.dependencies:
-        result["dependencies"] = [
-            {
-                "source_id": str(dep.source_id),
-                "target_id": str(dep.target_id),
-                "dependency_type": dep.dependency_type,
-                "created_at": dep.created_at.isoformat(),
-                "created_by": dep.created_by,
-            }
-            for dep in work_item.dependencies
-        ]
+    # Include children if present (from hierarchical query) and already loaded
+    # Use inspect() to check if relationship is loaded without triggering lazy-load
+    if "children" in inspector.mapper.relationships:
+        children_state = inspector.attrs.children
+        # Check if relationship was loaded: loaded_value != NEVER_SET
+        # NEVER_SET is a sentinel value indicating the relationship was never accessed
+        if children_state.loaded_value is not NEVER_SET:
+            # Relationship was loaded, safe to access
+            children_value = children_state.loaded_value
+            if children_value:  # Only include if non-empty
+                result["children"] = [_work_item_to_dict(child) for child in children_value]
+
+    # Include dependencies if present and already loaded
+    # Note: The WorkItem model has dependencies_as_source and dependencies_as_target,
+    # but not a direct "dependencies" attribute. Skip this for now to avoid AttributeError.
+    # If a "dependencies" relationship is added to the model, this code will handle it safely.
+    if "dependencies" in inspector.mapper.relationships:
+        dependencies_state = inspector.attrs.dependencies
+        if dependencies_state.loaded_value is not NEVER_SET:
+            dependencies_value = dependencies_state.loaded_value
+            if dependencies_value:  # Only include if non-empty
+                result["dependencies"] = [
+                    {
+                        "source_id": str(dep.source_id),
+                        "target_id": str(dep.target_id),
+                        "dependency_type": dep.dependency_type,
+                        "created_at": dep.created_at.isoformat(),
+                        "created_by": dep.created_by,
+                    }
+                    for dep in dependencies_value
+                ]
 
     return result
 
