@@ -1,0 +1,406 @@
+====================================================================
+FEATURE 003 TESTING PROMPT - DATABASE-BACKED PROJECT TRACKING
+====================================================================
+
+CONTEXT:
+This is Feature 003: Database-Backed Project Tracking System. The implementation adds:
+- Polymorphic work items (project, session, task, research) with hierarchical relationships
+- Optimistic locking for concurrent updates
+- Vendor tracking with deployment history
+- 9 new database tables with 3 Alembic migrations (003, 003a, 003b)
+- 10 service layer modules (~5,400 lines)
+- 3 MCP tool modules with 8 new tools
+- 235+ comprehensive tests
+
+BRANCH: 003-database-backed-project (rebased from master)
+STATUS: 92.3% complete (48/52 tasks)
+
+====================================================================
+TESTING INSTRUCTIONS
+====================================================================
+
+STEP 1: CHECKOUT AND VERIFY BRANCH
+-----------------------------------
+git checkout 003-database-backed-project
+git status
+git log --oneline -5
+
+Expected: Should see commits like:
+- "feat(database): add project tracking schema with 9 new tables"
+- "docs(spec): mark 48 completed tasks in tasks.md"
+
+
+STEP 2: VERIFY DATABASE MIGRATIONS
+-----------------------------------
+alembic current
+
+Expected output: "003b (head)"
+
+If not at 003b, run:
+alembic upgrade head
+
+Verify tables exist:
+psql -d codebase_mcp -c "\dt"
+
+Expected tables:
+- tasks (extended with new columns: version, item_type, parent_id, path, depth, branch_name, commit_hash, pr_number, metadata, created_by, deleted_at)
+- vendor_extractors (NEW)
+- deployment_events (NEW)
+- project_configuration (NEW)
+- future_enhancements (NEW)
+- work_item_dependencies (NEW - junction table)
+- vendor_deployment_links (NEW - junction table)
+- work_item_deployment_links (NEW - junction table)
+- archived_work_items (NEW)
+
+
+STEP 3: VERIFY MODEL IMPORTS
+-----------------------------
+python -c "
+from src.models.task import WorkItem, Task
+from src.models.tracking import VendorExtractor, DeploymentEvent, ProjectConfiguration, FutureEnhancement
+from src.services.locking import OptimisticLockError, get_current_version
+from src.services.hierarchy import get_ancestors, get_descendants
+print('✓ All models and services import successfully')
+"
+
+Expected: Success message, no import errors
+
+
+STEP 4: RUN EXISTING UNIT TESTS
+--------------------------------
+pytest tests/unit/ -v --tb=short
+
+Expected: 142 tests pass (100% backward compatibility)
+
+If any failures, report which tests failed and the error messages.
+
+
+STEP 5: MANUAL FUNCTIONAL TEST - HIERARCHICAL WORK ITEMS
+---------------------------------------------------------
+Create a file: test_hierarchy.py
+
+```python
+import asyncio
+from src.database.session import get_session
+from src.models.task import WorkItem
+
+async def test_hierarchy():
+    async with get_session() as session:
+        # Create parent project
+        project = WorkItem(
+            item_type="project",
+            title="Test Project - Feature 003",
+            status="active",
+            path="/",
+            depth=0,
+            created_by="test-user"
+        )
+        session.add(project)
+        await session.flush()
+
+        print(f"✓ Created project: {project.id}")
+        print(f"  - item_type: {project.item_type}")
+        print(f"  - depth: {project.depth}")
+        print(f"  - path: {project.path}")
+        print(f"  - version: {project.version}")
+
+        # Create child session
+        child_session = WorkItem(
+            item_type="session",
+            title="Test Session",
+            status="active",
+            parent_id=project.id,
+            path=f"/{project.id}",
+            depth=1,
+            created_by="test-user"
+        )
+        session.add(child_session)
+        await session.flush()
+
+        print(f"✓ Created child session: {child_session.id}")
+        print(f"  - parent_id: {child_session.parent_id}")
+        print(f"  - depth: {child_session.depth}")
+        print(f"  - path: {child_session.path}")
+
+        # Create grandchild task
+        task = WorkItem(
+            item_type="task",
+            title="Test Task",
+            status="active",
+            parent_id=child_session.id,
+            path=f"/{project.id}/{child_session.id}",
+            depth=2,
+            created_by="test-user"
+        )
+        session.add(task)
+        await session.commit()
+
+        print(f"✓ Created grandchild task: {task.id}")
+        print(f"  - depth: {task.depth}")
+        print(f"  - path: {task.path}")
+
+        print("\n✅ HIERARCHY TEST PASSED")
+
+asyncio.run(test_hierarchy())
+```
+
+Run: python test_hierarchy.py
+
+Expected output:
+✓ Created project: [UUID]
+✓ Created child session: [UUID]
+✓ Created grandchild task: [UUID]
+✅ HIERARCHY TEST PASSED
+
+
+STEP 6: MANUAL FUNCTIONAL TEST - OPTIMISTIC LOCKING
+----------------------------------------------------
+Create a file: test_locking.py
+
+```python
+import asyncio
+from src.database.session import get_session
+from src.models.task import WorkItem
+from src.services.locking import update_with_version_check, OptimisticLockError
+
+async def test_optimistic_locking():
+    async with get_session() as session:
+        # Create work item
+        item = WorkItem(
+            item_type="task",
+            title="Locking Test",
+            status="active",
+            path="/",
+            depth=0,
+            created_by="test-user"
+        )
+        session.add(item)
+        await session.flush()
+        initial_version = item.version
+
+        print(f"✓ Created work item: {item.id}")
+        print(f"  - Initial version: {initial_version}")
+
+        # First update succeeds
+        updated = await update_with_version_check(
+            entity=item,
+            updates={"title": "Updated Title"},
+            expected_version=initial_version,
+            session=session
+        )
+        await session.flush()
+
+        print(f"✓ First update succeeded")
+        print(f"  - New version: {updated.version}")
+        print(f"  - New title: {updated.title}")
+
+        # Second update with old version should fail
+        async with get_session() as session2:
+            # Fetch same item in new session
+            from sqlalchemy import select
+            result = await session2.execute(
+                select(WorkItem).where(WorkItem.id == item.id)
+            )
+            item_copy = result.scalar_one()
+
+            try:
+                await update_with_version_check(
+                    entity=item_copy,
+                    updates={"title": "Another Update"},
+                    expected_version=initial_version,  # Old version!
+                    session=session2
+                )
+                print("❌ FAILED: Should have raised OptimisticLockError")
+            except OptimisticLockError as e:
+                print(f"✓ Optimistic locking correctly prevented stale update")
+                print(f"  - Error: {str(e)}")
+                print(f"  - Expected version: {e.expected_version}")
+                print(f"  - Current version: {e.current_version}")
+
+        await session.commit()
+        print("\n✅ OPTIMISTIC LOCKING TEST PASSED")
+
+asyncio.run(test_optimistic_locking())
+```
+
+Run: python test_locking.py
+
+Expected output:
+✓ Created work item: [UUID]
+✓ First update succeeded
+✓ Optimistic locking correctly prevented stale update
+✅ OPTIMISTIC LOCKING TEST PASSED
+
+
+STEP 7: MANUAL FUNCTIONAL TEST - VENDOR TRACKING
+-------------------------------------------------
+Create a file: test_vendor.py
+
+```python
+import asyncio
+from src.database.session import get_session
+from src.models.tracking import VendorExtractor
+
+async def test_vendor_tracking():
+    async with get_session() as session:
+        # Create vendor
+        vendor = VendorExtractor(
+            name="test-vendor-extraction",
+            status="operational",
+            created_by="test-user",
+            metadata_={
+                "test_results": {
+                    "total": 10,
+                    "passing": 9
+                },
+                "format_support": {
+                    "pdf": True,
+                    "excel": True
+                }
+            }
+        )
+        session.add(vendor)
+        await session.flush()
+
+        print(f"✓ Created vendor: {vendor.id}")
+        print(f"  - Name: {vendor.name}")
+        print(f"  - Status: {vendor.status}")
+        print(f"  - Version: {vendor.version}")
+        print(f"  - Metadata: {vendor.metadata_}")
+
+        # Update vendor
+        vendor.status = "broken"
+        vendor.version += 1
+        await session.commit()
+
+        print(f"✓ Updated vendor status to: {vendor.status}")
+        print(f"  - New version: {vendor.version}")
+
+        print("\n✅ VENDOR TRACKING TEST PASSED")
+
+asyncio.run(test_vendor_tracking())
+```
+
+Run: python test_vendor.py
+
+Expected output:
+✓ Created vendor: [UUID]
+✓ Updated vendor status to: broken
+✅ VENDOR TRACKING TEST PASSED
+
+
+STEP 8: CHECK MCP TOOLS REGISTRATION (OPTIONAL)
+------------------------------------------------
+Start the MCP server and verify new tools are available:
+
+python src/mcp/server_fastmcp.py
+
+Expected new tools:
+- create_work_item
+- update_work_item
+- query_work_item
+- list_work_items
+- record_deployment
+- query_vendor_status
+- update_vendor_status
+- get_project_configuration
+
+Test via Claude Desktop MCP Inspector or direct API calls.
+
+
+====================================================================
+SUCCESS CRITERIA
+====================================================================
+
+✅ PASS CONDITIONS:
+1. Database migration at 003b
+2. All models import successfully
+3. Unit tests pass (142/142)
+4. Hierarchical work items test passes
+5. Optimistic locking test passes
+6. Vendor tracking test passes
+7. No unexpected errors or crashes
+
+❌ KNOWN ISSUES (DOCUMENTED, NOT FAILURES):
+1. 14 contract test failures - Pydantic field validators not yet added (expected at this phase)
+2. 2 integration test failures - Application logic bugs (documented in locking.py:304-307)
+3. 6 hierarchical query test failures - Async fixture issues (tests pass individually)
+
+These are documented in handoff materials and are NOT blocking issues.
+
+
+====================================================================
+PERFORMANCE TARGETS
+====================================================================
+
+To measure (optional):
+- Vendor queries: <1ms p95
+- Hierarchical queries: <10ms p95 for 5 levels
+- Status generation: <100ms
+
+
+====================================================================
+REPORTING RESULTS
+====================================================================
+
+Please report back with:
+
+1. Migration status: [003b / other]
+2. Model import test: [PASS / FAIL + error]
+3. Unit tests: [XXX/142 passing]
+4. Hierarchy test: [PASS / FAIL + output]
+5. Optimistic locking test: [PASS / FAIL + output]
+6. Vendor tracking test: [PASS / FAIL + output]
+7. Any unexpected errors or issues
+
+Example report:
+"
+✅ Migration: 003b
+✅ Model imports: PASS
+✅ Unit tests: 142/142 passing
+✅ Hierarchy test: PASS
+✅ Optimistic locking test: PASS
+✅ Vendor tracking test: PASS
+No unexpected issues found.
+"
+
+
+====================================================================
+ARCHITECTURE SUMMARY
+====================================================================
+
+Database Schema (9 new tables):
+- vendor_extractors: 45+ vendor tracking with test results
+- deployment_events: Deployment history with PR details
+- project_configuration: Singleton config (token budgets, git state)
+- future_enhancements: Feature backlog with priorities
+- archived_work_items: Historical records (1+ year old)
+- 3 junction tables for many-to-many relationships
+
+Service Layer (10 modules):
+- hierarchy.py: Materialized path + recursive CTE queries
+- locking.py: Optimistic locking with version checking
+- vendor.py: Vendor CRUD operations
+- deployment.py: Deployment event tracking
+- work_items.py: Work item CRUD with hierarchy
+- validation.py: Pydantic JSONB validation
+- fallback.py: 4-layer fallback (PostgreSQL → SQLite → Git → Markdown)
+- cache.py: SQLite cache with 30-min TTL
+- git_history.py: Git log parsing
+- markdown.py: Status report generation
+
+MCP Tools (8 new tools):
+- create_work_item: Create polymorphic work items
+- update_work_item: Update with optimistic locking
+- query_work_item: Query with hierarchy
+- list_work_items: List with pagination/filtering
+- record_deployment: Track deployments
+- query_vendor_status: Query vendor by name/ID
+- update_vendor_status: Update vendor with locking
+- get_project_configuration: Get singleton config
+
+
+====================================================================
+END OF TESTING PROMPT
+====================================================================

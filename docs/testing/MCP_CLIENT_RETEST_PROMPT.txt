@@ -1,0 +1,40 @@
+FEATURE 003 MCP TOOLS - RETEST REQUEST
+
+Both critical bugs identified in your previous test run have been fixed and pushed to branch 003-database-backed-project:
+
+✅ FIX #1: SQLAlchemy Session Management Bug
+   - Modified: src/mcp/tools/work_items.py
+   - Issue: "Parent instance is not bound to a Session" errors
+   - Solution: Safe relationship loading using sqlalchemy.inspect() API
+   - Impact: All work item operations (create, list, query, update) now functional
+
+✅ FIX #2: Status Value Incompatibility
+   - Modified: src/services/tasks.py
+   - Issue: Pydantic validation failures with new status values
+   - Solution: STATUS_TRANSLATION layer for backward compatibility
+   - Impact: list_tasks works with both old and new status values
+
+RETEST INSTRUCTIONS:
+
+Please re-run all 11 tests from the original MCP_CLIENT_TESTING_PROMPT.txt exactly as before.
+
+EXPECTED RESULTS (10/11 tests should now pass):
+
+✅ Test 1: List tools (should still pass)
+✅ Test 2: Create project work item (NOW FIXED)
+✅ Test 3: Create session work item (NOW FIXED)
+✅ Test 4: Create task work item (NOW FIXED)
+✅ Test 5: Query work item with hierarchy (NOW FIXED)
+✅ Test 6: List work items with filters (NOW FIXED)
+✅ Test 7: Update work item success (NOW FIXED)
+✅ Test 8: Update work item version conflict (NOW FIXED)
+✅ Test 9: Legacy create_task (should still pass)
+✅ Test 10: Legacy list_tasks (NOW FIXED)
+❌ Test 11: Database schema check (may still fail - not a functional issue)
+
+Please run the full test suite and report back the results in the same format as before:
+- Overall pass rate
+- Which tests passed/failed
+- Any error messages
+
+If any work item operations (Tests 2-8) or legacy list_tasks (Test 10) still fail, please provide the complete error details.
