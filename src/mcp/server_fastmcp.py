@@ -180,9 +180,12 @@ def main() -> None:
     # correct mcp instance (the one that will be used by the protocol handlers)
     try:
         logger.info("Importing tool modules...")
+        import src.mcp.tools.configuration  # noqa: F401
         import src.mcp.tools.indexing  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
         import src.mcp.tools.tasks  # noqa: F401
+        import src.mcp.tools.tracking  # noqa: F401
+        import src.mcp.tools.work_items  # noqa: F401
         logger.info("✓ Tool modules imported successfully")
     except ImportError as e:
         logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
@@ -197,15 +200,30 @@ def main() -> None:
         logger.info("=" * 80)
 
         # List expected tools for diagnostics
-        expected_tools = ["create_task", "get_task", "index_repository",
-                         "list_tasks", "search_code", "update_task"]
+        expected_tools = [
+            "create_task",
+            "create_work_item",
+            "get_project_configuration",
+            "get_task",
+            "index_repository",
+            "list_tasks",
+            "list_work_items",
+            "query_vendor_status",
+            "query_work_item",
+            "record_deployment",
+            "search_code",
+            "update_project_configuration",
+            "update_task",
+            "update_vendor_status",
+            "update_work_item",
+        ]
 
         logger.info(f"✓ Tool modules imported successfully")
         logger.info(f"  Expected tools: {', '.join(expected_tools)}")
         logger.info("Starting FastMCP server with stdio transport...")
 
         sys.stderr.write("INFO: Starting FastMCP server...\n")
-        sys.stderr.write(f"INFO: 6 tools registered:\n")
+        sys.stderr.write(f"INFO: {len(expected_tools)} tools registered:\n")
         for name in expected_tools:
             sys.stderr.write(f"  - {name}\n")
         sys.stderr.write("INFO: Server ready for connections\n")

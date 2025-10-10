@@ -1,0 +1,1253 @@
+# MCP Tools Contract: Project Status and Work Item Tracking System
+# Feature: 003-database-backed-project
+# Generated: 2025-10-10
+# Specification: specs/003-database-backed-project/spec.md
+# Data Model: specs/003-database-backed-project/data-model.md
+
+# This contract defines 8 MCP tools for database-backed project tracking
+# All tools follow FastMCP conventions with async handlers and Context injection
+# Performance targets: <1ms (vendor queries), <10ms (hierarchies), <100ms (full status)
+
+openapi: 3.0.3
+info:
+  title: Project Status and Work Item Tracking MCP Tools
+  version: 1.0.0
+  description: |
+    MCP tools for AI coding assistants to query and update project status,
+    work item tracking, vendor health, and deployment history. Replaces
+    manual .project_status.md with queryable PostgreSQL storage supporting
+    concurrent multi-client access.
+
+components:
+  schemas:
+    # ========================================================================
+    # Shared Types
+    # ========================================================================
+
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      example: '123e4567-e89b-12d3-a456-426614174000'
+
+    DateTime:
+      type: string
+      format: date-time
+      example: '2025-10-10T14:30:00Z'
+
+    CommitHash:
+      type: string
+      pattern: '^[a-f0-9]{40}$'
+      minLength: 40
+      maxLength: 40
+      description: Git SHA-1 commit hash (40 lowercase hex characters)
+      example: 'a1b2c3d4e5f6789012345678901234567890abcd'
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [ValidationError, NotFoundError, VersionConflictError, DatabaseError]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    # ========================================================================
+    # Work Item Types
+    # ========================================================================
+
+    WorkItemType:
+      type: string
+      enum: [project, session, task, research]
+      description: Polymorphic work item type
+
+    WorkItemStatus:
+      type: string
+      enum: [active, completed, blocked]
+      description: Work item lifecycle status
+
+    ProjectMetadata:
+      type: object
+      description: Metadata for item_type='project'
+      required:
+        - description
+      properties:
+        description:
+          type: string
+          maxLength: 1000
+        target_quarter:
+          type: string
+          pattern: '^\d{4}-Q[1-4]$'
+          nullable: true
+          example: '2025-Q1'
+        constitutional_principles:
+          type: array
+          items:
+            type: string
+          default: []
+
+    SessionMetadata:
+      type: object
+      description: Metadata for item_type='session'
+      required:
+        - token_budget
+        - prompts_count
+        - yaml_frontmatter
+      properties:
+        token_budget:
+          type: integer
+          minimum: 1000
+          maximum: 1000000
+        prompts_count:
+          type: integer
+          minimum: 0
+        yaml_frontmatter:
+          type: object
+          description: Raw YAML frontmatter from session prompt
+          required:
+            - schema_version
+          additionalProperties: true
+
+    TaskMetadata:
+      type: object
+      description: Metadata for item_type='task'
+      properties:
+        estimated_hours:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1000
+          nullable: true
+        actual_hours:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1000
+          nullable: true
+        blocked_reason:
+          type: string
+          maxLength: 500
+          nullable: true
+
+    ResearchMetadata:
+      type: object
+      description: Metadata for item_type='research'
+      properties:
+        research_questions:
+          type: array
+          items:
+            type: string
+          default: []
+        findings_summary:
+          type: string
+          maxLength: 2000
+          nullable: true
+        references:
+          type: array
+          items:
+            type: string
+          default: []
+
+    WorkItem:
+      type: object
+      description: Hierarchical work item (project/session/task/research)
+      required:
+        - id
+        - version
+        - item_type
+        - title
+        - status
+        - depth
+        - created_at
+        - updated_at
+        - created_by
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        version:
+          type: integer
+          minimum: 1
+          description: Optimistic locking version (increments on update)
+        item_type:
+          $ref: '#/components/schemas/WorkItemType'
+        title:
+          type: string
+          maxLength: 200
+        status:
+          $ref: '#/components/schemas/WorkItemStatus'
+        parent_id:
+          $ref: '#/components/schemas/UUID'
+          nullable: true
+          description: Parent work item ID for hierarchical relationships
+        path:
+          type: string
+          maxLength: 500
+          description: Materialized path (e.g., /parent1/parent2/current)
+        depth:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Hierarchy depth (0-5 levels max)
+        branch_name:
+          type: string
+          maxLength: 100
+          nullable: true
+        commit_hash:
+          $ref: '#/components/schemas/CommitHash'
+          nullable: true
+        pr_number:
+          type: integer
+          minimum: 1
+          nullable: true
+        metadata:
+          oneOf:
+            - $ref: '#/components/schemas/ProjectMetadata'
+            - $ref: '#/components/schemas/SessionMetadata'
+            - $ref: '#/components/schemas/TaskMetadata'
+            - $ref: '#/components/schemas/ResearchMetadata'
+          description: Type-specific JSONB metadata (validated by Pydantic)
+        deleted_at:
+          $ref: '#/components/schemas/DateTime'
+          nullable: true
+          description: Soft delete timestamp
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        created_by:
+          type: string
+          maxLength: 100
+          description: AI client identifier (e.g., "claude-code", "claude-desktop")
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+          description: Child work items (recursive hierarchy)
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItemDependency'
+          description: Work item dependencies (blocked-by, depends-on)
+
+    WorkItemDependency:
+      type: object
+      required:
+        - source_id
+        - target_id
+        - dependency_type
+        - created_at
+        - created_by
+      properties:
+        source_id:
+          $ref: '#/components/schemas/UUID'
+        target_id:
+          $ref: '#/components/schemas/UUID'
+        dependency_type:
+          type: string
+          enum: [blocks, depends_on]
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        created_by:
+          type: string
+          maxLength: 100
+
+    # ========================================================================
+    # Vendor Types
+    # ========================================================================
+
+    VendorStatus:
+      type: string
+      enum: [operational, broken]
+      description: Vendor extractor operational status
+
+    VendorMetadata:
+      type: object
+      description: Vendor-specific JSONB metadata
+      required:
+        - format_support
+        - test_results
+        - extractor_version
+        - manifest_compliant
+      properties:
+        format_support:
+          type: object
+          description: Supported file formats with capability flags
+          required:
+            - excel
+            - csv
+            - pdf
+            - ocr
+          properties:
+            excel:
+              type: boolean
+            csv:
+              type: boolean
+            pdf:
+              type: boolean
+            ocr:
+              type: boolean
+        test_results:
+          type: object
+          description: Test execution summary (counts)
+          required:
+            - passing
+            - total
+            - skipped
+          properties:
+            passing:
+              type: integer
+              minimum: 0
+            total:
+              type: integer
+              minimum: 0
+            skipped:
+              type: integer
+              minimum: 0
+        extractor_version:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: Semantic version string (e.g., '2.3.1')
+        manifest_compliant:
+          type: boolean
+          description: Whether vendor follows manifest standards
+
+    VendorExtractor:
+      type: object
+      required:
+        - id
+        - version
+        - name
+        - status
+        - extractor_version
+        - metadata
+        - created_at
+        - updated_at
+        - created_by
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        version:
+          type: integer
+          minimum: 1
+          description: Optimistic locking version
+        name:
+          type: string
+          maxLength: 100
+          description: Unique vendor name
+        status:
+          $ref: '#/components/schemas/VendorStatus'
+        extractor_version:
+          type: string
+          maxLength: 50
+        metadata:
+          $ref: '#/components/schemas/VendorMetadata'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        created_by:
+          type: string
+          maxLength: 100
+          description: AI client identifier
+
+    # ========================================================================
+    # Deployment Types
+    # ========================================================================
+
+    DeploymentMetadata:
+      type: object
+      description: Deployment event JSONB metadata
+      required:
+        - pr_number
+        - pr_title
+        - commit_hash
+        - test_summary
+        - constitutional_compliance
+      properties:
+        pr_number:
+          type: integer
+          minimum: 1
+          description: GitHub pull request number
+        pr_title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        commit_hash:
+          $ref: '#/components/schemas/CommitHash'
+        test_summary:
+          type: object
+          description: Test results by category (e.g., {'unit': 150, 'integration': 30})
+          additionalProperties:
+            type: integer
+            minimum: 0
+        constitutional_compliance:
+          type: boolean
+          description: Whether deployment passes constitutional validation
+
+    DeploymentEvent:
+      type: object
+      required:
+        - id
+        - deployed_at
+        - commit_hash
+        - metadata
+        - created_at
+        - created_by
+      properties:
+        id:
+          $ref: '#/components/schemas/UUID'
+        deployed_at:
+          $ref: '#/components/schemas/DateTime'
+        commit_hash:
+          $ref: '#/components/schemas/CommitHash'
+        metadata:
+          $ref: '#/components/schemas/DeploymentMetadata'
+        created_at:
+          $ref: '#/components/schemas/DateTime'
+        created_by:
+          type: string
+          maxLength: 100
+        affected_vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorExtractor'
+          description: Vendors affected by this deployment
+        related_work_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+          description: Work items included in this deployment
+
+    # ========================================================================
+    # Configuration Types
+    # ========================================================================
+
+    ContextType:
+      type: string
+      enum: [feature, maintenance, research]
+      description: Active project context type
+
+    ProjectConfiguration:
+      type: object
+      description: Singleton project configuration
+      required:
+        - id
+        - active_context_type
+        - default_token_budget
+        - database_healthy
+        - updated_at
+        - updated_by
+      properties:
+        id:
+          type: integer
+          enum: [1]
+          description: Always 1 (singleton pattern)
+        active_context_type:
+          $ref: '#/components/schemas/ContextType'
+        current_session_id:
+          $ref: '#/components/schemas/UUID'
+          nullable: true
+        git_branch:
+          type: string
+          maxLength: 100
+          nullable: true
+        git_head_commit:
+          $ref: '#/components/schemas/CommitHash'
+          nullable: true
+        default_token_budget:
+          type: integer
+          minimum: 1000
+          maximum: 1000000
+          default: 200000
+        database_healthy:
+          type: boolean
+          description: Database health check status
+        last_health_check_at:
+          $ref: '#/components/schemas/DateTime'
+          nullable: true
+        updated_at:
+          $ref: '#/components/schemas/DateTime'
+        updated_by:
+          type: string
+          maxLength: 100
+          description: Last AI client to update configuration
+
+# ============================================================================
+# Tool Definitions
+# ============================================================================
+
+paths:
+  # ==========================================================================
+  # Work Item CRUD Tools
+  # ==========================================================================
+
+  /tools/create_work_item:
+    post:
+      operationId: create_work_item
+      summary: Create hierarchical work item
+      description: |
+        Create a new work item (project/session/task/research) with
+        type-specific metadata and optional parent relationship. Supports
+        hierarchical organization up to 5 levels deep.
+
+        **Performance Target**: <150ms p95 latency
+        **Requirements**: FR-008 (hierarchical work items), FR-010 (JSONB metadata)
+
+      parameters:
+        - name: item_type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/WorkItemType'
+          description: Work item type (project/session/task/research)
+
+        - name: title
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+          description: Work item title
+
+        - name: parent_id
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+            nullable: true
+          description: Parent work item ID (null for root-level items)
+
+        - name: metadata
+          in: query
+          required: true
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ProjectMetadata'
+              - $ref: '#/components/schemas/SessionMetadata'
+              - $ref: '#/components/schemas/TaskMetadata'
+              - $ref: '#/components/schemas/ResearchMetadata'
+          description: Type-specific JSONB metadata (validated by Pydantic)
+
+        - name: branch_name
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+            nullable: true
+          description: Git branch name
+
+        - name: created_by
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: AI client identifier (e.g., "claude-code")
+
+      responses:
+        '200':
+          description: Work item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+              example:
+                id: '123e4567-e89b-12d3-a456-426614174000'
+                version: 1
+                item_type: 'task'
+                title: 'Implement vendor status caching'
+                status: 'active'
+                parent_id: '987e6543-e21b-12d3-a456-426614174000'
+                path: '/project1/session1/task1'
+                depth: 2
+                branch_name: '003-database-backed-project'
+                metadata:
+                  estimated_hours: 8.0
+                  actual_hours: null
+                  blocked_reason: null
+                created_at: '2025-10-10T14:30:00Z'
+                updated_at: '2025-10-10T14:30:00Z'
+                created_by: 'claude-code'
+
+        '400':
+          description: Validation error (invalid metadata, depth > 5, circular dependency)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'ValidationError'
+                message: 'Metadata validation failed'
+                details:
+                  field: 'token_budget'
+                  constraint: 'minimum: 1000'
+
+        '404':
+          description: Parent work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'NotFoundError'
+                message: 'Parent work item not found: 987e6543-e21b-12d3-a456-426614174000'
+
+  /tools/update_work_item:
+    patch:
+      operationId: update_work_item
+      summary: Update work item with optimistic locking
+      description: |
+        Update existing work item with version check for optimistic locking.
+        Supports partial updates (only provided fields are modified). Rejects
+        conflicting concurrent updates with version mismatch error.
+
+        **Performance Target**: <150ms p95 latency
+        **Requirements**: FR-014 (audit trail), FR-037 (optimistic locking)
+
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: Work item ID to update
+
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Expected version (for optimistic locking)
+
+        - name: title
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+            nullable: true
+          description: New title (null = no change)
+
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WorkItemStatus'
+            nullable: true
+          description: New status (null = no change)
+
+        - name: metadata
+          in: query
+          required: false
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ProjectMetadata'
+              - $ref: '#/components/schemas/SessionMetadata'
+              - $ref: '#/components/schemas/TaskMetadata'
+              - $ref: '#/components/schemas/ResearchMetadata'
+            nullable: true
+          description: Updated metadata (null = no change)
+
+        - name: deleted_at
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/DateTime'
+            nullable: true
+          description: Soft delete timestamp (set to NOW() to delete)
+
+        - name: updated_by
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: AI client identifier performing update
+
+      responses:
+        '200':
+          description: Work item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+              example:
+                id: '123e4567-e89b-12d3-a456-426614174000'
+                version: 2
+                item_type: 'task'
+                title: 'Implement vendor status caching'
+                status: 'completed'
+                metadata:
+                  estimated_hours: 8.0
+                  actual_hours: 6.5
+                  blocked_reason: null
+                updated_at: '2025-10-10T16:45:00Z'
+
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'NotFoundError'
+                message: 'Work item not found: 123e4567-e89b-12d3-a456-426614174000'
+
+        '409':
+          description: Version conflict (concurrent update detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'VersionConflictError'
+                message: 'Work item was modified by another client (expected version 2, current version 3)'
+                details:
+                  expected_version: 2
+                  current_version: 3
+                  last_updated_by: 'claude-desktop'
+
+  /tools/query_work_item:
+    get:
+      operationId: query_work_item
+      summary: Query single work item with full hierarchy
+      description: |
+        Retrieve work item by ID with full parent chain and children up to
+        5 levels deep. Includes dependency relationships (blocked-by, depends-on).
+        Uses materialized path for ancestor queries and recursive CTE for
+        descendants.
+
+        **Performance Target**: <10ms p95 latency (up to 5 levels)
+        **Requirements**: FR-013 (hierarchy query performance), FR-009 (dependencies)
+
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: Work item ID to retrieve
+
+        - name: include_children
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Include child work items (recursive, max 5 levels)
+
+        - name: include_dependencies
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Include dependency relationships
+
+      responses:
+        '200':
+          description: Work item retrieved with hierarchy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+              example:
+                id: '987e6543-e21b-12d3-a456-426614174000'
+                version: 1
+                item_type: 'session'
+                title: 'Feature 003: Database-backed project tracking'
+                status: 'active'
+                parent_id: '555e1234-e89b-12d3-a456-426614174000'
+                path: '/project1/session1'
+                depth: 1
+                metadata:
+                  token_budget: 200000
+                  prompts_count: 5
+                  yaml_frontmatter:
+                    schema_version: '1.0'
+                children:
+                  - id: '123e4567-e89b-12d3-a456-426614174000'
+                    item_type: 'task'
+                    title: 'Implement vendor status caching'
+                    depth: 2
+                dependencies:
+                  - source_id: '123e4567-e89b-12d3-a456-426614174000'
+                    target_id: '789e4567-e89b-12d3-a456-426614174000'
+                    dependency_type: 'depends_on'
+
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tools/list_work_items:
+    get:
+      operationId: list_work_items
+      summary: List work items with filtering and pagination
+      description: |
+        List work items with optional filtering by type, status, parent, and
+        pagination support. Results ordered by updated_at descending. Excludes
+        soft-deleted items unless explicitly requested.
+
+        **Performance Target**: <200ms p95 latency
+        **Requirements**: FR-018 (filtering), FR-012 (soft delete)
+
+      parameters:
+        - name: item_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WorkItemType'
+            nullable: true
+          description: Filter by work item type
+
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WorkItemStatus'
+            nullable: true
+          description: Filter by status
+
+        - name: parent_id
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+            nullable: true
+          description: Filter by parent (null = root-level items only)
+
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include soft-deleted items
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum results to return
+
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Pagination offset
+
+      responses:
+        '200':
+          description: Work items list with total count
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - total_count
+                  - limit
+                  - offset
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkItem'
+                  total_count:
+                    type: integer
+                    minimum: 0
+                    description: Total matching items (ignoring pagination)
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+              example:
+                items:
+                  - id: '123e4567-e89b-12d3-a456-426614174000'
+                    item_type: 'task'
+                    title: 'Implement vendor status caching'
+                    status: 'active'
+                  - id: '456e7890-e89b-12d3-a456-426614174000'
+                    item_type: 'task'
+                    title: 'Write integration tests'
+                    status: 'completed'
+                total_count: 42
+                limit: 50
+                offset: 0
+
+  # ==========================================================================
+  # Deployment Tracking Tool
+  # ==========================================================================
+
+  /tools/record_deployment:
+    post:
+      operationId: record_deployment
+      summary: Record deployment event with relationships
+      description: |
+        Record deployment event with PR details, test results, constitutional
+        compliance status, and relationships to affected vendors and work items.
+        Creates many-to-many links in junction tables.
+
+        **Performance Target**: <200ms p95 latency
+        **Requirements**: FR-005 to FR-007 (deployment tracking with relationships)
+
+      parameters:
+        - name: deployed_at
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DateTime'
+          description: Deployment timestamp
+
+        - name: commit_hash
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/CommitHash'
+          description: Git commit hash (40 lowercase hex characters)
+
+        - name: metadata
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DeploymentMetadata'
+          description: Deployment metadata (PR details, tests, compliance)
+
+        - name: affected_vendor_ids
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/UUID'
+            default: []
+          description: Vendor IDs affected by this deployment
+
+        - name: related_work_item_ids
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/UUID'
+            default: []
+          description: Work item IDs included in this deployment
+
+        - name: created_by
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: AI client identifier
+
+      responses:
+        '200':
+          description: Deployment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentEvent'
+              example:
+                id: '789e4567-e89b-12d3-a456-426614174000'
+                deployed_at: '2025-10-10T18:00:00Z'
+                commit_hash: 'a1b2c3d4e5f6789012345678901234567890abcd'
+                metadata:
+                  pr_number: 42
+                  pr_title: 'Add database-backed project tracking'
+                  commit_hash: 'a1b2c3d4e5f6789012345678901234567890abcd'
+                  test_summary:
+                    unit: 150
+                    integration: 30
+                    contract: 8
+                  constitutional_compliance: true
+                affected_vendors:
+                  - id: '111e1111-e89b-12d3-a456-426614174000'
+                    name: 'ADP Vendor'
+                    status: 'operational'
+                related_work_items:
+                  - id: '123e4567-e89b-12d3-a456-426614174000'
+                    title: 'Implement vendor status caching'
+                created_at: '2025-10-10T18:00:00Z'
+                created_by: 'claude-code'
+
+        '400':
+          description: Validation error (invalid commit hash, negative test counts)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '404':
+          description: Referenced vendor or work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================================================
+  # Vendor Status Tools
+  # ==========================================================================
+
+  /tools/query_vendor_status:
+    get:
+      operationId: query_vendor_status
+      summary: Query vendor operational status (<1ms target)
+      description: |
+        Query vendor extractor operational status, test results, format support
+        flags, and version information. Optimized for <1ms response time using
+        unique index on vendor name.
+
+        **Performance Target**: <1ms p95 latency (single vendor query)
+        **Requirements**: FR-001 to FR-003 (vendor tracking with <1ms query)
+
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: Unique vendor name
+
+      responses:
+        '200':
+          description: Vendor status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorExtractor'
+              example:
+                id: '111e1111-e89b-12d3-a456-426614174000'
+                version: 5
+                name: 'ADP Vendor'
+                status: 'operational'
+                extractor_version: '2.3.1'
+                metadata:
+                  format_support:
+                    excel: true
+                    csv: true
+                    pdf: false
+                    ocr: false
+                  test_results:
+                    passing: 42
+                    total: 45
+                    skipped: 2
+                  extractor_version: '2.3.1'
+                  manifest_compliant: true
+                created_at: '2025-01-15T10:00:00Z'
+                updated_at: '2025-10-10T12:30:00Z'
+                created_by: 'claude-code'
+
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'NotFoundError'
+                message: 'Vendor not found: ADP Vendor'
+
+  /tools/update_vendor_status:
+    patch:
+      operationId: update_vendor_status
+      summary: Update vendor status with optimistic locking
+      description: |
+        Update vendor extractor status, test results, version, and metadata
+        with optimistic locking version check. Rejects conflicting concurrent
+        updates.
+
+        **Performance Target**: <100ms p95 latency
+        **Requirements**: FR-003 (metadata storage), FR-037 (optimistic locking)
+
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: Unique vendor name
+
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Expected version (for optimistic locking)
+
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VendorStatus'
+            nullable: true
+          description: New operational status (null = no change)
+
+        - name: extractor_version
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+            nullable: true
+          description: New extractor version (null = no change)
+
+        - name: metadata
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VendorMetadata'
+            nullable: true
+          description: Updated metadata (null = no change)
+
+        - name: updated_by
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: AI client identifier
+
+      responses:
+        '200':
+          description: Vendor status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorExtractor'
+              example:
+                id: '111e1111-e89b-12d3-a456-426614174000'
+                version: 6
+                name: 'ADP Vendor'
+                status: 'broken'
+                metadata:
+                  test_results:
+                    passing: 38
+                    total: 45
+                    skipped: 2
+                updated_at: '2025-10-10T15:20:00Z'
+
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '409':
+          description: Version conflict (concurrent update detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'VersionConflictError'
+                message: 'Vendor was modified by another client (expected version 5, current version 6)'
+
+  # ==========================================================================
+  # Configuration Tool
+  # ==========================================================================
+
+  /tools/get_project_configuration:
+    get:
+      operationId: get_project_configuration
+      summary: Get singleton project configuration
+      description: |
+        Retrieve singleton project configuration including active context type,
+        token budgets, current session reference, git state, and health check
+        status. Always returns single row (id=1).
+
+        **Performance Target**: <50ms p95 latency
+        **Requirements**: FR-015 to FR-016 (configuration management)
+
+      parameters: []
+
+      responses:
+        '200':
+          description: Project configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectConfiguration'
+              example:
+                id: 1
+                active_context_type: 'feature'
+                current_session_id: '987e6543-e21b-12d3-a456-426614174000'
+                git_branch: '003-database-backed-project'
+                git_head_commit: 'a1b2c3d4e5f6789012345678901234567890abcd'
+                default_token_budget: 200000
+                database_healthy: true
+                last_health_check_at: '2025-10-10T14:00:00Z'
+                updated_at: '2025-10-10T14:30:00Z'
+                updated_by: 'claude-code'
+
+# ============================================================================
+# Error Handling Patterns
+# ============================================================================
+
+# All tools follow consistent error response format:
+# - 400 ValidationError: Invalid input (Pydantic validation failure)
+# - 404 NotFoundError: Resource not found (work item, vendor, parent)
+# - 409 VersionConflictError: Optimistic locking failure (concurrent update)
+# - 500 DatabaseError: Internal database error (with fallback to cache)
+
+# Example error responses documented in each tool definition above.
+
+# ============================================================================
+# Performance Targets Summary
+# ============================================================================
+
+# Tool                        | Target Latency | Requirement
+# --------------------------- | -------------- | -----------
+# query_vendor_status         | <1ms p95       | FR-002
+# query_work_item             | <10ms p95      | FR-013
+# update_vendor_status        | <100ms p95     | Production Quality
+# create_work_item            | <150ms p95     | Production Quality
+# update_work_item            | <150ms p95     | Production Quality
+# list_work_items             | <200ms p95     | Production Quality
+# record_deployment           | <200ms p95     | Production Quality
+# get_project_configuration   | <50ms p95      | Production Quality
+
+# ============================================================================
+# Integration with FastMCP
+# ============================================================================
+
+# All tools implemented as FastMCP @mcp.tool() decorated async functions:
+#
+# @mcp.tool()
+# async def create_work_item(
+#     item_type: WorkItemType,
+#     title: str,
+#     parent_id: UUID | None = None,
+#     metadata: dict,
+#     branch_name: str | None = None,
+#     created_by: str,
+#     ctx: Context | None = None,
+# ) -> WorkItem:
+#     """Implementation following contract specification"""
+#
+# Context injection provides logging (ctx.info(), ctx.error())
+# All metadata validated via Pydantic models before persistence
+# Optimistic locking enforced via SQLAlchemy version_id_col

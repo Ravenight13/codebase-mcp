@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+"""Validation script for migration 003_project_tracking.py.
+
+Verifies:
+- Revision chain correctness
+- Table creation order
+- Index definitions
+- Constraint definitions
+- Downgrade logic
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+
+def validate_migration() -> None:
+    """Validate migration 003 structure and completeness."""
+    migration_file = Path(__file__).parent / "003_project_tracking.py"
+    content = migration_file.read_text()
+
+    # Validation checks
+    checks_passed = 0
+    total_checks = 0
+
+    # Check 1: Revision identifiers
+    total_checks += 1
+    if "revision: str = '003'" in content and "down_revision: Union[str, None] = '001'" in content:
+        print("✅ Check 1: Revision identifiers correct (003 revises 001)")
+        checks_passed += 1
+    else:
+        print("❌ Check 1: Revision identifiers incorrect")
+
+    # Check 2: Tables created (9 expected)
+    total_checks += 1
+    expected_tables = [
+        'vendor_extractors',
+        'deployment_events',
+        'project_configuration',
+        'future_enhancements',
+        'work_item_dependencies',
+        'vendor_deployment_links',
+        'work_item_deployment_links',
+        'archived_work_items'
+    ]
+    tables_created = [t for t in expected_tables if f"op.create_table(\n        '{t}'" in content]
+    if len(tables_created) == 8:  # 8 new tables (work_items is extended, not created)
+        print(f"✅ Check 2: All 8 new tables created ({len(tables_created)}/{len(expected_tables)})")
+        checks_passed += 1
+    else:
+        print(f"❌ Check 2: Missing tables. Found {len(tables_created)}/8")
+
+    # Check 3: work_items extensions (6 columns added)
+    total_checks += 1
+    work_item_columns = ['version', 'item_type', 'parent_id', 'path', 'depth', 'deleted_at']
+    columns_added = sum(1 for col in work_item_columns if f"sa.Column('{col}'" in content)
+    if columns_added == 6:
+        print(f"✅ Check 3: All 6 work_items columns added ({columns_added}/6)")
+        checks_passed += 1
+    else:
+        print(f"❌ Check 3: Missing work_items columns. Found {columns_added}/6")
+
+    # Check 4: Indexes created (11 expected)
+    total_checks += 1
+    index_count = content.count("op.create_index(")
+    if index_count >= 11:
+        print(f"✅ Check 4: Sufficient indexes created ({index_count} >= 11)")
+        checks_passed += 1
+    else:
+        print(f"❌ Check 4: Insufficient indexes. Found {index_count}/11")
+
+    # Check 5: CHECK constraints (9 expected)
+    total_checks += 1
+    check_constraints = [
+        'ck_vendor_status',
+        'ck_commit_hash_format',
+        'ck_work_item_type',
+        'ck_work_item_depth',
+        'ck_singleton',
+        'ck_priority_range',
+        'ck_enhancement_status',
+        'ck_dependency_type',
+        'ck_no_self_dependency'
+    ]
+    # Check both inline (name='ck_') and op.create_check_constraint('ck_') formats
+    constraints_found = sum(1 for ck in check_constraints if
+                           f"name='{ck}'" in content or f"'{ck}'" in content)
+    if constraints_found >= 9:
+        print(f"✅ Check 5: All CHECK constraints present ({constraints_found}/9)")
+        checks_passed += 1
+    else:
+        print(f"❌ Check 5: Missing CHECK constraints. Found {constraints_found}/9")
+
+    # Check 6: Foreign keys (6 expected)
+    total_checks += 1
+    fk_count = content.count("op.create_foreign_key(") + content.count("sa.ForeignKeyConstraint(")
+    if fk_count >= 6:
+        print(f"✅ Check 6: Sufficient foreign keys ({fk_count} >= 6)")
+        checks_passed += 1
+    else:
+        print(f"❌ Check 6: Insufficient foreign keys. Found {fk_count}/6")
+
+    # Check 7: PostgreSQL-specific types
+    total_checks += 1
+    if "postgresql.UUID(as_uuid=True)" in content and "postgresql.JSONB" in content:
+        print("✅ Check 7: PostgreSQL-specific types used (UUID, JSONB)")
+        checks_passed += 1
+    else:
+        print("❌ Check 7: Missing PostgreSQL-specific types")
+
+    # Check 8: Downgrade function exists
+    total_checks += 1
+    if "def downgrade() -> None:" in content and "op.drop_table(" in content:
+        print("✅ Check 8: Downgrade function implemented")
+        checks_passed += 1
+    else:
+        print("❌ Check 8: Downgrade function missing or incomplete")
+
+    # Check 9: Type annotations (mypy compliance)
+    total_checks += 1
+    if "-> None:" in content and "from typing import" in content:
+        print("✅ Check 9: Type annotations present")
+        checks_passed += 1
+    else:
+        print("❌ Check 9: Type annotations missing")
+
+    # Check 10: Constitutional compliance documentation
+    total_checks += 1
+    if "Constitutional Compliance:" in content and "Principle" in content:
+        print("✅ Check 10: Constitutional compliance documented")
+        checks_passed += 1
+    else:
+        print("❌ Check 10: Constitutional compliance not documented")
+
+    # Summary
+    print("\n" + "=" * 70)
+    print(f"VALIDATION SUMMARY: {checks_passed}/{total_checks} checks passed")
+    print("=" * 70)
+
+    if checks_passed == total_checks:
+        print("\n🎉 Migration 003 is valid and ready for deployment!")
+        return
+    else:
+        print(f"\n⚠️  Migration 003 has {total_checks - checks_passed} issues to address")
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    validate_migration()

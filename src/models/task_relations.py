@@ -30,8 +30,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
+# Use TYPE_CHECKING for type hints only - relationships use string references
 if TYPE_CHECKING:
-    from .task import Task
+    from .task import WorkItem
 
 
 class TaskPlanningReference(Base):
@@ -79,8 +80,10 @@ class TaskPlanningReference(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    # Relationships
-    task: Mapped[Task] = relationship(back_populates="planning_references")
+    # Relationships - string reference for circular import resolution
+    task: Mapped["WorkItem"] = relationship(
+        "WorkItem", back_populates="planning_references"
+    )
 
 
 class TaskBranchLink(Base):
@@ -123,8 +126,8 @@ class TaskBranchLink(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    # Relationships
-    task: Mapped[Task] = relationship(back_populates="branch_links")
+    # Relationships - string reference for circular import resolution
+    task: Mapped["WorkItem"] = relationship("WorkItem", back_populates="branch_links")
 
     # Table-level constraints
     __table_args__ = (
@@ -175,8 +178,8 @@ class TaskCommitLink(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    # Relationships
-    task: Mapped[Task] = relationship(back_populates="commit_links")
+    # Relationships - string reference for circular import resolution
+    task: Mapped["WorkItem"] = relationship("WorkItem", back_populates="commit_links")
 
     # Table-level constraints
     __table_args__ = (
@@ -230,5 +233,5 @@ class TaskStatusHistory(Base):
         DateTime, default=datetime.utcnow, nullable=False, index=True
     )
 
-    # Relationships
-    task: Mapped[Task] = relationship(back_populates="status_history")
+    # Relationships - string reference for circular import resolution
+    task: Mapped["WorkItem"] = relationship("WorkItem", back_populates="status_history")

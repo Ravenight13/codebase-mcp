@@ -4,7 +4,6 @@ Supporting entities for operational tracking:
 - ChangeEvent: Records file system changes for incremental indexing
 - EmbeddingMetadata: Analytics for embedding generation performance
 - SearchQuery: Analytics for search query performance
-- VendorExtractor: Tracks operational status and test results for 45+ vendor extractors (Feature 003)
 - ProjectConfiguration: Singleton global configuration for project state
 - ArchivedWorkItem: Archive table for work items older than 1 year
 - FutureEnhancement: Track planned future enhancements with priorities
@@ -35,7 +34,7 @@ from __future__ import annotations
 
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -51,6 +50,7 @@ if TYPE_CHECKING:
     from .code_file import CodeFile
     # Forward references for models not yet implemented
     WorkItem: Any  # Will be implemented in future task
+    VendorExtractor: Any  # Will be defined in separate task (T009)
 
 # Import Pydantic schemas for JSONB validation
 try:
@@ -230,132 +230,6 @@ class SearchQuery(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False, index=True
     )
-
-
-# ============================================================================
-# Database-Backed Project Tracking Models (Feature 003)
-# ============================================================================
-
-
-class VendorExtractor(Base):
-    """Tracks operational status, test results, and capabilities for 45+ commission vendor extractors.
-
-    Table: vendor_extractors
-
-    Relationships:
-        - deployment_links: One-to-many with VendorDeploymentLink (many-to-many with DeploymentEvent)
-
-    Indexes:
-        - name: UNIQUE B-tree index for <1ms vendor lookup by name (idx_vendor_name)
-        - status: B-tree index for filtering operational vendors (idx_vendor_status)
-
-    Constraints:
-        - name: UNIQUE, NOT NULL (primary lookup key)
-        - status: CHECK (status IN ('operational', 'broken'))
-        - version: NOT NULL (optimistic locking, auto-incremented on UPDATE)
-
-    Purpose:
-        - Track operational status for 45+ commission vendor extractors
-        - Store test results, format support, and capability flags in validated JSONB
-        - Enable <1ms vendor queries via unique index on name (FR-002)
-        - Prevent concurrent update conflicts with optimistic locking (version column)
-        - Maintain audit trail for vendor status changes (created_at, updated_at, created_by)
-
-    Performance Target:
-        <1ms for single vendor query by name (FR-002)
-
-    Example:
-        >>> # Import VendorMetadata from contracts
-        >>> import sys
-        >>> from pathlib import Path
-        >>> specs_path = Path(__file__).parent.parent.parent / "specs" / "003-database-backed-project" / "contracts"
-        >>> sys.path.insert(0, str(specs_path))
-        >>> from pydantic_schemas import VendorMetadata
-        >>>
-        >>> vendor = VendorExtractor(
-        ...     name="vendor_abc",
-        ...     status="operational",
-        ...     extractor_version="2.3.1",
-        ...     metadata_=VendorMetadata(
-        ...         format_support={"excel": True, "csv": True, "pdf": False, "ocr": False},
-        ...         test_results={"passing": 45, "total": 50, "skipped": 5},
-        ...         extractor_version="2.3.1",
-        ...         manifest_compliant=True
-        ...     ),
-        ...     created_by="claude-code-v1"
-        ... )
-        >>> session.add(vendor)
-        >>> await session.commit()
-
-    Constitutional Compliance:
-        - Principle IV: Performance (<1ms vendor queries via unique index)
-        - Principle V: Production quality (CHECK constraints, audit trail, Pydantic validation)
-        - Principle VIII: Type safety (full Mapped[] annotations, PydanticJSON validation)
-        - Principle X: Git micro-commits (audit trail for traceability)
-    """
-
-    __tablename__ = "vendor_extractors"
-
-    # Primary Key
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-
-    # Optimistic Locking
-    version: Mapped[int] = mapped_column("version", Integer, default=1, nullable=False)
-
-    # Mapper configuration (after column definitions)
-    __mapper_args__ = {"version_id_col": version}
-
-    # Core Fields
-    name: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False, index=True
-    )
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # "operational" | "broken"
-    extractor_version: Mapped[str] = mapped_column(String(50), nullable=False)
-
-    # JSONB Metadata (Pydantic-validated)
-    # Note: Using JSONB temporarily. To enable Pydantic validation with VendorMetadata:
-    # 1. Import: from pydantic_schemas import VendorMetadata
-    # 2. Update type: metadata_: Mapped[VendorMetadata] = mapped_column("metadata", PydanticJSON(VendorMetadata), nullable=False)
-    from sqlalchemy.dialects.postgresql import JSONB
-
-    metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSONB, nullable=False
-    )
-
-    # Audit Trail
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-    created_by: Mapped[str] = mapped_column(
-        String(100), nullable=False
-    )  # AI client identifier
-
-    # Relationships
-    deployment_links: Mapped[list["VendorDeploymentLink"]] = relationship(
-        back_populates="vendor", cascade="all, delete-orphan"
-    )
-
-    # Table-level constraints
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('operational', 'broken')",
-            name="ck_vendor_status",
-        ),
-    )
-
-
 
 
 class FutureEnhancement(Base):
@@ -633,7 +507,7 @@ class ProjectConfiguration(Base):
     )  # "feature" | "maintenance" | "research"
 
     current_session_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("work_items.id"), nullable=True
     )
 
     # Git state
@@ -719,12 +593,12 @@ class WorkItemDependency(Base):
     # Composite primary key
     source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tasks.id", ondelete="CASCADE"),
+        ForeignKey("work_items.id", ondelete="CASCADE"),
         primary_key=True,
     )
     target_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tasks.id", ondelete="CASCADE"),
+        ForeignKey("work_items.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
@@ -868,7 +742,7 @@ class WorkItemDeploymentLink(Base):
     )
     work_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tasks.id", ondelete="CASCADE"),
+        ForeignKey("work_items.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
