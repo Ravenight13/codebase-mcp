@@ -1,0 +1,117 @@
+FEATURE 003 MCP TOOLS - FINAL VALIDATION TEST
+
+This is the final test before merging to main. Two enhancements have been made:
+
+✅ ENHANCEMENT #1: Query Response Format
+   - Modified: src/mcp/tools/work_items.py
+   - Change: query_work_item now includes explicit ancestors and descendants arrays
+   - Impact: Test 5 should now return full hierarchy information as expected
+
+✅ ENHANCEMENT #2: Metadata Schema Documentation
+   - Created: specs/003-database-backed-project/METADATA_SCHEMAS.md
+   - Content: Comprehensive documentation of required metadata for each work item type
+   - Impact: Developers now have clear reference for creating work items
+
+VALIDATION INSTRUCTIONS:
+
+Please run Test 5 from the original test suite with enhanced verification:
+
+TEST 5 (ENHANCED): Query Work Item with Full Hierarchy
+
+1. Query the task work item created in Test 4 with hierarchy:
+   ```
+   query_work_item(
+     id="<task_id_from_test_4>",
+     include_children=true,
+     include_dependencies=false
+   )
+   ```
+
+2. Verify response now includes:
+   - ✅ Basic work item fields (id, title, status, depth, path)
+   - ✅ **NEW**: "ancestors" array with 2 items (project → session)
+   - ✅ **NEW**: "descendants" array (empty for leaf task)
+
+3. Expected "ancestors" array structure:
+   ```json
+   "ancestors": [
+     {
+       "id": "<project_id>",
+       "title": "Test Feature 003 Implementation",
+       "item_type": "project",
+       "depth": 0,
+       "path": "/<project_id>"
+     },
+     {
+       "id": "<session_id>",
+       "title": "Test Session",
+       "item_type": "session",
+       "depth": 1,
+       "path": "/<project_id>/<session_id>"
+     }
+   ]
+   ```
+
+4. Query the project work item with hierarchy:
+   ```
+   query_work_item(
+     id="<project_id_from_test_2>",
+     include_children=true,
+     include_dependencies=false
+   )
+   ```
+
+5. Verify response includes:
+   - ✅ "ancestors" array (empty for root-level project)
+   - ✅ **NEW**: "descendants" array with 2 items (session and task)
+
+6. Expected "descendants" array structure:
+   ```json
+   "descendants": [
+     {
+       "id": "<session_id>",
+       "title": "Test Session",
+       "item_type": "session",
+       "depth": 1,
+       "path": "/<project_id>/<session_id>"
+     },
+     {
+       "id": "<task_id>",
+       "title": "Test Task",
+       "item_type": "task",
+       "depth": 2,
+       "path": "/<project_id>/<session_id>/<task_id>"
+     }
+   ]
+   ```
+
+EXPECTED RESULTS:
+
+✅ Test 5 should now return "ancestors" and "descendants" arrays
+✅ Hierarchy information explicit in response (not just path/depth fields)
+✅ All other tests (1-11) should still pass as before
+
+SUCCESS CRITERIA:
+
+1. query_work_item returns ancestors array when querying child items
+2. query_work_item returns descendants array when querying parent items
+3. Arrays contain summary information (id, title, item_type, depth, path)
+4. Backward compatibility maintained (all 10 previous tests still pass)
+
+REPORT FORMAT:
+
+Please report:
+- Does query_work_item now include "ancestors" array? (YES/NO)
+- Does query_work_item now include "descendants" array? (YES/NO)
+- Do arrays have the expected structure? (YES/NO)
+- Did any previously passing tests break? (YES/NO)
+- Overall assessment: PASS/FAIL
+
+---
+
+METADATA DOCUMENTATION REFERENCE:
+
+For future work item creation, consult the comprehensive documentation:
+- File: specs/003-database-backed-project/METADATA_SCHEMAS.md
+- Includes: Required fields, validation rules, examples for all work item types
+- Quick reference table for each metadata type (project, session, task, research)

@@ -90,7 +90,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 
-def _work_item_to_dict(work_item: Any) -> dict[str, Any]:
+def _work_item_to_dict(work_item: Any, include_hierarchy: bool = False) -> dict[str, Any]:
     """Convert WorkItem SQLAlchemy model to MCP contract dictionary.
 
     Safely handles both attached (session-bound) and detached SQLAlchemy objects.
@@ -99,6 +99,7 @@ def _work_item_to_dict(work_item: Any) -> dict[str, Any]:
 
     Args:
         work_item: WorkItem SQLAlchemy model instance (attached or detached)
+        include_hierarchy: Include ancestors and descendants arrays if available
 
     Returns:
         Dictionary matching MCP contract WorkItem definition
@@ -161,6 +162,35 @@ def _work_item_to_dict(work_item: Any) -> dict[str, Any]:
                     }
                     for dep in dependencies_value
                 ]
+
+    # Include ancestors and descendants arrays if hierarchy was requested
+    # These are temporary attributes set by hierarchy service (not database columns)
+    if include_hierarchy:
+        # Check for ancestors attribute (set by get_work_item_with_hierarchy)
+        if hasattr(work_item, "ancestors") and work_item.ancestors:
+            result["ancestors"] = [
+                {
+                    "id": str(ancestor.id),
+                    "title": ancestor.title,
+                    "item_type": ancestor.item_type,
+                    "depth": ancestor.depth,
+                    "path": ancestor.path,
+                }
+                for ancestor in work_item.ancestors
+            ]
+
+        # Check for descendants attribute (set by get_work_item_with_hierarchy)
+        if hasattr(work_item, "descendants") and work_item.descendants:
+            result["descendants"] = [
+                {
+                    "id": str(descendant.id),
+                    "title": descendant.title,
+                    "item_type": descendant.item_type,
+                    "depth": descendant.depth,
+                    "path": descendant.path,
+                }
+                for descendant in work_item.descendants
+            ]
 
     return result
 
@@ -571,8 +601,8 @@ async def query_work_item(
             await ctx.error(f"Failed to query work item: {e}")
         raise
 
-    # Convert to response format
-    response = _work_item_to_dict(work_item)
+    # Convert to response format (include ancestors/descendants if hierarchy was requested)
+    response = _work_item_to_dict(work_item, include_hierarchy=include_children)
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 
