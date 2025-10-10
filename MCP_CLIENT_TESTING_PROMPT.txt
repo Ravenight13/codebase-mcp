@@ -1,0 +1,271 @@
+==============================================================
+MCP SERVER TESTING PROMPT - Feature 003 Tools
+==============================================================
+
+INSTRUCTIONS FOR USE:
+1. Ensure the codebase-mcp server is running and connected
+2. Copy the tests below and run them sequentially
+3. Copy all outputs and paste them back for verification
+4. Mark each test as PASS/FAIL
+
+==============================================================
+TEST 1: LIST AVAILABLE TOOLS
+==============================================================
+
+Please list all available MCP tools from the codebase-mcp server.
+
+Expected new tools from Feature 003:
+- create_work_item
+- update_work_item
+- query_work_item
+- list_work_items
+
+Expected existing tools (backward compatibility):
+- create_task
+- update_task
+- get_task
+- list_tasks
+- index_repository
+- search_code
+
+Result: [Paste tool list here]
+
+
+==============================================================
+TEST 2: CREATE A WORK ITEM (PROJECT)
+==============================================================
+
+Use the create_work_item tool to create a project work item:
+
+Tool: create_work_item
+Parameters:
+{
+  "item_type": "project",
+  "title": "Test Project - Feature 003 Validation",
+  "description": "Testing hierarchical work items",
+  "status": "active"
+}
+
+Expected result: Returns work item with id, version=1, item_type="project", created_at, created_by
+
+Result: [Paste response here]
+Save the returned ID as PROJECT_ID for next tests
+
+
+==============================================================
+TEST 3: CREATE A CHILD WORK ITEM (SESSION)
+==============================================================
+
+Use the create_work_item tool to create a session under the project:
+
+Tool: create_work_item
+Parameters:
+{
+  "item_type": "session",
+  "title": "Test Session - Child of Project",
+  "description": "Testing parent-child relationships",
+  "status": "active",
+  "parent_id": "[PROJECT_ID from Test 2]"
+}
+
+Expected result: Returns work item with parent_id set, depth=1, version=1
+
+Result: [Paste response here]
+Save the returned ID as SESSION_ID for next tests
+
+
+==============================================================
+TEST 4: CREATE A GRANDCHILD WORK ITEM (TASK)
+==============================================================
+
+Use the create_work_item tool to create a task under the session:
+
+Tool: create_work_item
+Parameters:
+{
+  "item_type": "task",
+  "title": "Test Task - Grandchild",
+  "description": "Testing 3-level hierarchy",
+  "status": "active",
+  "parent_id": "[SESSION_ID from Test 3]"
+}
+
+Expected result: Returns work item with parent_id set, depth=2, version=1
+
+Result: [Paste response here]
+Save the returned ID as TASK_ID for next tests
+
+
+==============================================================
+TEST 5: QUERY WORK ITEM WITH HIERARCHY
+==============================================================
+
+Use the query_work_item tool to get the task with its full hierarchy:
+
+Tool: query_work_item
+Parameters:
+{
+  "item_id": "[TASK_ID from Test 4]",
+  "include_hierarchy": true,
+  "max_depth": 5
+}
+
+Expected result: Returns work item with ancestors array (session, project) and descendants array (empty)
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 6: LIST WORK ITEMS WITH FILTERING
+==============================================================
+
+Use the list_work_items tool to get all work items of type "project":
+
+Tool: list_work_items
+Parameters:
+{
+  "item_type": "project",
+  "limit": 10,
+  "offset": 0
+}
+
+Expected result: Returns paginated list including the project from Test 2
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 7: UPDATE WORK ITEM (OPTIMISTIC LOCKING)
+==============================================================
+
+Use the update_work_item tool to update the task title:
+
+Tool: update_work_item
+Parameters:
+{
+  "item_id": "[TASK_ID from Test 4]",
+  "version": 1,
+  "title": "Updated Task Title - Locking Test"
+}
+
+Expected result: Returns updated work item with version=2, new title
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 8: UPDATE WITH STALE VERSION (SHOULD FAIL)
+==============================================================
+
+Use the update_work_item tool with old version (should fail):
+
+Tool: update_work_item
+Parameters:
+{
+  "item_id": "[TASK_ID from Test 4]",
+  "version": 1,
+  "title": "This should fail - stale version"
+}
+
+Expected result: ERROR - OptimisticLockError with current_version=2, expected_version=1
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 9: BACKWARD COMPATIBILITY - CREATE LEGACY TASK
+==============================================================
+
+Use the create_task tool (legacy endpoint) to verify backward compatibility:
+
+Tool: create_task
+Parameters:
+{
+  "title": "Legacy Task Test",
+  "description": "Testing backward compatibility",
+  "planning_references": []
+}
+
+Expected result: Returns task with standard fields (id, title, status, created_at, updated_at)
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 10: BACKWARD COMPATIBILITY - LIST LEGACY TASKS
+==============================================================
+
+Use the list_tasks tool (legacy endpoint):
+
+Tool: list_tasks
+Parameters: {}
+
+Expected result: Returns list of all tasks including the legacy task from Test 9
+
+Result: [Paste response here]
+
+
+==============================================================
+TEST 11: CHECK DATABASE SCHEMA (IF ACCESSIBLE)
+==============================================================
+
+If you have access to query the database directly, run:
+
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+Expected tables:
+- tasks (extended with new columns)
+- vendor_extractors
+- deployment_events
+- project_configuration
+- future_enhancements
+- work_item_dependencies
+- vendor_deployment_links
+- work_item_deployment_links
+- archived_work_items
+
+Result: [Paste table list or "NOT ACCESSIBLE"]
+
+
+==============================================================
+SUMMARY REPORT FORMAT
+==============================================================
+
+Please provide a summary in this format:
+
+TEST RESULTS:
+-------------
+Test 1 (List Tools): [PASS/FAIL]
+Test 2 (Create Project): [PASS/FAIL]
+Test 3 (Create Session): [PASS/FAIL]
+Test 4 (Create Task): [PASS/FAIL]
+Test 5 (Query Hierarchy): [PASS/FAIL]
+Test 6 (List Filtered): [PASS/FAIL]
+Test 7 (Update Success): [PASS/FAIL]
+Test 8 (Update Fail - Locking): [PASS/FAIL]
+Test 9 (Legacy Create): [PASS/FAIL]
+Test 10 (Legacy List): [PASS/FAIL]
+Test 11 (Schema Check): [PASS/FAIL/SKIPPED]
+
+ISSUES FOUND:
+-------------
+[List any errors, unexpected behaviors, or missing features]
+
+PERFORMANCE NOTES:
+------------------
+[Any observations about response times, if notably slow]
+
+SUCCESS CRITERIA:
+-----------------
+✅ All new tools (create_work_item, update_work_item, query_work_item, list_work_items) are available
+✅ Hierarchical relationships work (parent_id, depth)
+✅ Optimistic locking prevents stale updates
+✅ Legacy tools (create_task, list_tasks) still work
+✅ No unexpected errors or crashes
+
+
+==============================================================
+END OF TESTING PROMPT
+==============================================================

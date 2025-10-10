@@ -53,6 +53,17 @@ logger = get_logger(__name__)
 # Valid task status values
 VALID_STATUSES: Final[set[str]] = {"need to be done", "in-progress", "complete"}
 
+# Status translation mapping: new work item statuses → legacy task statuses
+# Maintains backward compatibility when database contains new work items from Feature 003
+STATUS_TRANSLATION: Final[dict[str, str]] = {
+    "active": "need to be done",        # New active status → legacy todo
+    "in-progress": "in-progress",       # Same in both systems (no translation)
+    "completed": "complete",            # New completed status → legacy complete
+    "blocked": "need to be done",       # Blocked items shown as todo
+    "need to be done": "need to be done",  # Pass-through old values
+    "complete": "complete",             # Pass-through old values
+}
+
 # Git SHA-1 validation (40 hex characters)
 SHA1_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}$")
 
@@ -105,6 +116,49 @@ def _validate_commit_hash(commit_hash: str) -> None:
         )
 
 
+def _translate_task_status(task: Task) -> Task:
+    """Translate work item status to legacy task status for backward compatibility.
+
+    Converts new Feature 003 work item status values (active, completed, blocked)
+    to legacy task status values (need to be done, in-progress, complete) that are
+    expected by TaskSummary and TaskResponse Pydantic models.
+
+    This translation layer is CRITICAL for backward compatibility because:
+    1. Database now contains both old and new status values after Feature 003
+    2. TaskSummary.status field uses Literal["need to be done", "in-progress", "complete"]
+    3. Pydantic validation fails if status doesn't match the literal type
+    4. This function ensures all status values are translated before validation
+
+    Args:
+        task: Task SQLAlchemy model instance (may have new or old status values)
+
+    Returns:
+        Task instance with status translated to legacy format
+
+    Note:
+        - This is a NON-DESTRUCTIVE operation - modifies in-memory object only
+        - Does NOT update database - translation is for Pydantic validation only
+        - If status not in translation map, leaves as-is (defensive behavior)
+        - Required for TaskSummary.model_validate() and TaskResponse construction
+
+    Constitutional Compliance:
+        - Principle V: Production quality (maintains backward compatibility)
+        - Principle VIII: Type safety (ensures Pydantic validation succeeds)
+
+    Example:
+        >>> task = Task(id=uuid4(), title="Test", status="active", ...)
+        >>> translated = _translate_task_status(task)
+        >>> translated.status
+        'need to be done'  # active → need to be done
+        >>> TaskSummary.model_validate(translated)  # Now succeeds
+        TaskSummary(id=..., status='need to be done', ...)
+    """
+    if task.status in STATUS_TRANSLATION:
+        task.status = STATUS_TRANSLATION[task.status]
+    # If status not in map, leave as-is (defensive - shouldn't happen with CHECK constraint)
+    return task
+
+
 def _task_to_response(task: Task) -> TaskResponse:
     """Convert Task model to TaskResponse schema.
 
@@ -113,6 +167,11 @@ def _task_to_response(task: Task) -> TaskResponse:
 
     Returns:
         TaskResponse with aggregated data
+
+    Note:
+        Status translation is applied in the calling code (list_tasks) before
+        this function is called to ensure backward compatibility with legacy
+        TaskResponse Pydantic validation.
     """
     return TaskResponse(
         id=task.id,
@@ -291,6 +350,10 @@ async def get_task(db: AsyncSession, task_id: UUID) -> TaskResponse | None:
         extra={"context": {"task_id": str(task_id), "title": task.title}},
     )
 
+    # Apply status translation for backward compatibility with Pydantic validation
+    # Database may contain new Feature 003 status values that need translation
+    task = _translate_task_status(task)
+
     return _task_to_response(task)
 
 
@@ -389,11 +452,18 @@ async def list_tasks(
         },
     )
 
+    # Apply status translation for backward compatibility with Pydantic validation
+    # CRITICAL: TaskSummary and TaskResponse expect legacy status values only
+    # ("need to be done", "in-progress", "complete")
+    # Database may contain new Feature 003 status values ("active", "completed", "blocked")
+    # Translation layer ensures Pydantic validation succeeds
+    translated_tasks = [_translate_task_status(task) for task in tasks]
+
     # Conditional serialization: TaskSummary for efficiency, TaskResponse for full details
     if full_details:
-        return [_task_to_response(task) for task in tasks]
+        return [_task_to_response(task) for task in translated_tasks]
     else:
-        return [TaskSummary.model_validate(task) for task in tasks]
+        return [TaskSummary.model_validate(task) for task in translated_tasks]
 
 
 async def update_task(
@@ -588,6 +658,10 @@ async def update_task(
             "Task updated successfully",
             extra={"context": {"task_id": str(task_id), "title": task.title}},
         )
+
+        # Apply status translation for backward compatibility with Pydantic validation
+        # Task fetched from database may have new Feature 003 status values
+        task = _translate_task_status(task)
 
         return _task_to_response(task)
 
