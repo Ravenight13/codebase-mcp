@@ -1,0 +1,298 @@
+# MCP Tool Contract: list_tasks (Full Details Mode - Opt-In)
+
+# This contract defines the opt-in behavior of list_tasks with full_details=True
+# returning complete TaskResponse objects (backward compatibility mode).
+
+tool_name: list_tasks
+mcp_version: "2024-11-05"
+feature: "Optimize list_tasks for Token Efficiency"
+mode: "full_details"  # Opt-in mode
+
+## Request Schema
+
+parameters:
+  status:
+    type: string
+    required: false
+    description: "Filter by task status"
+    enum:
+      - "need to be done"
+      - "in-progress"
+      - "complete"
+    example: "in-progress"
+
+  branch:
+    type: string
+    required: false
+    description: "Filter by git branch name"
+    example: "004-as-an-ai"
+
+  limit:
+    type: integer
+    required: false
+    default: 50
+    minimum: 1
+    maximum: 100
+    description: "Maximum number of tasks to return"
+    example: 15
+
+  full_details:
+    type: boolean
+    required: false
+    default: false
+    description: "Return full TaskResponse objects (when true) or TaskSummary objects (when false, default)"
+    example: true
+    note: "This contract documents full_details=true behavior. See list_tasks_summary.yaml for default mode."
+
+## Response Schema
+
+response:
+  type: object
+  required: true
+  properties:
+    tasks:
+      type: array
+      required: true
+      description: "Array of TaskResponse objects (full details)"
+      items:
+        $ref: "#/components/schemas/TaskResponse"
+      example:
+        - id: "550e8400-e29b-41d4-a716-446655440000"
+          title: "Implement user authentication"
+          description: "Add JWT-based authentication with refresh tokens and role-based access control"
+          notes: "Consider OAuth2 integration for social login. Review security best practices."
+          status: "in-progress"
+          created_at: "2025-10-10T10:00:00Z"
+          updated_at: "2025-10-10T15:30:00Z"
+          planning_references:
+            - "specs/001-auth/spec.md"
+            - "specs/001-auth/plan.md"
+          branches:
+            - "001-user-auth"
+          commits:
+            - "a1b2c3d4e5f6789012345678901234567890abcd"
+
+    total_count:
+      type: integer
+      required: true
+      description: "Total number of tasks returned (matches array length)"
+      example: 1
+
+## Components
+
+components:
+  schemas:
+    TaskResponse:
+      type: object
+      description: "Complete task representation with all metadata"
+      required:
+        - id
+        - title
+        - status
+        - created_at
+        - updated_at
+        - planning_references
+        - branches
+        - commits
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "Unique task identifier"
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Task title"
+          example: "Implement user authentication"
+
+        description:
+          type: string
+          nullable: true
+          description: "Detailed task description (optional)"
+          example: "Add JWT-based authentication with refresh tokens and role-based access control"
+
+        notes:
+          type: string
+          nullable: true
+          description: "Additional notes (optional)"
+          example: "Consider OAuth2 integration for social login. Review security best practices."
+
+        status:
+          type: string
+          enum:
+            - "need to be done"
+            - "in-progress"
+            - "complete"
+          description: "Current task status"
+          example: "in-progress"
+
+        created_at:
+          type: string
+          format: date-time
+          description: "Task creation timestamp (ISO 8601)"
+          example: "2025-10-10T10:00:00Z"
+
+        updated_at:
+          type: string
+          format: date-time
+          description: "Last modification timestamp (ISO 8601)"
+          example: "2025-10-10T15:30:00Z"
+
+        planning_references:
+          type: array
+          items:
+            type: string
+          description: "Relative paths to planning documents"
+          example:
+            - "specs/001-auth/spec.md"
+            - "specs/001-auth/plan.md"
+
+        branches:
+          type: array
+          items:
+            type: string
+          description: "Associated git branch names"
+          example:
+            - "001-user-auth"
+
+        commits:
+          type: array
+          items:
+            type: string
+            pattern: "^[0-9a-f]{40}$"
+          description: "Associated git commit hashes (40-char hex)"
+          example:
+            - "a1b2c3d4e5f6789012345678901234567890abcd"
+
+## Performance Requirements
+
+performance:
+  token_count:
+    target: "No constraint (full details mode)"
+    baseline: "12000-15000 tokens for 15 tasks"
+    note: "Use summary mode for token efficiency"
+
+  latency:
+    target: "< 200ms p95"
+    measurement: "End-to-end tool execution time"
+    note: "Same latency target as summary mode (database query unchanged)"
+
+## Contract Tests
+
+test_scenarios:
+  - name: "test_list_tasks_full_details_schema"
+    description: "Validate TaskResponse schema with full_details=true"
+    steps:
+      - "Create 5 test tasks with descriptions, notes, planning refs"
+      - "Call list_tasks(full_details=True)"
+      - "Assert response has 'tasks' array"
+      - "Assert response has 'total_count' integer"
+      - "Assert each task has ALL 10 fields: id, title, description, notes, status, created_at, updated_at, planning_references, branches, commits"
+
+  - name: "test_list_tasks_full_details_backward_compat"
+    description: "Validate backward compatibility with old behavior"
+    steps:
+      - "Create task with all metadata populated"
+      - "Call list_tasks(full_details=True, limit=1)"
+      - "Assert task.description is present and matches database"
+      - "Assert task.notes is present and matches database"
+      - "Assert task.planning_references array is present"
+      - "Assert task.branches array is present"
+      - "Assert task.commits array is present"
+
+  - name: "test_list_tasks_full_details_null_handling"
+    description: "Validate null handling for optional fields"
+    steps:
+      - "Create task with no description or notes"
+      - "Call list_tasks(full_details=True, limit=1)"
+      - "Assert task.description is null"
+      - "Assert task.notes is null"
+      - "Assert task.planning_references is empty array []"
+      - "Assert task.branches is empty array []"
+      - "Assert task.commits is empty array []"
+
+  - name: "test_list_tasks_full_details_token_count_baseline"
+    description: "Document token count for full details mode (baseline)"
+    steps:
+      - "Create 15 test tasks with realistic descriptions (~200 chars each)"
+      - "Call list_tasks(full_details=True, limit=15)"
+      - "Serialize response to JSON string"
+      - "Count tokens using tiktoken (cl100k_base encoding)"
+      - "Document baseline token count for comparison (expect 12000-15000)"
+
+## Error Responses
+
+errors:
+  - code: "INVALID_STATUS"
+    status_code: 400
+    description: "Invalid status parameter value"
+    response:
+      error: "Invalid status: invalid-status. Valid values: ['need to be done', 'in-progress', 'complete']"
+
+  - code: "INVALID_LIMIT"
+    status_code: 400
+    description: "Limit parameter out of range"
+    response:
+      error: "Limit must be between 1 and 100, got 150"
+
+  - code: "DATABASE_ERROR"
+    status_code: 500
+    description: "Database query failure"
+    response:
+      error: "Failed to list tasks: database connection timeout"
+
+  - code: "QUERY_TIMEOUT"
+    status_code: 504
+    description: "Database query timeout"
+    response:
+      error: "Failed to list tasks: query timeout after 5s"
+
+## Use Cases
+
+recommended_usage:
+  - scenario: "Temporary backward compatibility"
+    use: "Migration period after breaking change"
+    recommendation: "Migrate to summary mode + get_task() pattern instead"
+
+  - scenario: "Debugging full task state"
+    use: "Development/debugging when all fields needed immediately"
+    recommendation: "Use sparingly due to token cost"
+
+  - scenario: "Export/reporting"
+    use: "Generating full task reports or exports"
+    recommendation: "Consider pagination with smaller limits"
+
+discouraged_usage:
+  - scenario: "Regular task browsing"
+    reason: "Wasteful token usage, use summary mode instead"
+
+  - scenario: "High-frequency polling"
+    reason: "Expensive token cost, use summary mode + selective get_task()"
+
+## Relationship to Summary Mode
+
+comparison:
+  - aspect: "Token Efficiency"
+    summary_mode: "~2000 tokens for 15 tasks (6x better)"
+    full_details_mode: "~12000-15000 tokens for 15 tasks"
+
+  - aspect: "Fields Returned"
+    summary_mode: "5 core fields only"
+    full_details_mode: "All 10 fields (5 core + 5 detail)"
+
+  - aspect: "Use Case"
+    summary_mode: "Task browsing, scanning, listing"
+    full_details_mode: "Backward compatibility, debugging, exports"
+
+  - aspect: "Recommendation"
+    summary_mode: "Default, preferred for most use cases"
+    full_details_mode: "Opt-in when full context needed immediately"
+
+---
+# Constitutional Compliance
+- Principle III: MCP Protocol Compliance (maintains MCP tool contract format)
+- Principle IV: Performance Guarantees (<200ms latency maintained)
+- Principle VIII: Pydantic Type Safety (schema matches Pydantic models)

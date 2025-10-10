@@ -24,7 +24,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from src.database import get_session_factory
 from src.mcp.server_fastmcp import mcp
-from src.models import Task, TaskCreate, TaskResponse, TaskUpdate
+from src.models import Task, TaskCreate, TaskResponse, TaskSummary, TaskUpdate
 from src.services import (
     InvalidCommitHashError,
     InvalidStatusError,
@@ -50,27 +50,38 @@ VALID_STATUSES: set[str] = {"need to be done", "in-progress", "complete"}
 # ==============================================================================
 
 
-def _task_to_dict(task_response: TaskResponse) -> dict[str, Any]:
-    """Convert TaskResponse to MCP contract dictionary.
+def _task_to_dict(task: TaskSummary | TaskResponse) -> dict[str, Any]:
+    """Convert TaskSummary or TaskResponse to MCP contract dictionary.
+
+    Handles both lightweight TaskSummary (5 fields) and full TaskResponse (10 fields)
+    for token-efficient serialization.
 
     Args:
-        task_response: TaskResponse Pydantic model
+        task: TaskSummary or TaskResponse Pydantic model
 
     Returns:
         Dictionary matching MCP contract Task definition
+        - TaskSummary: 5 fields (id, title, status, created_at, updated_at)
+        - TaskResponse: 10 fields (adds description, notes, planning_references, branches, commits)
     """
-    return {
-        "id": str(task_response.id),
-        "title": task_response.title,
-        "description": task_response.description,
-        "notes": task_response.notes,
-        "status": task_response.status,
-        "created_at": task_response.created_at.isoformat(),
-        "updated_at": task_response.updated_at.isoformat(),
-        "planning_references": task_response.planning_references,
-        "branches": task_response.branches,
-        "commits": task_response.commits,
+    # Base fields (present in both TaskSummary and TaskResponse)
+    result: dict[str, Any] = {
+        "id": str(task.id),
+        "title": task.title,
+        "status": task.status,
+        "created_at": task.created_at.isoformat(),
+        "updated_at": task.updated_at.isoformat(),
     }
+
+    # Add detail fields if full TaskResponse (not TaskSummary)
+    if isinstance(task, TaskResponse):
+        result["description"] = task.description
+        result["notes"] = task.notes
+        result["planning_references"] = task.planning_references
+        result["branches"] = task.branches
+        result["commits"] = task.commits
+
+    return result
 
 
 # ==============================================================================
@@ -160,23 +171,36 @@ async def list_tasks(
     status: str | None = None,
     branch: str | None = None,
     limit: int = 50,
+    full_details: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
-    """List development tasks with optional filters.
+    """List development tasks with optional filters and token-efficient response modes.
 
     Supports filtering by status (need to be done, in-progress, complete)
     and git branch name. Results are ordered by updated_at descending.
+
+    Token Efficiency (Breaking Change):
+    - DEFAULT (full_details=False): Returns TaskSummary with 5 fields
+      - Fields: id, title, status, created_at, updated_at
+      - Token footprint: ~120-150 tokens per task (6x reduction)
+      - Use case: Task browsing, quick status overview
+    - full_details=True: Returns full TaskResponse with 10 fields
+      - Additional fields: description, notes, planning_references, branches, commits
+      - Token footprint: ~800-1000 tokens per task
+      - Use case: Backward compatibility, detailed task context
 
     Args:
         status: Filter by task status (optional)
         branch: Filter by git branch name (optional)
         limit: Maximum number of results (1-100, default: 50)
+        full_details: If True, return full task details; if False (default),
+            return lightweight summary for 6x token efficiency
         ctx: FastMCP context for logging (injected)
 
     Returns:
         Dictionary with tasks array and total count:
         {
-            "tasks": [...],
+            "tasks": [TaskSummary or TaskResponse objects],
             "total_count": 42
         }
 
@@ -185,16 +209,37 @@ async def list_tasks(
 
     Performance:
         Target: <200ms p95 latency
+
+    Examples:
+        # Token-efficient summary mode (default)
+        >>> result = await list_tasks(status="in-progress")
+        >>> result["tasks"][0].keys()
+        dict_keys(['id', 'title', 'status', 'created_at', 'updated_at'])
+
+        # Full details mode (backward compatible)
+        >>> result = await list_tasks(status="in-progress", full_details=True)
+        >>> result["tasks"][0].keys()
+        dict_keys(['id', 'title', 'description', 'notes', 'status',
+                   'created_at', 'updated_at', 'planning_references',
+                   'branches', 'commits'])
     """
     start_time = time.perf_counter()
 
     # Dual logging pattern
+    mode = "summary" if not full_details else "full"
     if ctx:
-        await ctx.info(f"Listing tasks (status={status}, branch={branch})")
+        await ctx.info(
+            f"Listing tasks (status={status}, branch={branch}, mode={mode})"
+        )
 
     logger.info(
         "list_tasks called",
-        extra={"status": status, "branch": branch, "limit": limit},
+        extra={
+            "status": status,
+            "branch": branch,
+            "limit": limit,
+            "full_details": full_details,
+        },
     )
 
     # Validate parameters
@@ -219,6 +264,7 @@ async def list_tasks(
                 status=status_literal,
                 branch=branch,
                 limit=limit,
+                full_details=full_details,
             )
             await db.commit()
     except Exception as e:
@@ -245,11 +291,15 @@ async def list_tasks(
 
     logger.info(
         "list_tasks completed successfully",
-        extra={"tasks_count": len(tasks), "latency_ms": latency_ms},
+        extra={
+            "tasks_count": len(tasks),
+            "latency_ms": latency_ms,
+            "mode": mode,
+        },
     )
 
     if ctx:
-        await ctx.info(f"Listed {len(tasks)} tasks")
+        await ctx.info(f"Listed {len(tasks)} tasks ({mode} mode)")
 
     return response
 

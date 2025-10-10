@@ -40,6 +40,9 @@ from .code_chunk import CodeChunk, CodeChunkCreate, CodeChunkResponse
 # Task models and schemas
 from .task import Task, TaskCreate, TaskResponse, TaskUpdate
 
+# Task schemas (optimized for token efficiency - Feature 004)
+from .task_schemas import BaseTaskFields, TaskResponse as TaskResponseV2, TaskSummary
+
 # Task relationship models
 from .task_relations import (
     TaskBranchLink,
@@ -76,6 +79,10 @@ __all__ = [
     "TaskCreate",
     "TaskUpdate",
     "TaskResponse",
+    # Task schemas (optimized)
+    "BaseTaskFields",
+    "TaskSummary",
+    "TaskResponseV2",
     # Task relationships
     "TaskPlanningReference",
     "TaskBranchLink",

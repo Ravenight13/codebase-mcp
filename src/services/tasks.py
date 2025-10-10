@@ -40,6 +40,7 @@ from src.models import (
     TaskPlanningReference,
     TaskResponse,
     TaskStatusHistory,
+    TaskSummary,
     TaskUpdate,
 )
 
@@ -298,28 +299,39 @@ async def list_tasks(
     status: str | None = None,
     branch: str | None = None,
     limit: int = DEFAULT_TASK_LIMIT,
-) -> list[TaskResponse]:
-    """List tasks with optional filters.
+    full_details: bool = False,
+) -> list[TaskSummary | TaskResponse]:
+    """List tasks with optional filters and conditional serialization.
 
     Args:
         db: Async database session
         status: Filter by status (optional)
         branch: Filter by branch name (optional)
         limit: Maximum results (default 20, max 100)
+        full_details: If True, return full TaskResponse; if False, return lightweight
+            TaskSummary for token efficiency (default: False)
 
     Returns:
-        List of tasks ordered by created_at descending
+        List of tasks ordered by created_at descending:
+        - TaskSummary objects (~120-150 tokens each) if full_details=False
+        - TaskResponse objects (~800-1000 tokens each) if full_details=True
 
     Raises:
         ValueError: If status is invalid or limit exceeds maximum
 
+    Token Efficiency:
+        - full_details=False: 15 tasks ≈ 1800-2250 tokens (6x reduction)
+        - full_details=True: 15 tasks ≈ 12000-15000 tokens (backward compatible)
+
     Example:
         >>> async with get_session() as db:
-        ...     # Get in-progress tasks
-        ...     tasks = await list_tasks(db, status="in-progress", limit=10)
+        ...     # Get task summaries (token-efficient default)
+        ...     summaries = await list_tasks(db, status="in-progress", limit=10)
         ...
-        ...     # Get tasks on specific branch
-        ...     tasks = await list_tasks(db, branch="001-auth", limit=5)
+        ...     # Get full task details
+        ...     full_tasks = await list_tasks(
+        ...         db, branch="001-auth", limit=5, full_details=True
+        ...     )
     """
     # Validate inputs
     if status is not None and status not in VALID_STATUSES:
@@ -369,10 +381,19 @@ async def list_tasks(
 
     logger.info(
         "Tasks retrieved successfully",
-        extra={"context": {"count": len(tasks)}},
+        extra={
+            "context": {
+                "count": len(tasks),
+                "full_details": full_details,
+            }
+        },
     )
 
-    return [_task_to_response(task) for task in tasks]
+    # Conditional serialization: TaskSummary for efficiency, TaskResponse for full details
+    if full_details:
+        return [TaskResponse.model_validate(task) for task in tasks]
+    else:
+        return [TaskSummary.model_validate(task) for task in tasks]
 
 
 async def update_task(

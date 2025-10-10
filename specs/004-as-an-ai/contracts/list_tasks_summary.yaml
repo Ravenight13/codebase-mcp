@@ -1,0 +1,254 @@
+# MCP Tool Contract: list_tasks (Summary Mode - Default)
+
+# This contract defines the default behavior of list_tasks returning TaskSummary objects
+# for token-efficient task browsing.
+
+tool_name: list_tasks
+mcp_version: "2024-11-05"
+feature: "Optimize list_tasks for Token Efficiency"
+mode: "summary"  # Default mode
+
+## Request Schema
+
+parameters:
+  status:
+    type: string
+    required: false
+    description: "Filter by task status"
+    enum:
+      - "need to be done"
+      - "in-progress"
+      - "complete"
+    example: "in-progress"
+
+  branch:
+    type: string
+    required: false
+    description: "Filter by git branch name"
+    example: "004-as-an-ai"
+
+  limit:
+    type: integer
+    required: false
+    default: 50
+    minimum: 1
+    maximum: 100
+    description: "Maximum number of tasks to return"
+    example: 15
+
+  full_details:
+    type: boolean
+    required: false
+    default: false
+    description: "Return full TaskResponse objects (when true) or TaskSummary objects (when false, default)"
+    example: false
+    note: "This contract documents default behavior (full_details=false). See list_tasks_full.yaml for full_details=true."
+
+## Response Schema
+
+response:
+  type: object
+  required: true
+  properties:
+    tasks:
+      type: array
+      required: true
+      description: "Array of TaskSummary objects"
+      items:
+        $ref: "#/components/schemas/TaskSummary"
+      example:
+        - id: "550e8400-e29b-41d4-a716-446655440000"
+          title: "Implement user authentication"
+          status: "in-progress"
+          created_at: "2025-10-10T10:00:00Z"
+          updated_at: "2025-10-10T15:30:00Z"
+        - id: "660e8400-e29b-41d4-a716-446655440001"
+          title: "Add database migrations"
+          status: "need to be done"
+          created_at: "2025-10-10T11:00:00Z"
+          updated_at: "2025-10-10T11:00:00Z"
+
+    total_count:
+      type: integer
+      required: true
+      description: "Total number of tasks returned (matches array length)"
+      example: 2
+
+## Components
+
+components:
+  schemas:
+    TaskSummary:
+      type: object
+      description: "Lightweight task representation for efficient browsing"
+      required:
+        - id
+        - title
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "Unique task identifier"
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Task title"
+          example: "Implement user authentication"
+
+        status:
+          type: string
+          enum:
+            - "need to be done"
+            - "in-progress"
+            - "complete"
+          description: "Current task status"
+          example: "in-progress"
+
+        created_at:
+          type: string
+          format: date-time
+          description: "Task creation timestamp (ISO 8601)"
+          example: "2025-10-10T10:00:00Z"
+
+        updated_at:
+          type: string
+          format: date-time
+          description: "Last modification timestamp (ISO 8601)"
+          example: "2025-10-10T15:30:00Z"
+
+## Performance Requirements
+
+performance:
+  token_count:
+    target: "< 2000 tokens"
+    baseline: "12000+ tokens (old full response)"
+    improvement: "~6x reduction"
+    measurement: "15 tasks with average title length ~50 chars"
+    test_validation: "Integration test with tiktoken must assert < 2000"
+
+  latency:
+    target: "< 200ms p95"
+    measurement: "End-to-end tool execution time"
+    test_validation: "Performance test must assert < 200ms for p95"
+
+## Contract Tests
+
+test_scenarios:
+  - name: "test_list_tasks_summary_schema"
+    description: "Validate TaskSummary response schema"
+    steps:
+      - "Create 5 test tasks in database"
+      - "Call list_tasks() with default parameters"
+      - "Assert response has 'tasks' array"
+      - "Assert response has 'total_count' integer"
+      - "Assert each task has exactly 5 fields: id, title, status, created_at, updated_at"
+      - "Assert no task has description, notes, planning_references, branches, or commits"
+
+  - name: "test_list_tasks_token_efficiency"
+    description: "Validate < 2000 token requirement"
+    steps:
+      - "Create 15 test tasks with realistic titles"
+      - "Call list_tasks() with limit=15"
+      - "Serialize response to JSON string"
+      - "Count tokens using tiktoken (cl100k_base encoding)"
+      - "Assert token_count < 2000"
+
+  - name: "test_list_tasks_with_filters"
+    description: "Validate filtering works with summary mode"
+    steps:
+      - "Create tasks with various statuses and branches"
+      - "Call list_tasks(status='in-progress')"
+      - "Assert all returned tasks have status='in-progress'"
+      - "Call list_tasks(branch='004-as-an-ai')"
+      - "Assert all returned tasks associated with that branch (if field exists)"
+
+  - name: "test_list_tasks_empty_result"
+    description: "Validate empty list handling"
+    steps:
+      - "Ensure database has no tasks matching filter"
+      - "Call list_tasks(status='complete')"
+      - "Assert response.tasks is empty array []"
+      - "Assert response.total_count == 0"
+
+## Error Responses
+
+errors:
+  - code: "INVALID_STATUS"
+    status_code: 400
+    description: "Invalid status parameter value"
+    response:
+      error: "Invalid status: invalid-status. Valid values: ['need to be done', 'in-progress', 'complete']"
+
+  - code: "INVALID_LIMIT"
+    status_code: 400
+    description: "Limit parameter out of range"
+    response:
+      error: "Limit must be between 1 and 100, got 150"
+
+  - code: "DATABASE_ERROR"
+    status_code: 500
+    description: "Database query failure"
+    response:
+      error: "Failed to list tasks: database connection timeout"
+
+  - code: "QUERY_TIMEOUT"
+    status_code: 504
+    description: "Database query timeout"
+    response:
+      error: "Failed to list tasks: query timeout after 5s"
+
+## Breaking Change Documentation
+
+breaking_change:
+  version: "0.4.0"
+  date: "2025-10-10"
+  severity: "HIGH"
+  impact: "All MCP clients using list_tasks"
+
+  change_description: |
+    list_tasks now returns TaskSummary objects by default instead of full TaskResponse objects.
+    This is an immediate breaking change with no deprecation period (early development phase).
+
+  fields_removed_from_default_response:
+    - description
+    - notes
+    - planning_references
+    - branches
+    - commits
+
+  migration_path: |
+    Option 1: Use get_task(task_id) to retrieve full details for specific tasks
+    Option 2: Pass full_details=True parameter to list_tasks for temporary backward compatibility
+    Option 3: Update client code to work with TaskSummary (recommended)
+
+  performance_benefit: "6x token reduction (12000+ → <2000 tokens for 15 tasks)"
+
+## Rationale
+
+design_decisions:
+  - decision: "Return TaskSummary by default"
+    rationale: "Token efficiency for task browsing - 6x improvement"
+    alternative_rejected: "Add new tool (list_tasks_summary)"
+    rejection_reason: "Tool proliferation, confusing API"
+
+  - decision: "Immediate breaking change"
+    rationale: "Early development phase, clear migration path"
+    alternative_rejected: "Gradual deprecation"
+    rejection_reason: "Adds complexity, delays benefit delivery"
+
+  - decision: "Optional full_details parameter"
+    rationale: "Escape hatch for clients needing temporary backward compatibility"
+    alternative_rejected: "Separate tool for full details"
+    rejection_reason: "API proliferation"
+
+---
+# Constitutional Compliance
+- Principle III: MCP Protocol Compliance (maintains MCP tool contract format)
+- Principle IV: Performance Guarantees (<200ms latency, <2000 tokens)
+- Principle VIII: Pydantic Type Safety (schema matches Pydantic models)
