@@ -391,7 +391,7 @@ async def list_tasks(
 
     # Conditional serialization: TaskSummary for efficiency, TaskResponse for full details
     if full_details:
-        return [TaskResponse.model_validate(task) for task in tasks]
+        return [_task_to_response(task) for task in tasks]
     else:
         return [TaskSummary.model_validate(task) for task in tasks]
 
