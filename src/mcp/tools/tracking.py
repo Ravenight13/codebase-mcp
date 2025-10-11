@@ -18,6 +18,7 @@ import logging
 import re
 import time
 from datetime import datetime
+import json
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -583,8 +584,8 @@ async def update_vendor_status(
 async def create_vendor(
     name: str,
     initial_metadata: Annotated[
-        dict[str, Any] | None,
-        "Optional metadata dictionary with flexible schema. Known fields: scaffolder_version (str), created_at (ISO 8601 str). Custom fields allowed.",
+        str | None,
+        "Optional metadata as JSON string. Example: '{\"scaffolder_version\": \"1.0.0\", \"created_at\": \"2025-10-11T12:00:00Z\"}'. Pass null or empty string for no metadata.",
     ] = None,
     created_by: str = "claude-code",
     ctx: Context | None = None,
@@ -597,7 +598,7 @@ async def create_vendor(
 
     Args:
         name: Unique vendor name (1-100 chars, alphanumeric + spaces/hyphens/underscores)
-        initial_metadata: Optional initial metadata with flexible schema
+        initial_metadata: Optional metadata as JSON string (will be parsed to dict)
         created_by: AI client identifier (default: "claude-code")
         ctx: FastMCP context for logging (injected)
 
@@ -605,7 +606,7 @@ async def create_vendor(
         Dictionary with created vendor details (id, name, status, version, metadata, timestamps)
 
     Raises:
-        ValueError: Validation failed or vendor already exists
+        ValueError: Validation failed, invalid JSON, or vendor already exists
 
     Performance:
         Target: <100ms p95 latency
@@ -616,6 +617,23 @@ async def create_vendor(
     """
     start_time = time.perf_counter()
 
+    # Parse JSON metadata string if provided
+    metadata_dict: dict[str, Any] | None = None
+    if initial_metadata and initial_metadata.strip():
+        try:
+            metadata_dict = json.loads(initial_metadata)
+            if not isinstance(metadata_dict, dict):
+                raise ValueError("Metadata must be a JSON object (dict), not array or primitive")
+        except json.JSONDecodeError as e:
+            error_msg = f"Invalid JSON in initial_metadata: {e}"
+            if ctx:
+                await ctx.error(error_msg)
+            logger.warning(
+                "JSON parsing failed for initial_metadata",
+                extra={"vendor_name": name, "error": str(e), "raw_value": initial_metadata[:100]},
+            )
+            raise ValueError(error_msg) from e
+
     # Dual logging pattern
     if ctx:
         await ctx.info(f"Creating vendor: {name}")
@@ -624,7 +642,7 @@ async def create_vendor(
         "create_vendor called",
         extra={
             "vendor_name": name,
-            "has_metadata": initial_metadata is not None,
+            "has_metadata": metadata_dict is not None,
             "created_by": created_by,
         },
     )
@@ -644,7 +662,7 @@ async def create_vendor(
 
     # Validate initial metadata if provided
     try:
-        validated_metadata = validate_create_vendor_metadata(initial_metadata)
+        validated_metadata = validate_create_vendor_metadata(metadata_dict)
     except ValueError as e:
         error_msg = str(e)
         if ctx:
@@ -654,7 +672,7 @@ async def create_vendor(
             extra={
                 "vendor_name": name,
                 "error": error_msg,
-                "metadata_keys": list(initial_metadata.keys()) if initial_metadata else [],
+                "metadata_keys": list(metadata_dict.keys()) if metadata_dict else [],
             },
         )
         raise
