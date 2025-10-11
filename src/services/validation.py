@@ -12,6 +12,8 @@ Key Features:
 - Validates VendorMetadata (format_support, test_results, version, compliance)
 - Validates DeploymentMetadata (PR details, commit hash, test summary)
 - Validates WorkItemMetadata (polymorphic based on item_type)
+- Validates vendor name format and constraints (FR-012)
+- Validates vendor creation metadata with flexible schema
 - Returns detailed ValidationError with field-level error messages
 - Type-safe validation with complete Pydantic integration
 
@@ -22,7 +24,9 @@ Performance:
 
 from __future__ import annotations
 
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Union
 
@@ -73,6 +77,13 @@ WorkItemMetadata = Union[
     TaskMetadata,
     ResearchMetadata,
 ]
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Vendor name validation pattern: alphanumeric, spaces, hyphens, underscores only
+VENDOR_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9 \-_]+$')
 
 # ==============================================================================
 # Exception Classes
@@ -136,6 +147,107 @@ class ValidationError(Exception):
 # ==============================================================================
 # Validation Functions
 # ==============================================================================
+
+
+def validate_vendor_name(name: str) -> None:
+    """Validate vendor name format and constraints per FR-012.
+
+    Validates that vendor name:
+    - Is not empty or whitespace-only
+    - Has length between 1-100 characters
+    - Contains only alphanumeric characters, spaces, hyphens, and underscores
+
+    Args:
+        name: Vendor name to validate
+
+    Raises:
+        ValueError: If validation fails with descriptive error message
+
+    Example:
+        >>> validate_vendor_name("Acme Corp")  # Valid
+        >>> validate_vendor_name("Acme-Corp_123")  # Valid
+        >>> validate_vendor_name("")  # Raises ValueError
+        >>> validate_vendor_name("Acme@Corp")  # Raises ValueError (invalid char)
+
+    Performance:
+        <1ms for typical vendor names
+    """
+    if not name or not name.strip():
+        raise ValueError("Vendor name cannot be empty")
+
+    if len(name) < 1 or len(name) > 100:
+        raise ValueError(f"Vendor name must be 1-100 characters, got {len(name)}")
+
+    if not VENDOR_NAME_PATTERN.match(name):
+        raise ValueError(
+            "Vendor name must contain only alphanumeric characters, "
+            "spaces, hyphens, and underscores"
+        )
+
+
+def validate_create_vendor_metadata(
+    metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Validate vendor creation metadata with flexible schema.
+
+    Validates known fields if present, allows unknown fields without validation.
+    This provides a flexible schema for vendor creation metadata.
+
+    Known fields (validated if present):
+    - scaffolder_version: Must be string
+    - created_at: Must be ISO 8601 format string
+
+    Unknown fields: Passed through without validation
+
+    Args:
+        metadata: Optional metadata dictionary from create_vendor tool
+
+    Returns:
+        Validated metadata dictionary (empty dict if input is None)
+
+    Raises:
+        ValueError: If known fields fail validation
+
+    Example:
+        >>> validate_create_vendor_metadata(None)
+        {}
+        >>> validate_create_vendor_metadata({"scaffolder_version": "1.0.0"})
+        {"scaffolder_version": "1.0.0"}
+        >>> validate_create_vendor_metadata({"custom_field": "value"})
+        {"custom_field": "value"}
+        >>> validate_create_vendor_metadata({"created_at": "2025-10-11T12:00:00Z"})
+        {"created_at": "2025-10-11T12:00:00Z"}
+
+    Performance:
+        <1ms for typical metadata structures
+    """
+    if metadata is None:
+        return {}
+
+    validated: dict[str, Any] = {}
+
+    # Validate scaffolder_version if present
+    if "scaffolder_version" in metadata:
+        if not isinstance(metadata["scaffolder_version"], str):
+            raise ValueError("scaffolder_version must be string")
+        validated["scaffolder_version"] = metadata["scaffolder_version"]
+
+    # Validate created_at if present (ISO 8601 format)
+    if "created_at" in metadata:
+        if not isinstance(metadata["created_at"], str):
+            raise ValueError("created_at must be ISO 8601 string")
+        try:
+            datetime.fromisoformat(metadata["created_at"])
+        except ValueError as e:
+            raise ValueError("created_at must be valid ISO 8601 format") from e
+        validated["created_at"] = metadata["created_at"]
+
+    # Copy unknown fields without validation (flexible schema)
+    for key, value in metadata.items():
+        if key not in validated:
+            validated[key] = value
+
+    return validated
 
 
 def validate_vendor_metadata(metadata: dict[str, Any]) -> VendorMetadata:
@@ -393,6 +505,8 @@ def validate_work_item_metadata(
 
 __all__ = [
     "ValidationError",
+    "validate_vendor_name",
+    "validate_create_vendor_metadata",
     "validate_vendor_metadata",
     "validate_deployment_metadata",
     "validate_work_item_metadata",
