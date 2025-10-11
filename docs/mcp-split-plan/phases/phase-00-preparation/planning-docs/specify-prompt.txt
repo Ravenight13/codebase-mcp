@@ -1,0 +1,172 @@
+Refactor codebase-mcp into a pure semantic code search MCP server with multi-project support.
+
+## Problem Statement
+
+The current codebase-mcp is monolithic, combining semantic code search with work item tracking, task management, vendor tracking, and deployment recording. This violates the Single Responsibility Principle and creates unnecessary complexity. We need to extract the search functionality into a focused, high-performance service that can operate across multiple projects.
+
+## What We Need
+
+A refactored codebase-mcp that:
+
+1. **Provides ONLY semantic code search** - Remove all work item, task, vendor, and deployment functionality
+2. **Supports multiple projects** - Each project has isolated database and indexes
+3. **Integrates with workflow-mcp** - Queries workflow-mcp for active project context
+4. **Maintains performance** - Sub-500ms search latency, <60s indexing for 10k files
+5. **Works offline** - No cloud dependencies, local Ollama embeddings
+6. **Follows MCP protocol** - FastMCP framework, SSE transport, no stdout pollution
+
+## Success Criteria
+
+### Functional Requirements
+- Developers can index code repositories with `index_repository(repo_path, project_id)`
+- Developers can search code with `search_code(query, project_id, filters)`
+- Search results include file path, line numbers, code snippet, context lines
+- Multiple projects can be indexed and searched independently
+- Project context switches automatically via workflow-mcp integration
+- All non-search tools are removed (work items, tasks, vendors, deployments)
+
+### Performance Requirements
+- Search latency <500ms (p95) for projects with 50,000 chunks
+- Indexing throughput: 10,000 files in <60 seconds
+- Concurrent search support: 20 simultaneous queries without degradation
+- Database connection pool: 5-20 connections, efficient utilization
+
+### Quality Requirements
+- 100% MCP protocol compliance (validated via mcp-inspector)
+- Type-safe: mypy --strict passes with no errors
+- Test coverage >80% (unit + integration tests)
+- No stdout/stderr pollution (structured logging to files)
+- Clear error messages with actionable guidance
+
+### Architecture Requirements
+- Local-first: PostgreSQL + Ollama, no cloud APIs
+- One database per project (isolation guarantee)
+- FastMCP framework with MCP Python SDK
+- AsyncPG for database operations (async I/O)
+- Pydantic models for all data structures
+- HNSW indexes for vector similarity (pgvector)
+
+## Constraints
+
+### Technical Stack (Non-Negotiable)
+- Python 3.11+ (async, type hints)
+- PostgreSQL 14+ with pgvector extension
+- Ollama with nomic-embed-text model (768 dimensions)
+- FastMCP framework with MCP Python SDK
+- AsyncPG driver (no psycopg2)
+- Tree-sitter for code chunking
+- Pydantic 2.x for validation
+- mypy --strict for type checking
+
+### Development Approach
+- Option B Sequential: workflow-mcp core exists first, then refactor codebase-mcp
+- Specification-first: /specify → /clarify → /plan → /tasks → /implement
+- Test-driven: Write tests before implementation
+- Git micro-commits: One commit per completed task
+- Branch-per-feature: `###-refactor-codebase-mcp`
+
+### Out of Scope
+- Work item tracking (moved to workflow-mcp)
+- Task management (moved to workflow-mcp)
+- Vendor tracking (moved to workflow-mcp)
+- Deployment recording (moved to workflow-mcp)
+- Project configuration (moved to workflow-mcp)
+- Code analysis, linting, refactoring tools
+- Cloud-based embeddings (OpenAI, Cohere, etc.)
+- Custom protocol implementations (use FastMCP only)
+
+## Current State
+
+The existing codebase-mcp has:
+- 13 MCP tools (index_repository, search_code, + 11 non-search tools)
+- Single database schema with multiple tables (work_items, tasks, vendors, deployments, repositories, code_chunks)
+- No multi-project support (single global namespace)
+- FastMCP implementation with SSE transport
+- Working indexing pipeline: scan → chunk → embed → store
+- Working search pipeline: query → embed → vector search → rank results
+
+Files to refactor:
+- `src/codebase_mcp/server.py` - MCP tool definitions (remove non-search tools)
+- `src/codebase_mcp/database/schema.sql` - Database schema (remove non-search tables)
+- `src/codebase_mcp/database/operations.py` - Database CRUD (remove non-search functions)
+- `src/codebase_mcp/tools/` - Tool implementations (remove non-search tools)
+- `tests/` - Test suite (remove non-search tests)
+
+## Business Value
+
+### For Developers
+- **Faster searches**: Focused tool optimized for single purpose
+- **Multi-project support**: Work across multiple codebases seamlessly
+- **Clear separation**: Search MCP vs. workflow MCP, no confusion
+- **Better performance**: Smaller footprint, faster startup, optimized for search
+
+### For AI Coding Assistants
+- **Simpler integration**: Only 2 tools instead of 13
+- **Better context**: Multi-project support enables workspace-aware assistance
+- **Reliable search**: Single-purpose tool, less likely to break
+- **Predictable behavior**: Clear scope, no feature creep
+
+### For Project Maintainers
+- **Easier maintenance**: Smaller codebase, focused scope
+- **Better testability**: Fewer edge cases, simpler test matrix
+- **Clear evolution path**: Search features evolve independently from workflow features
+- **Reduced complexity**: Constitutional principle (Simplicity Over Features) enforced
+
+## Acceptance Criteria
+
+This feature is complete when:
+
+1. **Refactoring Complete**:
+   - All non-search tools removed from codebase-mcp
+   - All non-search database tables removed
+   - All non-search tests removed
+   - Tool surface reduced to: index_repository, search_code
+
+2. **Multi-Project Support Added**:
+   - project_id parameter added to index_repository and search_code
+   - One database per project (isolation validated)
+   - get_active_project_id() helper queries workflow-mcp
+   - Tests validate no cross-project data leakage
+
+3. **Integration Tests Pass**:
+   - Index 3+ projects, search each independently
+   - Switch active project, verify search results change
+   - Explicit project_id parameter overrides workflow-mcp context
+   - Works when workflow-mcp is unavailable (explicit project_id required)
+
+4. **Performance Tests Pass**:
+   - Search latency <500ms (p95) on 50,000 chunk dataset
+   - Indexing throughput: 10,000 files in <60 seconds
+   - 20 concurrent searches without degradation
+
+5. **Quality Gates Pass**:
+   - mypy --strict: 0 errors
+   - pytest: 100% pass, coverage >80%
+   - mcp-inspector: 100% protocol compliance
+   - No stdout/stderr pollution (clean SSE transport)
+
+6. **Documentation Updated**:
+   - README.md reflects new scope (search only)
+   - API docs updated (only 2 tools documented)
+   - Migration guide for users of removed tools (point to workflow-mcp)
+   - Constitution updated to reflect search-only focus
+
+## Migration Notes
+
+Users currently using removed tools must:
+1. Install workflow-mcp for work item/task/vendor/deployment tracking
+2. Update MCP client configuration (add workflow-mcp server)
+3. Replace tool calls:
+   - `create_work_item` → `workflow_mcp.create_work_item`
+   - `create_task` → `workflow_mcp.create_task`
+   - `query_vendor_status` → `workflow_mcp.query_vendor_status`
+   - `record_deployment` → `workflow_mcp.record_deployment`
+4. No migration for search tools (API unchanged except project_id parameter)
+
+## Questions to Address During Planning
+
+- How does codebase-mcp discover available databases for projects? (Query workflow-mcp? Config file? Environment variable?)
+- What happens if workflow-mcp is unavailable? (Fail gracefully? Require explicit project_id?)
+- How are databases named per project? (project-{project_id}? Configurable prefix?)
+- Do we need database migration scripts for existing single-project installs? (Probably yes)
+- Should project_id be required or optional? (Optional if workflow-mcp integration works, required fallback?)
