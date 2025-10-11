@@ -202,6 +202,7 @@ def main() -> None:
         # List expected tools for diagnostics
         expected_tools = [
             "create_task",
+            "create_vendor",
             "create_work_item",
             "get_project_configuration",
             "get_task",
