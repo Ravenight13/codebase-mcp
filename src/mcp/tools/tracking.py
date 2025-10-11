@@ -32,8 +32,14 @@ from src.services.deployment import (
 )
 from src.services.locking import OptimisticLockError
 from src.services.validation import ValidationError
+from src.services.validation import (
+    validate_create_vendor_metadata,
+    validate_vendor_name,
+)
 from src.services.vendor import (
+    VendorAlreadyExistsError,
     VendorNotFoundError,
+    create_vendor as create_vendor_service,
     get_vendor_by_name,
     update_vendor_status as update_vendor_service,
 )
@@ -573,6 +579,147 @@ async def update_vendor_status(
     return response
 
 
+@mcp.tool()
+async def create_vendor(
+    name: str,
+    initial_metadata: dict[str, Any] | None = None,
+    created_by: str = "claude-code",
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Create a new vendor extractor record in the database.
+
+    Initializes vendor with "broken" status, "0.0.0" extractor version, and
+    optional metadata. Validates vendor name and enforces case-insensitive
+    uniqueness. Used by AI assistants during vendor scaffolding workflow.
+
+    Args:
+        name: Unique vendor name (1-100 chars, alphanumeric + spaces/hyphens/underscores)
+        initial_metadata: Optional initial metadata with flexible schema
+        created_by: AI client identifier (default: "claude-code")
+        ctx: FastMCP context for logging (injected)
+
+    Returns:
+        Dictionary with created vendor details (id, name, status, version, metadata, timestamps)
+
+    Raises:
+        ValueError: Validation failed or vendor already exists
+
+    Performance:
+        Target: <100ms p95 latency
+
+    Requirements:
+        FR-012 (vendor name validation), FR-013 (case-insensitive uniqueness),
+        FR-014 (flexible metadata schema), FR-015 (<100ms p95 latency)
+    """
+    start_time = time.perf_counter()
+
+    # Dual logging pattern
+    if ctx:
+        await ctx.info(f"Creating vendor: {name}")
+
+    logger.info(
+        "create_vendor called",
+        extra={
+            "vendor_name": name,
+            "has_metadata": initial_metadata is not None,
+            "created_by": created_by,
+        },
+    )
+
+    # Validate vendor name (fail-fast)
+    try:
+        validate_vendor_name(name)
+    except ValueError as e:
+        error_msg = str(e)
+        if ctx:
+            await ctx.error(error_msg)
+        logger.warning(
+            "Vendor name validation failed",
+            extra={"vendor_name": name, "error": error_msg},
+        )
+        raise
+
+    # Validate initial metadata if provided
+    try:
+        validated_metadata = validate_create_vendor_metadata(initial_metadata)
+    except ValueError as e:
+        error_msg = str(e)
+        if ctx:
+            await ctx.error(error_msg)
+        logger.warning(
+            "Vendor metadata validation failed",
+            extra={
+                "vendor_name": name,
+                "error": error_msg,
+                "metadata_keys": list(initial_metadata.keys()) if initial_metadata else [],
+            },
+        )
+        raise
+
+    # Create vendor via service
+    try:
+        async with get_session_factory()() as db:
+            vendor = await create_vendor_service(
+                name=name,
+                initial_metadata=validated_metadata,
+                created_by=created_by,
+                session=db,
+            )
+            await db.commit()
+    except VendorAlreadyExistsError as e:
+        error_msg = str(e)
+        if ctx:
+            await ctx.error(error_msg)
+        logger.warning(
+            "Vendor already exists",
+            extra={
+                "vendor_name": name,
+                "existing_name": e.existing_name,
+                "error": error_msg,
+            },
+        )
+        # Convert to ValueError for MCP protocol compliance
+        raise ValueError(error_msg) from e
+    except Exception as e:
+        logger.error(
+            "Failed to create vendor",
+            extra={"vendor_name": name, "error": str(e)},
+        )
+        if ctx:
+            await ctx.error(f"Failed to create vendor: {e}")
+        raise
+
+    # Convert to response format
+    response = {
+        "id": str(vendor.id),
+        "name": vendor.name,
+        "status": vendor.status,
+        "extractor_version": vendor.extractor_version,
+        "metadata": vendor.metadata_,
+        "version": vendor.version,
+        "created_at": vendor.created_at.isoformat(),
+        "updated_at": vendor.updated_at.isoformat(),
+        "created_by": vendor.created_by,
+    }
+
+    latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+    logger.info(
+        "create_vendor completed successfully",
+        extra={
+            "vendor_id": str(vendor.id),
+            "vendor_name": name,
+            "status": vendor.status,
+            "latency_ms": latency_ms,
+        },
+    )
+
+    if ctx:
+        await ctx.info(f"Vendor created successfully: {vendor.id}")
+
+    return response
+
+
 # ==============================================================================
 # Module Exports
 # ==============================================================================
@@ -581,4 +728,5 @@ __all__ = [
     "record_deployment",
     "query_vendor_status",
     "update_vendor_status",
+    "create_vendor",
 ]
