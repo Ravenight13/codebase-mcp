@@ -105,6 +105,40 @@ class VendorNotFoundError(Exception):
         }
 
 
+class VendorAlreadyExistsError(Exception):
+    """Raised when attempting to create a vendor that already exists.
+
+    HTTP Mapping:
+        409 Conflict - Vendor name conflicts with existing vendor
+    """
+
+    def __init__(self, vendor_name: str, existing_name: str | None = None) -> None:
+        """Initialize VendorAlreadyExistsError.
+
+        Args:
+            vendor_name: Vendor name that was attempted to be created
+            existing_name: Existing vendor name that conflicts (for case-insensitive matches)
+        """
+        self.vendor_name = vendor_name
+        self.existing_name = existing_name or vendor_name
+
+        if existing_name and existing_name != vendor_name:
+            message = f"Vendor already exists: {vendor_name} (conflicts with existing '{existing_name}')"
+        else:
+            message = f"Vendor already exists: {vendor_name}"
+
+        super().__init__(message)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert exception to dictionary for MCP error responses."""
+        return {
+            "error_type": "VendorAlreadyExistsError",
+            "vendor_name": self.vendor_name,
+            "existing_name": self.existing_name,
+            "http_status": 409,
+        }
+
+
 # ==============================================================================
 # Service Functions
 # ==============================================================================
@@ -447,6 +481,7 @@ async def update_vendor_status(
 
 __all__ = [
     "VendorNotFoundError",
+    "VendorAlreadyExistsError",
     "get_vendor_by_name",
     "get_vendor_by_id",
     "get_all_vendors",
