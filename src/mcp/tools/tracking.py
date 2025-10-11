@@ -18,7 +18,7 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastmcp import Context
@@ -582,7 +582,10 @@ async def update_vendor_status(
 @mcp.tool()
 async def create_vendor(
     name: str,
-    initial_metadata: dict[str, Any] | None = None,
+    initial_metadata: Annotated[
+        dict[str, Any] | None,
+        "Optional metadata dictionary with flexible schema. Known fields: scaffolder_version (str), created_at (ISO 8601 str). Custom fields allowed.",
+    ] = None,
     created_by: str = "claude-code",
     ctx: Context | None = None,
 ) -> dict[str, Any]:
