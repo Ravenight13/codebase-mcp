@@ -379,47 +379,494 @@ async def test_create_vendor_with_custom_created_by(
 
 
 # ==============================================================================
+# Error Scenario Tests (T005 - Scenarios 4, 5, 7-12 from quickstart.md)
+# ==============================================================================
+
+
+@pytest.fixture
+async def existing_vendor(session: AsyncSession) -> VendorExtractor:
+    """Create an existing vendor for duplicate detection tests.
+
+    Returns:
+        VendorExtractor instance with name "ExistingVendor"
+    """
+    vendor = VendorExtractor(
+        name="ExistingVendor",
+        status="broken",
+        extractor_version="0.0.0",
+        metadata_={"scaffolder_version": "1.0"},
+        created_by="test-setup",
+    )
+
+    session.add(vendor)
+    await session.commit()
+    await session.refresh(vendor)
+
+    return vendor
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_duplicate_exact_match(
+    session: AsyncSession,
+    existing_vendor: VendorExtractor,
+) -> None:
+    """Test duplicate detection for exact name match (Scenario 4).
+
+    From quickstart.md Scenario 4:
+    Given: Vendor "ExistingVendor" already exists in database
+    When: Attempt to create vendor with exact same name
+    Then: ValueError raised with "already exists" message
+    And: No new database record created
+    And: Existing vendor record unchanged
+
+    Requirements:
+        FR-016: Case-insensitive duplicate detection
+        FR-018: Clear error messages for duplicate vendors
+    """
+    from sqlalchemy import func
+
+    # Verify existing vendor is in database
+    result = await session.execute(
+        select(func.count()).select_from(VendorExtractor)
+        .where(VendorExtractor.name == "ExistingVendor")
+    )
+    count_before = result.scalar()
+    assert count_before == 1, "Existing vendor not found in database"
+
+    # Act & Assert: Attempt to create duplicate vendor
+    with pytest.raises(ValueError) as exc_info:
+        await create_vendor(
+            name="ExistingVendor",
+            initial_metadata={},
+            created_by="test-duplicate",
+        )
+
+    # Assert: Error message indicates duplicate
+    error_message = str(exc_info.value).lower()
+    assert "already exists" in error_message, (
+        f"Expected 'already exists' in error message, got: {exc_info.value}"
+    )
+    assert "existingvendor" in error_message, (
+        f"Expected vendor name in error message, got: {exc_info.value}"
+    )
+
+    # Verify: No new record created (still only 1)
+    result = await session.execute(
+        select(func.count()).select_from(VendorExtractor)
+        .where(VendorExtractor.name == "ExistingVendor")
+    )
+    count_after = result.scalar()
+    assert count_after == 1, f"Expected 1 vendor record, found {count_after}"
+
+    # Verify: Existing vendor unchanged (version still 1)
+    result = await session.execute(
+        select(VendorExtractor).where(VendorExtractor.name == "ExistingVendor")
+    )
+    vendor = result.scalar_one()
+    assert vendor.version == 1, f"Existing vendor version changed to {vendor.version}"
+    assert vendor.created_by == "test-setup", "Existing vendor created_by changed"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_duplicate_case_insensitive(
+    session: AsyncSession,
+    existing_vendor: VendorExtractor,
+) -> None:
+    """Test case-insensitive duplicate detection (Scenario 5).
+
+    From quickstart.md Scenario 5:
+    Given: Vendor "ExistingVendor" exists in database
+    When: Attempt to create vendor with name "existingvendor" (lowercase)
+    Then: ValueError raised with "already exists" message
+    And: Error message shows conflicting name: "conflicts with existing 'ExistingVendor'"
+    And: No new database record created
+
+    Requirements:
+        FR-016: Case-insensitive duplicate detection enforced by database
+        FR-018: Clear error messages showing case conflict
+    """
+    from sqlalchemy import func
+
+    # Act & Assert: Attempt to create case-insensitive duplicate
+    with pytest.raises(ValueError) as exc_info:
+        await create_vendor(
+            name="existingvendor",  # Different case
+            initial_metadata={},
+            created_by="test-case-insensitive",
+        )
+
+    # Assert: Error message indicates case-insensitive conflict
+    error_message = str(exc_info.value).lower()
+    assert "already exists" in error_message, (
+        f"Expected 'already exists' in error message, got: {exc_info.value}"
+    )
+
+    # Verify: Only one record exists (no duplicate created)
+    result = await session.execute(
+        select(func.count()).select_from(VendorExtractor)
+        .where(func.lower(VendorExtractor.name) == "existingvendor")
+    )
+    count = result.scalar()
+    assert count == 1, f"Expected 1 vendor with case-insensitive name, found {count}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_empty_name_validation(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test empty name validation (Scenario 7).
+
+    From quickstart.md Scenario 7:
+    Given: Attempting to create vendor with empty name
+    When: Call create_vendor with name=""
+    Then: ValueError raised with "cannot be empty" message
+    And: No database record created
+
+    Requirements:
+        FR-019: Name validation (1-100 characters)
+        FR-020: Clear validation error messages
+    """
+    # Act & Assert: Attempt to create vendor with empty name
+    with pytest.raises(ValueError) as exc_info:
+        await create_vendor(
+            name="",
+            initial_metadata={},
+            created_by="test-empty-name",
+        )
+
+    # Assert: Error message indicates empty name
+    error_message = str(exc_info.value).lower()
+    assert "cannot be empty" in error_message or "empty" in error_message, (
+        f"Expected 'empty' in error message, got: {exc_info.value}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_name_too_long_validation(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test length constraint validation - max 100 characters (Scenario 8).
+
+    From quickstart.md Scenario 8:
+    Given: Attempting to create vendor with 101-character name
+    When: Call create_vendor with name="A" * 101
+    Then: ValueError raised with "1-100 characters" message
+    And: No database record created
+
+    Requirements:
+        FR-019: Name length constraint (1-100 characters)
+        FR-020: Clear validation error messages showing actual length
+    """
+    long_name = "A" * 101
+
+    # Act & Assert: Attempt to create vendor with too-long name
+    with pytest.raises(ValueError) as exc_info:
+        await create_vendor(
+            name=long_name,
+            initial_metadata={},
+            created_by="test-long-name",
+        )
+
+    # Assert: Error message indicates length constraint
+    error_message = str(exc_info.value).lower()
+    assert "1-100 characters" in error_message or "100" in error_message, (
+        f"Expected length constraint in error message, got: {exc_info.value}"
+    )
+    assert "101" in error_message, (
+        f"Expected actual length (101) in error message, got: {exc_info.value}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_invalid_characters_validation(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test character constraint validation (Scenario 9).
+
+    From quickstart.md Scenario 9:
+    Given: Attempting to create vendor with special characters
+    When: Call create_vendor with names containing @, !, #, $, %
+    Then: ValueError raised with "alphanumeric" message for each
+    And: No database records created
+
+    Requirements:
+        FR-021: Name character constraint (alphanumeric + spaces/hyphens/underscores)
+        FR-020: Clear validation error messages
+    """
+    invalid_names = [
+        "Test@Vendor",
+        "Vendor!",
+        "Test#123",
+        "Vendor$Corp",
+        "Test%Value",
+    ]
+
+    for invalid_name in invalid_names:
+        # Act & Assert: Attempt to create vendor with invalid characters
+        with pytest.raises(ValueError) as exc_info:
+            await create_vendor(
+                name=invalid_name,
+                initial_metadata={},
+                created_by="test-invalid-chars",
+            )
+
+        # Assert: Error message indicates character constraint
+        error_message = str(exc_info.value).lower()
+        assert "alphanumeric" in error_message or "invalid" in error_message, (
+            f"Expected 'alphanumeric' or 'invalid' for name '{invalid_name}', "
+            f"got: {exc_info.value}"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_invalid_scaffolder_version_type(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test scaffolder_version type constraint (Scenario 10).
+
+    From quickstart.md Scenario 10:
+    Given: Attempting to create vendor with non-string scaffolder_version
+    When: Call create_vendor with scaffolder_version=123 (integer)
+    Then: ValueError raised with "scaffolder_version must be string" message
+    And: No database record created
+
+    Requirements:
+        FR-022: Metadata validation (scaffolder_version must be string)
+        FR-020: Clear validation error messages
+    """
+    # Act & Assert: Attempt to create vendor with invalid metadata type
+    with pytest.raises(ValueError) as exc_info:
+        await create_vendor(
+            name="TestVendor",
+            initial_metadata={"scaffolder_version": 123},  # Integer instead of string
+            created_by="test-invalid-metadata-type",
+        )
+
+    # Assert: Error message indicates type constraint
+    error_message = str(exc_info.value).lower()
+    assert "scaffolder_version" in error_message, (
+        f"Expected 'scaffolder_version' in error message, got: {exc_info.value}"
+    )
+    assert "string" in error_message, (
+        f"Expected 'string' in error message, got: {exc_info.value}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_invalid_created_at_format(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test created_at ISO 8601 format constraint (Scenario 11).
+
+    From quickstart.md Scenario 11:
+    Given: Attempting to create vendor with invalid created_at format
+    When: Call create_vendor with created_at="invalid-date"
+    Then: ValueError raised with "ISO 8601" message
+    And: No database record created
+
+    Requirements:
+        FR-023: Metadata validation (created_at must be ISO 8601 format)
+        FR-020: Clear validation error messages
+    """
+    invalid_dates = [
+        "invalid-date",
+        "2025-13-01",  # Invalid month
+        "2025-10-32",  # Invalid day
+        "not-a-date",
+    ]
+
+    for invalid_date in invalid_dates:
+        # Act & Assert: Attempt to create vendor with invalid date format
+        with pytest.raises(ValueError) as exc_info:
+            await create_vendor(
+                name=f"TestVendor_{invalid_date}",
+                initial_metadata={"created_at": invalid_date},
+                created_by="test-invalid-date",
+            )
+
+        # Assert: Error message indicates ISO 8601 format requirement
+        error_message = str(exc_info.value).lower()
+        assert "created_at" in error_message or "iso 8601" in error_message or "invalid" in error_message, (
+            f"Expected ISO 8601 error for date '{invalid_date}', got: {exc_info.value}"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_concurrent_creation_safety(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test concurrent creation safety (Scenario 12).
+
+    From quickstart.md Scenario 12:
+    Given: Two AI assistants attempt to create same vendor simultaneously
+    When: Execute create_vendor calls concurrently with asyncio.gather
+    Then: One call succeeds (creates vendor)
+    And: Other call fails with ValueError (VendorAlreadyExistsError)
+    And: Exactly one vendor record exists in database
+    And: Successful vendor has one of the two metadata values
+
+    Requirements:
+        FR-017: Concurrent creation safety (database constraint enforcement)
+        FR-024: One success, one failure for concurrent attempts
+    """
+    import asyncio
+    from sqlalchemy import func
+
+    # Act: Simulate concurrent creation attempts
+    task1 = create_vendor(
+        name="ConcurrentVendor",
+        initial_metadata={"source": "assistant1"},
+        created_by="assistant1",
+    )
+    task2 = create_vendor(
+        name="ConcurrentVendor",
+        initial_metadata={"source": "assistant2"},
+        created_by="assistant2",
+    )
+
+    results = await asyncio.gather(task1, task2, return_exceptions=True)
+
+    # Assert: One success, one failure
+    successes = [r for r in results if not isinstance(r, Exception)]
+    failures = [r for r in results if isinstance(r, Exception)]
+
+    assert len(successes) == 1, (
+        f"Expected exactly 1 concurrent creation to succeed, got {len(successes)}"
+    )
+    assert len(failures) == 1, (
+        f"Expected exactly 1 concurrent creation to fail, got {len(failures)}"
+    )
+
+    # Assert: Failure is ValueError (translated VendorAlreadyExistsError)
+    assert isinstance(failures[0], ValueError), (
+        f"Expected ValueError for concurrent failure, got {type(failures[0])}"
+    )
+    error_message = str(failures[0]).lower()
+    assert "already exists" in error_message, (
+        f"Expected 'already exists' in concurrent failure message, got: {failures[0]}"
+    )
+
+    # Verify: Exactly one vendor record in database
+    result = await session.execute(
+        select(func.count()).select_from(VendorExtractor)
+        .where(VendorExtractor.name == "ConcurrentVendor")
+    )
+    count = result.scalar()
+    assert count == 1, f"Expected 1 vendor record after concurrent creation, found {count}"
+
+    # Verify: Vendor has one of the two metadata values
+    result = await session.execute(
+        select(VendorExtractor).where(VendorExtractor.name == "ConcurrentVendor")
+    )
+    vendor = result.scalar_one()
+    assert "source" in vendor.metadata_, "Vendor metadata missing 'source' field"
+    assert vendor.metadata_["source"] in ["assistant1", "assistant2"], (
+        f"Expected metadata source to be 'assistant1' or 'assistant2', "
+        f"got: {vendor.metadata_['source']}"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.skipif(not CREATE_VENDOR_IMPORTED, reason="create_vendor tool not yet implemented (TDD)")
+async def test_create_vendor_whitespace_only_name_validation(
+    session: AsyncSession,
+    clean_vendors: None,
+) -> None:
+    """Test whitespace-only name validation (additional edge case).
+
+    Given: Attempting to create vendor with whitespace-only name
+    When: Call create_vendor with name="   " (spaces only)
+    Then: ValueError raised with "cannot be empty" message
+    And: No database record created
+
+    Additional edge case validation beyond quickstart scenarios.
+    """
+    whitespace_names = [
+        "   ",  # Spaces
+        "\t\t",  # Tabs
+        "\n\n",  # Newlines
+        " \t\n ",  # Mixed whitespace
+    ]
+
+    for whitespace_name in whitespace_names:
+        # Act & Assert: Attempt to create vendor with whitespace-only name
+        with pytest.raises(ValueError) as exc_info:
+            await create_vendor(
+                name=whitespace_name,
+                initial_metadata={},
+                created_by="test-whitespace",
+            )
+
+        # Assert: Error message indicates empty/invalid name
+        error_message = str(exc_info.value).lower()
+        assert "cannot be empty" in error_message or "invalid" in error_message, (
+            f"Expected 'empty' or 'invalid' for whitespace name, got: {exc_info.value}"
+        )
+
+
+# ==============================================================================
 # Test Summary
 # ==============================================================================
 
 """
-Test Summary for T004 - Create Vendor Success Scenarios:
+Test Summary for T004/T005 - Create Vendor Integration Tests:
 
-Tests Implemented:
+Success Scenarios (T004):
 1. test_create_vendor_with_full_metadata (Scenario 1)
-   - Full metadata with scaffolder_version, created_at, custom_field
-   - Validates all response fields and defaults
-   - Verifies database record and immediate queryability
-   - Performance: <100ms
-
 2. test_create_vendor_with_partial_metadata (Scenario 2)
-   - Partial metadata (scaffolder_version only)
-   - Validates only provided fields in metadata
-   - Confirms optional fields not included
-
 3. test_create_vendor_with_no_metadata (Scenario 3)
-   - No metadata (empty dict)
-   - Validates empty metadata handling
-   - Confirms all defaults applied
-
 4. test_immediate_query_after_creation (Scenario 6)
-   - Creates vendor and immediately queries
-   - Validates consistency between create and query
-   - Confirms no database lag issues
-
 5. test_create_vendor_performance_single_creation
-   - Performance validation for single creation
-   - Asserts <100ms latency (FR-015)
-
 6. test_create_vendor_with_custom_created_by
-   - Custom created_by parameter
-   - Validates non-default AI client identifiers
 
-Total Test Count: 6 integration tests
+Error Scenarios (T005):
+7. test_create_vendor_duplicate_exact_match (Scenario 4)
+8. test_create_vendor_duplicate_case_insensitive (Scenario 5)
+9. test_create_vendor_empty_name_validation (Scenario 7)
+10. test_create_vendor_name_too_long_validation (Scenario 8)
+11. test_create_vendor_invalid_characters_validation (Scenario 9)
+12. test_create_vendor_invalid_scaffolder_version_type (Scenario 10)
+13. test_create_vendor_invalid_created_at_format (Scenario 11)
+14. test_create_vendor_concurrent_creation_safety (Scenario 12)
+15. test_create_vendor_whitespace_only_name_validation (additional)
+
+Total Test Count: 15 integration tests
+Coverage: All quickstart.md scenarios 1-12 (excluding performance bulk test)
 Performance Target: <100ms p95 latency (FR-015)
 Constitutional Compliance: Principle VII (TDD - tests before implementation)
 
 Expected Test Result:
 All tests MUST FAIL with ImportError or AttributeError because create_vendor()
 tool has not been implemented yet. This is correct TDD behavior.
+
+Next Implementation Steps:
+1. Implement create_vendor() MCP tool in src/mcp/tools/tracking.py
+2. Implement validation functions for name and metadata
+3. Implement VendorAlreadyExistsError exception class
+4. Add database constraint for case-insensitive uniqueness
+5. Run tests and verify they pass
+6. Commit: "feat(vendor): implement create_vendor with validation"
 """
