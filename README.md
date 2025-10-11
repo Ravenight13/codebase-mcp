@@ -1,8 +1,39 @@
-# Codebase MCP Server
+# codebase-mcp
 
-A production-grade MCP (Model Context Protocol) server that indexes code repositories into PostgreSQL with pgvector for semantic search, designed specifically for AI coding assistants.
+> **⚠️ REFACTORING IN PROGRESS**
+> This MCP is being refactored to focus exclusively on semantic code search
+> with multi-project support. See [`docs/REFACTORING-JOURNAL.md`](docs/REFACTORING-JOURNAL.md) for status.
+
+## Current Refactoring Status
+
+**Phase 0: Preparation** 🚧 (In Progress)
+- [x] Refactor branch created
+- [x] Rollback procedures established
+- [ ] Performance baseline collected
+- [ ] Database permissions validated
+
+**Phases 1-12: Implementation** ⏳ (Pending)
+- Database refactor (per-project databases)
+- Remove non-search features (14 tools → 0)
+- Keep core search tools (2 tools)
+- Add multi-project support
+- Target: 16 → 2 tools, 4500 → 1800 LOC
+
+## Emergency Rollback
+
+If issues occur during refactoring:
+
+```bash
+./scripts/emergency_rollback.sh
+```
+
+This restores the codebase to tag: `backup-before-refactor`
+
+---
 
 ## Overview
+
+A production-grade MCP (Model Context Protocol) server that indexes code repositories into PostgreSQL with pgvector for semantic search, designed specifically for AI coding assistants.
 
 The Codebase MCP Server provides semantic code search capabilities through a focused, local-first architecture. It enables AI assistants to understand and navigate codebases efficiently by combining tree-sitter AST parsing with vector embeddings.
 
