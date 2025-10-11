@@ -587,9 +587,71 @@ async def index_repository(
 
         # If no files to index, return early
         if not files_to_index:
+            # Determine appropriate status based on context
+            # If force_reindex is True and we found files but none to index, something is wrong
+            # If no files were found at all, this is an error condition
+            if len(all_files) == 0:
+                error_msg = (
+                    f"No files found in repository at {repo_path}. "
+                    f"Check that the directory contains code files."
+                )
+                errors.append(error_msg)
+                logger.error(
+                    error_msg,
+                    extra={
+                        "context": {
+                            "repository_id": str(repository.id),
+                            "repository_path": str(repo_path),
+                        }
+                    },
+                )
+
+                duration = time.perf_counter() - start_time
+                return IndexResult(
+                    repository_id=repository.id,
+                    files_indexed=0,
+                    chunks_created=0,
+                    duration_seconds=duration,
+                    status="failed",
+                    errors=errors,
+                )
+
+            # If we're in force_reindex mode but somehow nothing to index, that's suspicious
+            if force_reindex and len(all_files) > 0:
+                error_msg = (
+                    f"Force reindex requested but no files to process. "
+                    f"Found {len(all_files)} files but all filtered out or failed validation."
+                )
+                errors.append(error_msg)
+                logger.warning(
+                    error_msg,
+                    extra={
+                        "context": {
+                            "repository_id": str(repository.id),
+                            "file_count": len(all_files),
+                        }
+                    },
+                )
+
+                duration = time.perf_counter() - start_time
+                return IndexResult(
+                    repository_id=repository.id,
+                    files_indexed=0,
+                    chunks_created=0,
+                    duration_seconds=duration,
+                    status="failed",
+                    errors=errors,
+                )
+
+            # Normal incremental update case: no changes detected (this is OK)
             logger.info(
-                "No files to index (no changes detected)",
-                extra={"context": {"repository_id": str(repository.id)}},
+                "No files to index (no changes detected since last indexing)",
+                extra={
+                    "context": {
+                        "repository_id": str(repository.id),
+                        "total_files": len(all_files),
+                    }
+                },
             )
 
             # Update repository metadata
