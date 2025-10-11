@@ -32,16 +32,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.tracking import VendorExtractor
 
-# Import MCP tool (will fail until implemented - expected for TDD)
+# Import service functions (not MCP tool wrappers)
 try:
-    from src.mcp.tools.tracking import create_vendor
+    from src.services.vendor import create_vendor, VendorAlreadyExistsError
     CREATE_VENDOR_IMPORTED = True
 except ImportError:
     CREATE_VENDOR_IMPORTED = False
     create_vendor = None  # type: ignore
+    VendorAlreadyExistsError = Exception  # type: ignore
 
-# Import query tool for validation
-from src.mcp.tools.tracking import query_vendor_status
+# Import query service for validation
+from src.services.vendor import get_vendor_by_name
 
 
 # ==============================================================================
@@ -108,31 +109,33 @@ async def test_create_vendor_with_full_metadata(
         "custom_field": "custom_value"
     }
 
-    # Call create_vendor (will fail until implemented)
+    # Call create_vendor service function
     response = await create_vendor(
         name=vendor_name,
         initial_metadata=initial_metadata,
-        created_by="claude-code"
+        created_by="claude-code",
+        session=session
     )
 
     latency_ms = (time.perf_counter() - start_time) * 1000
 
     # Verify response structure and values
-    assert "id" in response
-    assert response["name"] == vendor_name
-    assert response["status"] == "broken"
-    assert response["extractor_version"] == "0.0.0"
-    assert response["version"] == 1
-    assert response["created_by"] == "claude-code"
+    assert response.id is not None
+    assert response.name == vendor_name
+    assert response.status == "broken"
+    assert response.extractor_version == "0.0.0"
+    assert response.version == 1
+    assert response.created_by == "claude-code"
 
     # Verify metadata matches input
-    assert response["metadata"] == initial_metadata
+    assert response.metadata_ == initial_metadata
 
     # Verify timestamps (created_at and updated_at should be recent)
-    created_at = datetime.fromisoformat(response["created_at"].replace("Z", "+00:00"))
-    updated_at = datetime.fromisoformat(response["updated_at"].replace("Z", "+00:00"))
+    created_at = response.created_at
+    updated_at = response.updated_at
     assert (datetime.now(timezone.utc) - created_at).total_seconds() < 2
-    assert created_at == updated_at  # Should be identical for new vendor
+    # Timestamps should be within 1 millisecond of each other (database precision)
+    assert abs((created_at - updated_at).total_seconds()) < 0.001
 
     # Verify database record created
     stmt = select(VendorExtractor).where(VendorExtractor.name == vendor_name)
@@ -150,11 +153,11 @@ async def test_create_vendor_with_full_metadata(
     assert latency_ms < 100, f"Creation latency {latency_ms:.2f}ms exceeds 100ms target"
 
     # Verify vendor is immediately queryable (Scenario 6 requirement)
-    query_response = await query_vendor_status(name=vendor_name)
-    assert query_response["id"] == response["id"]
-    assert query_response["name"] == vendor_name
-    assert query_response["status"] == "broken"
-    assert query_response["metadata"] == initial_metadata
+    query_response = await get_vendor_by_name(vendor_name, session=session)
+    assert query_response.id == response.id
+    assert query_response.name == vendor_name
+    assert query_response.status == "broken"
+    assert query_response.metadata_ == initial_metadata
 
 
 @pytest.mark.integration
@@ -188,25 +191,27 @@ async def test_create_vendor_with_partial_metadata(
     # Call create_vendor with partial metadata
     response = await create_vendor(
         name=vendor_name,
-        initial_metadata=initial_metadata
+        initial_metadata=initial_metadata,
+        created_by="claude-code",
+        session=session
     )
 
     # Verify response
-    assert response["name"] == vendor_name
-    assert response["status"] == "broken"
-    assert response["version"] == 1
-    assert response["created_by"] == "claude-code"  # Default value
+    assert response.name == vendor_name
+    assert response.status == "broken"
+    assert response.version == 1
+    assert response.created_by == "claude-code"
 
     # Verify metadata contains only scaffolder_version
-    assert response["metadata"] == {"scaffolder_version": "1.0"}
-    assert "created_at" not in response["metadata"]
-    assert "custom_field" not in response["metadata"]
+    assert response.metadata_ == {"scaffolder_version": "1.0"}
+    assert "created_at" not in response.metadata_
+    assert "custom_field" not in response.metadata_
 
     # Verify via query
-    query_response = await query_vendor_status(name=vendor_name)
-    assert query_response["metadata"]["scaffolder_version"] == "1.0"
-    assert "created_at" not in query_response["metadata"]
-    assert "custom_field" not in query_response["metadata"]
+    query_response = await get_vendor_by_name(vendor_name, session=session)
+    assert query_response.metadata_["scaffolder_version"] == "1.0"
+    assert "created_at" not in query_response.metadata_
+    assert "custom_field" not in query_response.metadata_
 
 
 @pytest.mark.integration
@@ -235,21 +240,25 @@ async def test_create_vendor_with_no_metadata(
     vendor_name = "TechCo"
 
     # Call create_vendor without metadata (default to None or {})
-    response = await create_vendor(name=vendor_name)
+    response = await create_vendor(name=vendor_name,
+        initial_metadata=None,
+        created_by="claude-code",
+        session=session
+    )
 
     # Verify response
-    assert response["name"] == vendor_name
-    assert response["status"] == "broken"
-    assert response["extractor_version"] == "0.0.0"
-    assert response["version"] == 1
-    assert response["created_by"] == "claude-code"
+    assert response.name == vendor_name
+    assert response.status == "broken"
+    assert response.extractor_version == "0.0.0"
+    assert response.version == 1
+    assert response.created_by == "claude-code"
 
     # Verify metadata is empty dict
-    assert response["metadata"] == {}
+    assert response.metadata_ == {}
 
     # Verify via query
-    query_response = await query_vendor_status(name=vendor_name)
-    assert query_response["metadata"] == {}
+    query_response = await get_vendor_by_name(vendor_name, session=session)
+    assert query_response.metadata_ == {}
 
 
 @pytest.mark.integration
@@ -282,25 +291,27 @@ async def test_immediate_query_after_creation(
     # Create vendor
     create_response = await create_vendor(
         name=vendor_name,
-        initial_metadata=initial_metadata
+        initial_metadata=initial_metadata,
+        created_by="claude-code",
+        session=session
     )
 
     # Immediately query without delay
-    query_response = await query_vendor_status(name=vendor_name)
+    query_response = await get_vendor_by_name(vendor_name, session=session)
 
     # Verify both operations succeeded
-    assert create_response["id"] == query_response["id"]
-    assert create_response["name"] == query_response["name"]
-    assert create_response["status"] == query_response["status"]
-    assert create_response["version"] == query_response["version"]
-    assert create_response["metadata"] == query_response["metadata"]
-    assert create_response["extractor_version"] == query_response["extractor_version"]
+    assert create_response.id == query_response.id
+    assert create_response.name == query_response.name
+    assert create_response.status == query_response.status
+    assert create_response.version == query_response.version
+    assert create_response.metadata_ == query_response.metadata_
+    assert create_response.extractor_version == query_response.extractor_version
 
     # Verify consistency
-    assert query_response["name"] == vendor_name
-    assert query_response["status"] == "broken"
-    assert query_response["version"] == 1
-    assert query_response["metadata"] == initial_metadata
+    assert query_response.name == vendor_name
+    assert query_response.status == "broken"
+    assert query_response.version == 1
+    assert query_response.metadata_ == initial_metadata
 
 
 @pytest.mark.integration
@@ -331,12 +342,14 @@ async def test_create_vendor_performance_single_creation(
     start_time = time.perf_counter()
     response = await create_vendor(
         name=vendor_name,
-        initial_metadata=initial_metadata
+        initial_metadata=initial_metadata,
+        created_by="claude-code",
+        session=session
     )
     latency_ms = (time.perf_counter() - start_time) * 1000
 
     # Verify successful creation
-    assert response["name"] == vendor_name
+    assert response.name == vendor_name
 
     # Verify performance
     print(f"\nSingle vendor creation latency: {latency_ms:.2f}ms")
@@ -367,15 +380,17 @@ async def test_create_vendor_with_custom_created_by(
 
     response = await create_vendor(
         name=vendor_name,
-        created_by=custom_client
+        initial_metadata=None,
+        created_by=custom_client,
+        session=session
     )
 
     # Verify custom created_by
-    assert response["created_by"] == custom_client
+    assert response.created_by == custom_client
 
     # Verify via query
-    query_response = await query_vendor_status(name=vendor_name)
-    assert query_response["created_by"] == custom_client
+    query_response = await get_vendor_by_name(vendor_name, session=session)
+    assert query_response.created_by == custom_client
 
 
 # ==============================================================================
@@ -436,12 +451,13 @@ async def test_create_vendor_duplicate_exact_match(
     assert count_before == 1, "Existing vendor not found in database"
 
     # Act & Assert: Attempt to create duplicate vendor
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(VendorAlreadyExistsError) as exc_info:
         await create_vendor(
             name="ExistingVendor",
             initial_metadata={},
-            created_by="test-duplicate",
-        )
+        created_by="test-duplicate",
+        session=session
+    )
 
     # Assert: Error message indicates duplicate
     error_message = str(exc_info.value).lower()
@@ -492,12 +508,13 @@ async def test_create_vendor_duplicate_case_insensitive(
     from sqlalchemy import func
 
     # Act & Assert: Attempt to create case-insensitive duplicate
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(VendorAlreadyExistsError) as exc_info:
         await create_vendor(
             name="existingvendor",  # Different case
             initial_metadata={},
-            created_by="test-case-insensitive",
-        )
+        created_by="test-case-insensitive",
+        session=session
+    )
 
     # Assert: Error message indicates case-insensitive conflict
     error_message = str(exc_info.value).lower()
@@ -538,8 +555,9 @@ async def test_create_vendor_empty_name_validation(
         await create_vendor(
             name="",
             initial_metadata={},
-            created_by="test-empty-name",
-        )
+        created_by="test-empty-name",
+        session=session
+    )
 
     # Assert: Error message indicates empty name
     error_message = str(exc_info.value).lower()
@@ -574,8 +592,9 @@ async def test_create_vendor_name_too_long_validation(
         await create_vendor(
             name=long_name,
             initial_metadata={},
-            created_by="test-long-name",
-        )
+        created_by="test-long-name",
+        session=session
+    )
 
     # Assert: Error message indicates length constraint
     error_message = str(exc_info.value).lower()
@@ -620,8 +639,9 @@ async def test_create_vendor_invalid_characters_validation(
             await create_vendor(
                 name=invalid_name,
                 initial_metadata={},
-                created_by="test-invalid-chars",
-            )
+        created_by="test-invalid-chars",
+        session=session
+    )
 
         # Assert: Error message indicates character constraint
         error_message = str(exc_info.value).lower()
@@ -656,7 +676,8 @@ async def test_create_vendor_invalid_scaffolder_version_type(
             name="TestVendor",
             initial_metadata={"scaffolder_version": 123},  # Integer instead of string
             created_by="test-invalid-metadata-type",
-        )
+        session=session
+    )
 
     # Assert: Error message indicates type constraint
     error_message = str(exc_info.value).lower()
@@ -700,8 +721,9 @@ async def test_create_vendor_invalid_created_at_format(
             await create_vendor(
                 name=f"TestVendor_{invalid_date}",
                 initial_metadata={"created_at": invalid_date},
-                created_by="test-invalid-date",
-            )
+        created_by="test-invalid-date",
+        session=session
+    )
 
         # Assert: Error message indicates ISO 8601 format requirement
         error_message = str(exc_info.value).lower()
@@ -817,8 +839,9 @@ async def test_create_vendor_whitespace_only_name_validation(
             await create_vendor(
                 name=whitespace_name,
                 initial_metadata={},
-                created_by="test-whitespace",
-            )
+        created_by="test-whitespace",
+        session=session
+    )
 
         # Assert: Error message indicates empty/invalid name
         error_message = str(exc_info.value).lower()

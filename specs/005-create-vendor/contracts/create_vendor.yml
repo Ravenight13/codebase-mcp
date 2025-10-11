@@ -1,0 +1,323 @@
+# MCP Tool Contract: create_vendor
+# Feature: 005-create-vendor
+# Date: 2025-10-11
+# Protocol: MCP (Model Context Protocol)
+
+tool:
+  name: create_vendor
+  description: >
+    Create a new vendor extractor record in the database with initial state.
+    Initializes vendor with "broken" status, empty extractor version, and
+    optional metadata. Validates vendor name and enforces case-insensitive
+    uniqueness. Used by AI assistants during vendor scaffolding workflow
+    (scripts/new_vendor.sh) to atomically register new vendor extractors.
+
+  input_schema:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        description: Unique vendor name (case-insensitive uniqueness enforced)
+        minLength: 1
+        maxLength: 100
+        pattern: '^[a-zA-Z0-9 \-_]+$'
+        examples:
+          - "NewCorp"
+          - "Acme Inc"
+          - "Tech-Co_123"
+
+      initial_metadata:
+        type: object
+        description: >
+          Optional initial metadata with flexible schema. Known fields are
+          validated if present (scaffolder_version, created_at). Additional
+          custom fields are allowed without validation.
+        additionalProperties: true
+        properties:
+          scaffolder_version:
+            type: string
+            description: Version of scaffolder tool that created vendor skeleton
+            examples:
+              - "1.0"
+              - "2.3.1"
+
+          created_at:
+            type: string
+            format: date-time
+            description: ISO 8601 timestamp when vendor was created
+            examples:
+              - "2025-10-11T10:00:00Z"
+              - "2025-10-11T10:00:00.123456+00:00"
+        examples:
+          - scaffolder_version: "1.0"
+            created_at: "2025-10-11T10:00:00Z"
+            custom_field: "custom_value"
+          - scaffolder_version: "1.0"
+          - {}
+
+      created_by:
+        type: string
+        description: AI client identifier (defaults to "claude-code")
+        default: "claude-code"
+        maxLength: 100
+        examples:
+          - "claude-code"
+          - "claude-code-v1"
+          - "github-copilot"
+
+  output_schema:
+    type: object
+    required:
+      - id
+      - name
+      - status
+      - extractor_version
+      - metadata
+      - version
+      - created_at
+      - updated_at
+      - created_by
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique vendor identifier (UUID)
+        examples:
+          - "550e8400-e29b-41d4-a716-446655440000"
+
+      name:
+        type: string
+        description: Vendor name (as provided in request)
+        minLength: 1
+        maxLength: 100
+        examples:
+          - "NewCorp"
+
+      status:
+        type: string
+        enum: ["broken"]
+        description: Operational status (always "broken" for newly created vendors)
+
+      extractor_version:
+        type: string
+        description: Extractor version (empty string initially, populated later)
+        examples:
+          - "0.0.0"
+
+      metadata:
+        type: object
+        description: Stored metadata (flexible schema, merged with defaults)
+        additionalProperties: true
+        examples:
+          - scaffolder_version: "1.0"
+            created_at: "2025-10-11T10:00:00Z"
+          - {}
+
+      version:
+        type: integer
+        enum: [1]
+        description: Optimistic locking version (always 1 for new vendors)
+
+      created_at:
+        type: string
+        format: date-time
+        description: Creation timestamp (ISO 8601, UTC)
+        examples:
+          - "2025-10-11T10:15:30.123456+00:00"
+
+      updated_at:
+        type: string
+        format: date-time
+        description: Last update timestamp (same as created_at initially)
+        examples:
+          - "2025-10-11T10:15:30.123456+00:00"
+
+      created_by:
+        type: string
+        description: AI client identifier who created the vendor
+        maxLength: 100
+        examples:
+          - "claude-code"
+
+  errors:
+    - error_type: DuplicateVendorError
+      description: Vendor with this name already exists (case-insensitive check)
+      http_status: 409
+      example:
+        error_type: "VendorAlreadyExistsError"
+        vendor_name: "newcorp"
+        existing_name: "NewCorp"
+        http_status: 409
+        message: "Vendor already exists: newcorp (conflicts with existing 'NewCorp')"
+
+    - error_type: ValidationError
+      description: Input validation failed (name format, metadata types, etc.)
+      http_status: 400
+      examples:
+        - error: "Vendor name cannot be empty"
+        - error: "Vendor name must be 1-100 characters, got 101"
+        - error: "Vendor name must contain only alphanumeric characters, spaces, hyphens, and underscores"
+        - error: "scaffolder_version must be string, got integer"
+        - error: "created_at must be valid ISO 8601 format"
+
+    - error_type: DatabaseError
+      description: Database operation failed (connection error, constraint violation, etc.)
+      http_status: 500
+      example:
+        error: "Failed to create vendor: database connection lost"
+
+  performance:
+    target_latency_p95: "100ms"
+    typical_latency: "5-10ms"
+    operations:
+      - name: "Name validation (regex)"
+        latency: "~0.1ms"
+      - name: "Case-insensitive duplicate check"
+        latency: "<1ms (indexed SELECT)"
+      - name: "Metadata validation"
+        latency: "~0.5ms"
+      - name: "INSERT operation"
+        latency: "<5ms (single row, 2 indexes)"
+      - name: "Response serialization"
+        latency: "~1ms"
+
+  usage_examples:
+    - description: Create vendor with full metadata
+      request:
+        name: "NewCorp"
+        initial_metadata:
+          scaffolder_version: "1.0"
+          created_at: "2025-10-11T10:00:00Z"
+          custom_field: "custom_value"
+        created_by: "claude-code"
+
+      response:
+        id: "550e8400-e29b-41d4-a716-446655440000"
+        name: "NewCorp"
+        status: "broken"
+        extractor_version: "0.0.0"
+        metadata:
+          scaffolder_version: "1.0"
+          created_at: "2025-10-11T10:00:00Z"
+          custom_field: "custom_value"
+        version: 1
+        created_at: "2025-10-11T10:15:30.123456+00:00"
+        updated_at: "2025-10-11T10:15:30.123456+00:00"
+        created_by: "claude-code"
+
+    - description: Create vendor with partial metadata
+      request:
+        name: "AcmeInc"
+        initial_metadata:
+          scaffolder_version: "1.0"
+
+      response:
+        id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        name: "AcmeInc"
+        status: "broken"
+        extractor_version: "0.0.0"
+        metadata:
+          scaffolder_version: "1.0"
+        version: 1
+        created_at: "2025-10-11T10:16:00.789012+00:00"
+        updated_at: "2025-10-11T10:16:00.789012+00:00"
+        created_by: "claude-code"
+
+    - description: Create vendor with no metadata
+      request:
+        name: "TechCo"
+
+      response:
+        id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        name: "TechCo"
+        status: "broken"
+        extractor_version: "0.0.0"
+        metadata: {}
+        version: 1
+        created_at: "2025-10-11T10:17:00.345678+00:00"
+        updated_at: "2025-10-11T10:17:00.345678+00:00"
+        created_by: "claude-code"
+
+    - description: Error - duplicate vendor (case-insensitive)
+      request:
+        name: "newcorp"  # Conflicts with existing "NewCorp"
+
+      error:
+        error_type: "VendorAlreadyExistsError"
+        vendor_name: "newcorp"
+        existing_name: "NewCorp"
+        http_status: 409
+        message: "Vendor already exists: newcorp (conflicts with existing 'NewCorp')"
+
+    - description: Error - invalid name format
+      request:
+        name: "Test@Vendor!"
+
+      error:
+        error: "Vendor name must contain only alphanumeric characters, spaces, hyphens, and underscores"
+
+    - description: Error - invalid metadata type
+      request:
+        name: "TestVendor"
+        initial_metadata:
+          scaffolder_version: 123  # Should be string
+
+      error:
+        error: "scaffolder_version must be string, got integer"
+
+  workflow_integration:
+    script: scripts/new_vendor.sh
+    purpose: Atomic vendor onboarding during vendor extractor scaffolding
+    sequence:
+      - step: 1
+        action: scripts/new_vendor.sh creates code skeleton (extractor, tests, fixtures)
+        result: Vendor code files created in repository
+
+      - step: 2
+        action: AI assistant calls create_vendor() MCP tool
+        parameters:
+          name: "<vendor_name>"
+          initial_metadata:
+            scaffolder_version: "1.0"
+            created_at: "<ISO 8601 timestamp>"
+        result: Vendor record initialized in database
+
+      - step: 3
+        action: AI assistant calls query_vendor_status() to verify
+        result: Returns vendor with status="broken", version=1
+
+      - step: 4
+        action: Developer implements vendor extractor
+        result: Tests pass, extractor functional
+
+      - step: 5
+        action: AI assistant calls update_vendor_status()
+        parameters:
+          name: "<vendor_name>"
+          version: 1
+          status: "operational"
+        result: Vendor marked operational, version=2
+
+  constitutional_compliance:
+    - principle: "I. Simplicity Over Features"
+      compliance: "PASS - Single create operation completing CRUD pattern"
+
+    - principle: "II. Local-First Architecture"
+      compliance: "PASS - PostgreSQL-only, no external APIs"
+
+    - principle: "III. Protocol Compliance (MCP via SSE)"
+      compliance: "PASS - FastMCP @mcp.tool() decorator, no stdout/stderr pollution"
+
+    - principle: "IV. Performance Guarantees"
+      compliance: "PASS - <100ms p95 latency target, typical 5-10ms"
+
+    - principle: "V. Production Quality Standards"
+      compliance: "PASS - Comprehensive validation, error handling, structured logging"
+
+    - principle: "VIII. Pydantic-Based Type Safety"
+      compliance: "PASS - Pydantic models for request/response validation"
+
+    - principle: "XI. FastMCP and Python SDK Foundation"
+      compliance: "PASS - Uses FastMCP @mcp.tool() decorator with automatic schema generation"

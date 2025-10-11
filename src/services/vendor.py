@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.mcp.mcp_logging import get_logger
 from src.models.tracking import VendorExtractor
 from src.services.locking import OptimisticLockError, update_with_version_check
-from src.services.validation import ValidationError, validate_vendor_metadata
+from src.services.validation import ValidationError, validate_create_vendor_metadata, validate_vendor_name
 
 # ==============================================================================
 # Import Pydantic Schemas from Contracts
@@ -517,6 +517,13 @@ async def create_vendor(
         ...     assert vendor.version == 1
         ...     await session.commit()
     """
+    # Validate inputs before database operations
+    # validate_vendor_name and validate_create_vendor_metadata raise ValueError on failure
+    validate_vendor_name(name)
+
+    if initial_metadata:
+        initial_metadata = validate_create_vendor_metadata(initial_metadata)
+
     logger.info(
         f"Creating vendor: {name}",
         extra={
@@ -539,9 +546,14 @@ async def create_vendor(
     session.add(vendor)
 
     try:
-        await session.flush()  # Trigger functional unique index check
+        await session.flush()  # Trigger unique index check
     except IntegrityError as e:
-        if "idx_vendor_name_lower" in str(e).lower():
+        # Check if this is a unique constraint violation on vendor name (case-insensitive)
+        error_str = str(e).lower()
+        if "idx_vendor_name_lower" in error_str or "unique constraint" in error_str:
+            # Rollback the session to allow subsequent queries
+            await session.rollback()
+
             # Query existing vendor to get actual casing
             result = await session.execute(
                 select(VendorExtractor).where(

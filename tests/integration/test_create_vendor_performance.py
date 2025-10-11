@@ -29,11 +29,11 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import future MCP tool (not yet implemented)
+# Import service function (not MCP tool wrapper)
 try:
-    from src.mcp.tools.tracking import create_vendor
+    from src.services.vendor import create_vendor
 except ImportError:
-    create_vendor = None  # Tool not yet implemented
+    create_vendor = None  # Service not yet implemented
 
 
 @pytest.mark.integration
@@ -88,7 +88,7 @@ async def test_create_vendor_p95_under_100ms(session: AsyncSession) -> None:
             name=vendor_name,
             initial_metadata={"scaffolder_version": "1.0", "iteration": i},
             created_by="performance-test",
-            session=session,
+            session=session
         )
 
         end_time = time.perf_counter()
@@ -98,11 +98,11 @@ async def test_create_vendor_p95_under_100ms(session: AsyncSession) -> None:
 
         # Verify successful creation
         assert vendor_response is not None
-        assert vendor_response["name"] == vendor_name
-        assert vendor_response["status"] == "broken"  # Initial status
-        assert vendor_response["version"] == 1  # Initial version
-        assert vendor_response["metadata"]["scaffolder_version"] == "1.0"
-        assert vendor_response["metadata"]["iteration"] == i
+        assert vendor_response.name == vendor_name
+        assert vendor_response.status == "broken"  # Initial status
+        assert vendor_response.version == 1  # Initial version
+        assert vendor_response.metadata_["scaffolder_version"] == "1.0"
+        assert vendor_response.metadata_["iteration"] == i
 
     # Calculate percentiles using statistics.quantiles()
     # Sort latencies for percentile calculation
@@ -189,7 +189,8 @@ async def test_create_vendor_performance_consistency(session: AsyncSession) -> N
             await create_vendor(
                 name=vendor_name,
                 initial_metadata={"batch": batch_num, "index": i},
-                session=session,
+                created_by="claude-code",
+                session=session
             )
             end_time = time.perf_counter()
 
@@ -275,7 +276,8 @@ async def test_create_vendor_with_metadata_performance(session: AsyncSession) ->
         await create_vendor(
             name=vendor_name,
             initial_metadata=large_metadata,
-            session=session,
+            created_by="claude-code",
+            session=session
         )
         end_time = time.perf_counter()
 
