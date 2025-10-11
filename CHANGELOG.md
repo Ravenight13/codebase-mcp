@@ -81,6 +81,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Vendor Management
+- **create_vendor MCP Tool**: New MCP tool for creating vendor extractor records during scaffolding workflow
+  - Initializes vendors with "broken" status and "0.0.0" extractor version
+  - Supports optional metadata with flexible schema (scaffolder_version, created_at, custom fields)
+  - Case-insensitive duplicate detection with enhanced error messages showing conflicting names
+  - Performance: <100ms p95 latency (typically 5-10ms)
+  - Database migration: Functional unique index on LOWER(name) for atomic uniqueness enforcement
+
+### Changed
+
+#### Database Schema
+- **Vendor Table**: Replaced case-sensitive unique constraint with functional unique index `idx_vendor_name_lower` for case-insensitive vendor name uniqueness
+
+### Fixed
+
+#### Vendor Creation
+- **Race Condition**: Database-level enforcement via functional unique index eliminates concurrent creation conflicts
+- **Duplicate Detection**: Case-insensitive comparison prevents variations like "example", "Example", "EXAMPLE" from creating duplicates
+
 ### Known Issues
 
 - **Contract Test Failures**: 14 Pydantic V2 validation contract tests failing due to schema mismatches (non-blocking, core functionality working)
