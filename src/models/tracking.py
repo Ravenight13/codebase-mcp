@@ -652,12 +652,15 @@ class ProjectConfiguration(Base):
         Boolean, nullable=False, default=True
     )
     last_health_check_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True
+        DateTime(timezone=True), nullable=True
     )
 
     # Audit trail (no created_at since singleton exists from migration)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
     updated_by: Mapped[str] = mapped_column(
         String(100), nullable=False
