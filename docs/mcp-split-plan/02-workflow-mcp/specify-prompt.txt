@@ -1,0 +1,210 @@
+Build workflow-mcp: An AI project management MCP server with multi-project workspace support and a generic entity system.
+
+PROBLEM STATEMENT:
+AI coding assistants need a way to manage multiple projects (commission work, game development, etc.) with complete data isolation, domain-specific entities (vendors, game mechanics), hierarchical work items, and deployment tracking - all without hardcoded domain tables or schema migrations.
+
+WHAT WE'RE BUILDING:
+A FastMCP-based server that provides:
+1. Multi-project workspace management (create, switch, list projects)
+2. Database-per-project architecture for complete isolation
+3. Generic entity system with runtime JSON Schema registration
+4. Hierarchical work items (project → session → task → research)
+5. Task management with git integration
+6. Deployment history with relationships
+
+SUCCESS CRITERIA:
+1. ISOLATION: Commission project data never visible in game dev project queries
+2. FLEXIBILITY: New entity types (vendors, mechanics, papers) registered without code changes
+3. PERFORMANCE: <50ms project switching, <200ms work item operations, <100ms entity queries (p95)
+4. SCALABILITY: 100+ projects with independent databases
+5. TYPE SAFETY: All operations validated via Pydantic, mypy --strict passes
+6. PROTOCOL COMPLIANCE: All tools invocable from Claude Desktop/CLI
+
+KEY CONSTRAINTS:
+1. ONE database per project (workflow_project_<uuid>)
+2. Registry database (workflow_registry) tracks all projects
+3. NO hardcoded domain tables (no vendor, game_mechanic tables in schema)
+4. Runtime entity type registration via JSON Schema
+5. JSONB storage for entities with GIN indexing
+6. FastMCP framework with MCP Python SDK (no custom protocol code)
+7. Local-first: PostgreSQL runs locally, no cloud dependencies
+8. SSE transport only (no stdout/stderr pollution)
+
+TECHNICAL STACK:
+- Python 3.11+ (async, type hints)
+- PostgreSQL 14+ (JSONB, GIN indexes, recursive CTEs, materialized paths)
+- FastMCP framework
+- MCP Python SDK
+- AsyncPG driver (high-performance async)
+- Pydantic for validation
+- JSON Schema for entity type schemas
+
+EXAMPLE USAGE (Commission Work):
+```python
+# Create commission project
+project = create_project(name="invoice-extractor-commission", description="PDF invoice extraction")
+
+# Switch to commission project
+switch_active_project(project["project_id"])
+
+# Register vendor entity type
+register_entity_type(
+    project_id=project["project_id"],
+    type_name="vendor",
+    schema={
+        "type": "object",
+        "properties": {
+            "status": {"enum": ["operational", "broken"]},
+            "extractor_version": {"type": "string"},
+            "supports_html": {"type": "boolean"}
+        },
+        "required": ["status"]
+    }
+)
+
+# Create EPSON vendor entity
+epson = create_entity(
+    project_id=project["project_id"],
+    entity_type="vendor",
+    name="EPSON",
+    data={"status": "operational", "extractor_version": "1.2.0", "supports_html": True}
+)
+
+# Query broken vendors
+broken = query_entities(
+    project_id=project["project_id"],
+    entity_type="vendor",
+    filters={"data": {"status": "broken"}}
+)
+```
+
+EXAMPLE USAGE (Game Development):
+```python
+# Create game dev project
+game_project = create_project(name="ttrpg-core-system", description="Tabletop RPG mechanics")
+
+# Switch to game dev project
+switch_active_project(game_project["project_id"])
+
+# Register game_mechanic entity type
+register_entity_type(
+    project_id=game_project["project_id"],
+    type_name="game_mechanic",
+    schema={
+        "type": "object",
+        "properties": {
+            "mechanic_type": {"enum": ["combat", "skill", "magic"]},
+            "implementation_status": {"enum": ["design", "prototype", "complete"]},
+            "complexity": {"type": "integer", "minimum": 1, "maximum": 5}
+        },
+        "required": ["mechanic_type", "implementation_status"]
+    }
+)
+
+# Create skill check mechanic
+skill_check = create_entity(
+    project_id=game_project["project_id"],
+    entity_type="game_mechanic",
+    name="Skill Check System",
+    data={"mechanic_type": "skill", "implementation_status": "prototype", "complexity": 3}
+)
+```
+
+RELATIONSHIP TO CODEBASE-MCP:
+- codebase-mcp: Code intelligence (semantic search, indexing)
+- workflow-mcp: Project management (work items, tasks, entities)
+- Integration: codebase-mcp queries workflow-mcp for active project context
+- Separation: workflow-mcp does NOT do semantic search or code indexing
+
+CORE FEATURES TO SPECIFY:
+
+PROJECT WORKSPACE MANAGEMENT:
+- create_project(name, description, metadata) → project_id
+- switch_active_project(project_id) → confirmation
+- get_active_project() → project metadata or null
+- list_projects(include_inactive) → project list
+- Database-per-project creation and connection pooling
+
+GENERIC ENTITY SYSTEM:
+- register_entity_type(project_id, type_name, schema, description) → entity_type_id
+- create_entity(project_id, entity_type, name, data, metadata) → entity_id, version
+- query_entities(project_id, entity_type, filters, limit, offset) → entity list
+- update_entity(entity_id, version, data_updates, metadata_updates) → updated entity
+- Optimistic locking via version parameter
+
+HIERARCHICAL WORK ITEMS:
+- create_work_item(project_id, item_type, title, metadata, parent_id) → work_item_id
+- query_work_item(work_item_id, include_children, include_dependencies) → hierarchy
+- update_work_item(work_item_id, version, status, title, metadata) → updated item
+- list_work_items(project_id, item_type, status, parent_id, limit, offset) → item list
+- Soft delete via deleted_at timestamp
+
+TASK MANAGEMENT:
+- create_task(project_id, title, description, planning_references) → task_id
+- update_task(task_id, status, branch, commit) → updated task
+- list_tasks(project_id, status, branch, limit, full_details) → task list
+- Git integration: branch/commit associations
+
+DEPLOYMENT TRACKING:
+- record_deployment(project_id, deployed_at, metadata, vendor_ids, work_item_ids) → deployment_id
+- list_deployments(project_id, limit, include_relationships) → deployment list
+- Relationships to entities and work items via junction tables
+
+IMPLEMENTATION PHASES:
+- Phase 1 (Weeks 1-3): Core - Project management foundation
+  - Registry database + projects table
+  - create_project, switch_active_project, get_active_project, list_projects
+  - Database-per-project creation with schema initialization
+  - Connection pooling system (AsyncPG)
+  - Acceptance: codebase-mcp can query for active project
+
+- Phase 3 (Weeks 7-9): Complete - Work items, tasks, entities
+  - Work item hierarchy with materialized paths
+  - Task management with git integration
+  - Generic entity system with JSON Schema validation
+  - Deployment tracking with relationships
+  - Acceptance: Commission + TTRPG projects work independently
+
+PERFORMANCE REQUIREMENTS:
+- Project switching: <50ms p95 latency
+- Work item operations: <200ms p95 latency (hierarchy queries)
+- Entity queries: <100ms p95 latency (JSONB filtering with GIN)
+- Task listing: <150ms p95 latency (summary mode)
+- Support 100+ projects without degradation
+
+QUALITY REQUIREMENTS:
+- Type safety: mypy --strict passes with zero errors
+- Test coverage: >90% line coverage, 100% for critical paths
+- MCP protocol compliance: All tools invocable from Claude Desktop/CLI
+- Error handling: All failure paths return structured MCP errors
+- Structured logging: JSON logs to file (no stdout/stderr)
+
+CONSTITUTIONAL PRINCIPLES TO FOLLOW:
+1. Simplicity Over Features (project management only, no code intelligence)
+2. Local-First Architecture (no cloud dependencies)
+3. MCP Protocol Compliance (FastMCP + SSE, no stdio pollution)
+4. Performance Guarantees (<50ms project switching, <200ms work items)
+5. Production Quality (comprehensive error handling, type safety)
+6. Specification-First Development (this spec before implementation)
+7. Test-Driven Development (protocol tests before features)
+8. Pydantic-Based Type Safety (all models validated)
+9. Orchestrated Subagent Execution (parallel task execution where safe)
+10. Git Micro-Commit Strategy (commit after each task)
+11. FastMCP and Python SDK Foundation (no custom MCP code)
+12. Generic Entity Adaptability (no hardcoded domain tables)
+
+EDGE CASES TO CONSIDER:
+- What happens if project database creation fails? (rollback registry entry)
+- How to handle switching to deleted/archived project? (validation error)
+- What if entity data doesn't match registered schema? (Pydantic validation error)
+- Concurrent entity updates with same version? (optimistic locking conflict)
+- Work item hierarchy exceeds 5 levels? (validation error)
+- Query entities in non-existent project? (project validation error)
+- Connection pool exhaustion for project? (graceful degradation, queue requests)
+
+MULTI-PROJECT ISOLATION VALIDATION:
+- Integration test: Create 2 projects, register "vendor" in both, ensure query_entities in project A never returns project B's vendors
+- Stress test: Create 100 projects, switch between them, verify <50ms latency
+- Connection test: 10 concurrent projects active, verify connection pools don't interfere
+
+This is a brand new repository. Specify all requirements for building workflow-mcp from scratch.
