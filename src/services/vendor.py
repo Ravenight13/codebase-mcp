@@ -28,7 +28,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.mcp.mcp_logging import get_logger
@@ -475,6 +476,111 @@ async def update_vendor_status(
         raise
 
 
+async def create_vendor(
+    name: str,
+    initial_metadata: dict[str, Any] | None,
+    created_by: str,
+    session: AsyncSession,
+) -> VendorExtractor:
+    """Create new vendor extractor record.
+
+    Creates a vendor with initial "broken" status, version 1, and
+    extractor_version "0.0.0". Enforces case-insensitive uniqueness
+    via database functional unique index on LOWER(name).
+
+    Args:
+        name: Vendor name (pre-validated by tool layer)
+        initial_metadata: Optional metadata dict (pre-validated by tool layer)
+        created_by: AI client identifier
+        session: Active async database session
+
+    Returns:
+        Created VendorExtractor instance with initial values
+
+    Raises:
+        VendorAlreadyExistsError: Vendor with name already exists (case-insensitive)
+            Includes existing vendor name with actual casing for clarity
+        IntegrityError: Database constraint violation (re-raised if not uniqueness)
+
+    Performance:
+        <5ms for single INSERT with functional unique index check
+
+    Example:
+        >>> async with session_factory() as session:
+        ...     vendor = await create_vendor(
+        ...         name="NewCorp",
+        ...         initial_metadata={"scaffolder_version": "1.0"},
+        ...         created_by="claude-code",
+        ...         session=session
+        ...     )
+        ...     assert vendor.status == "broken"
+        ...     assert vendor.version == 1
+        ...     await session.commit()
+    """
+    logger.info(
+        f"Creating vendor: {name}",
+        extra={
+            "context": {
+                "vendor_name": name,
+                "has_metadata": initial_metadata is not None,
+                "created_by": created_by,
+            }
+        },
+    )
+
+    vendor = VendorExtractor(
+        name=name,
+        status="broken",
+        extractor_version="0.0.0",
+        metadata_=initial_metadata or {},
+        created_by=created_by,
+    )
+
+    session.add(vendor)
+
+    try:
+        await session.flush()  # Trigger functional unique index check
+    except IntegrityError as e:
+        if "idx_vendor_name_lower" in str(e).lower():
+            # Query existing vendor to get actual casing
+            result = await session.execute(
+                select(VendorExtractor).where(
+                    func.lower(VendorExtractor.name) == func.lower(name)
+                )
+            )
+            existing_vendor = result.scalar_one_or_none()
+            existing_name = existing_vendor.name if existing_vendor else name
+
+            logger.warning(
+                f"Vendor already exists: {name} (conflicts with '{existing_name}')",
+                extra={
+                    "context": {
+                        "vendor_name": name,
+                        "existing_name": existing_name,
+                    }
+                },
+            )
+
+            raise VendorAlreadyExistsError(
+                vendor_name=name, existing_name=existing_name
+            ) from e
+        raise
+
+    logger.info(
+        f"Vendor created successfully: {name}",
+        extra={
+            "context": {
+                "vendor_id": str(vendor.id),
+                "vendor_name": name,
+                "status": vendor.status,
+                "version": vendor.version,
+            }
+        },
+    )
+
+    return vendor
+
+
 # ==============================================================================
 # Public API
 # ==============================================================================
@@ -486,4 +592,5 @@ __all__ = [
     "get_vendor_by_id",
     "get_all_vendors",
     "update_vendor_status",
+    "create_vendor",
 ]
