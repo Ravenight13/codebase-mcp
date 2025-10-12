@@ -41,17 +41,32 @@ The MCP server MUST focus exclusively on semantic code search. Feature requests 
 
 **Rationale**: Feature creep destroys maintainability and performance. A tool that does one thing perfectly is more valuable than one that does many things poorly. Semantic search is complex enough without additional concerns.
 
+**Verification**:
+- Automated: Ruff complexity checks (configured in pyproject.toml), `/analyze` command flags scope violations as CRITICAL
+- Manual: Specification review during `/specify` phase validates features against scope boundaries, code review rejects PRs extending beyond semantic search
+- Tooling: Project Non-Goals section in constitution serves as rejection criteria checklist
+
 ### II. Local-First Architecture
 
 The system MUST operate completely offline after initial setup. All dependencies MUST be locally hosted (PostgreSQL, Ollama). Zero cloud API calls are permitted except to local Ollama instance. The database schema MUST be standard PostgreSQL, allowing data reuse across tools.
 
 **Rationale**: Privacy, reliability, and speed require local execution. External APIs introduce latency, costs, privacy risks, and single points of failure. Standard schemas enable interoperability.
 
+**Verification**:
+- Automated: Integration tests validate offline operation after initial setup (`tests/integration/test_ai_assistant_integration.py`), httpx client configured to only allow localhost connections
+- Manual: Code review inspects all HTTP client instantiations for external API calls, architecture review validates database schema portability
+- Tooling: Network monitoring tests detect unauthorized external connections during test suite execution
+
 ### III. Protocol Compliance (MCP via SSE)
 
 All MCP communication MUST use SSE transport. Stdout and stderr MUST NEVER contain protocol messages or application logs. Logging MUST go exclusively to `/tmp/codebase-mcp.log`. The server MUST implement MCP specification correctly with no protocol violations.
 
 **Rationale**: MCP protocol violations break AI assistant integrations. Stdout/stderr pollution causes parsing failures. File-based logging enables debugging without breaking the protocol.
+
+**Verification**:
+- Automated: Contract tests validate MCP protocol compliance (`tests/contract/test_transport_compliance.py`, `test_schema_generation.py`, `test_tool_registration.py`), structured logging tests ensure no stdout/stderr pollution
+- Manual: Manual integration testing with Claude Code CLI validates end-to-end protocol behavior (`tests/manual/test_fastmcp_startup.py`)
+- Tooling: FastMCP framework provides built-in protocol validation, pytest markers segregate contract tests (`@pytest.mark.contract`)
 
 ### IV. Performance Guarantees
 
@@ -63,17 +78,32 @@ The system MUST meet these performance targets:
 
 **Rationale**: Slow tools break developer flow. These targets ensure the MCP server enhances rather than hinders AI assistant responsiveness. Async operations prevent blocking.
 
+**Verification**:
+- Automated: pytest-benchmark validates indexing and search performance baselines (`tests/performance/test_baseline.py`), performance validation tests enforce 60s/500ms targets (`tests/integration/test_performance_validation.py`)
+- Manual: py-spy profiling during code review identifies blocking operations, manual load testing with realistic codebases validates production performance
+- Tooling: pytest-benchmark for baseline tracking, scripts/collect_baseline.sh establishes performance regression detection
+
 ### V. Production Quality Standards
 
 Error handling MUST be comprehensive with specific error messages. All exceptions MUST be caught and logged with context. Type hints MUST be complete and enforced with mypy --strict. Configuration MUST validate on startup, failing fast with clear error messages. File-based structured logging MUST capture all errors with timestamps and context.
 
 **Rationale**: Production systems fail gracefully. Users need actionable error messages. Type safety catches bugs before runtime. Fast failure prevents silent corruption.
 
+**Verification**:
+- Automated: mypy --strict enforces complete type coverage (configured in pyproject.toml with strict=true), Ruff linter validates error handling patterns and logging format, pytest-cov enforces 95%+ coverage threshold blocking merges
+- Manual: Code review validates error message clarity and context propagation, manual testing of failure scenarios validates graceful degradation
+- Tooling: Pydantic validators enforce configuration schema at runtime, structured logging tests validate JSON format and field completeness (`tests/unit/test_logging.py`)
+
 ### VI. Specification-First Development
 
 Feature specifications MUST be completed before implementation planning. Specifications focus on user requirements (WHAT/WHY) without implementation details (HOW). All specifications MUST include acceptance criteria and test scenarios.
 
 **Rationale**: Clear requirements prevent implementation drift and enable effective testing. Separating concerns allows specification by domain experts and implementation by engineers.
+
+**Verification**:
+- Automated: `/plan` command validates spec.md existence before generating implementation plan, `/tasks` command validates plan.md existence before task generation, `/analyze` command flags missing acceptance criteria as HIGH severity
+- Manual: `/clarify` command facilitates interactive requirements refinement before planning, workflow gates enforce sequential `/specify` → `/plan` → `/tasks` → `/implement` progression
+- Tooling: check-prerequisites.sh script validates artifact dependencies, spec-template.md structure enforces WHAT/WHY separation from HOW implementation details
 
 ### VII. Test-Driven Development
 
