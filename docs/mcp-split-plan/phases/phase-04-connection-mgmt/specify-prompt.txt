@@ -1,0 +1,115 @@
+# Phase 04: Production-Grade Connection Management
+
+## Problem Statement
+
+With unlimited projects possible (Phase 03), creating a new database connection pool for every project would eventually exhaust PostgreSQL connections. A server with 50 projects using 20 connections each would require 1,000 PostgreSQL connections, exceeding typical PostgreSQL max_connections (100-200). We need intelligent connection pool management that supports unlimited projects while respecting resource limits.
+
+## User Stories
+
+### As a System Administrator
+I want connection pools to be created lazily (only when needed) and evicted intelligently, so that the server doesn't exhaust PostgreSQL connections with inactive projects.
+
+### As a DevOps Engineer
+I want configurable limits on concurrent connection pools, so that I can tune the server for different deployment sizes without risking resource exhaustion.
+
+### As a Developer
+I want connection pool statistics available for monitoring, so that I can understand pool usage patterns and optimize configuration.
+
+### As a Site Reliability Engineer
+I want graceful connection pool shutdown on server stop, so that in-flight queries complete successfully and connections are properly closed.
+
+## Success Criteria
+
+### LRU Connection Pool Manager Implemented
+- Connection pools created lazily (not at startup)
+- LRU eviction when MAX_PROJECTS limit reached
+- Thread-safe pool access with asyncio.Lock
+- Pool reuse for recently-used projects (cache hits)
+
+### Resource Limits Configurable
+- `MAX_PROJECTS` environment variable (default: 10 concurrent pools)
+- `MAX_CONNECTIONS_PER_POOL` environment variable (default: 20 connections)
+- Validation: Total connections must not exceed PostgreSQL max_connections
+- Clear error messages when limits would be exceeded
+
+### Pool Monitoring Available
+- Pool statistics accessible: cache hits, misses, evictions
+- Current active pools visible with connection counts
+- Idle connection count per pool available
+- Logging for pool lifecycle events (created, evicted, closed)
+
+### Graceful Shutdown Implemented
+- All pools closed on server shutdown
+- Wait for in-flight queries to complete (with timeout)
+- Log pool closure statistics
+- No connection leaks after shutdown
+
+### Multi-Project Stress Test Passes
+- Server handles MAX_PROJECTS+5 gracefully (LRU eviction)
+- Concurrent operations across 15+ projects without errors
+- Least-recently-used pools evicted correctly
+- No connection leaks under heavy load
+
+## Constraints
+
+### PostgreSQL Connection Limits (NON-NEGOTIABLE)
+- Total connections (MAX_PROJECTS × MAX_CONNECTIONS_PER_POOL) must not exceed PostgreSQL max_connections
+- Default PostgreSQL max_connections is typically 100
+- Server must validate limits on startup
+
+### LRU Eviction Strategy (NON-NEGOTIABLE)
+- Least-recently-used pool evicted when limit reached
+- Pool eviction must close all connections gracefully
+- Evicted project can be re-created if accessed again
+
+### Thread Safety
+- Pool manager must be thread-safe (asyncio.Lock)
+- No race conditions during pool creation or eviction
+- Concurrent access to different pools must not block
+
+### Lazy Creation Only
+- Pools not created at server startup
+- First access to project creates pool
+- Reduces resource usage for inactive projects
+
+## Out of Scope
+
+### Not Included in This Phase
+- Advanced load balancing across PostgreSQL instances
+- Connection retry logic (PostgreSQL handles this)
+- Pool warming strategies (pre-creating pools)
+- Dynamic pool resizing based on load
+- Cross-database queries or transactions
+
+### Explicitly NOT Doing
+- Modifying search or indexing algorithms
+- Changing tool interfaces
+- Database schema changes
+- Performance optimization (that's Phase 06)
+
+## Business Value
+
+### Scalability Without Resource Exhaustion
+Supports unlimited projects while keeping resource usage bounded. A server can handle 100 projects with only 10 active connection pools (200 connections instead of 2,000).
+
+### Operational Simplicity
+Automatic pool management means administrators don't need to manually configure connection limits per project. LRU eviction adapts to usage patterns automatically.
+
+### Cost Efficiency
+By limiting active connection pools, the server can run on smaller PostgreSQL instances with lower max_connections settings, reducing infrastructure costs.
+
+### Production Readiness
+Pool monitoring and graceful shutdown are essential for production deployments. Operators can observe pool behavior and ensure clean shutdowns during deployments.
+
+### Resource Predictability
+Configurable limits (MAX_PROJECTS, MAX_CONNECTIONS_PER_POOL) provide predictable resource usage, making capacity planning straightforward.
+
+## Additional Context
+
+This phase corresponds to Phase 8 from FINAL-IMPLEMENTATION-PLAN.md. It should take 4-6 hours to complete and depends on Phase 03 (multi-project support implemented).
+
+The LRU eviction strategy balances resource efficiency with user experience. Frequently-used projects stay in the pool cache, while rarely-used projects are evicted to make room.
+
+Connection pool monitoring is essential for production debugging. Operators can identify if MAX_PROJECTS is too low (high eviction rate) or too high (resource waste).
+
+The default values (MAX_PROJECTS=10, MAX_CONNECTIONS_PER_POOL=20) support 10 concurrent projects with 200 total connections, fitting comfortably within typical PostgreSQL max_connections=300.

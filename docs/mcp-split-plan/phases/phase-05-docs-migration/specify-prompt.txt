@@ -1,0 +1,125 @@
+# Phase 05: Documentation & Migration Guide
+
+## Problem Statement
+
+After refactoring from 16 to 2 MCP tools, adding multi-project support, and implementing connection pooling, the existing documentation is completely outdated. Users upgrading from v1.x need clear migration instructions to avoid data loss. New users need accurate documentation reflecting the refactored architecture. Without updated documentation and migration guidance, users will be confused, adoption will suffer, and support burden will increase.
+
+## User Stories
+
+### As a New User
+I want accurate README and installation instructions, so that I can get started with codebase-mcp quickly without encountering outdated examples or broken instructions.
+
+### As an Existing User (v1.x)
+I want a clear migration guide with step-by-step instructions, so that I can upgrade to v2.0 without losing data or breaking my workflows.
+
+### As a System Administrator
+I want configuration documentation with environment variables and PostgreSQL tuning guidance, so that I can deploy codebase-mcp in production with appropriate settings.
+
+### As a Developer Integrating codebase-mcp
+I want API reference documentation with examples, so that I understand how to use index_repository and search_code with the new project_id parameter.
+
+### As a DevOps Engineer
+I want architecture documentation explaining the multi-project design, so that I understand the database-per-project strategy and can troubleshoot issues.
+
+## Success Criteria
+
+### README.md Updated
+- Reflects 2 tools (not 16)
+- Explains multi-project support clearly
+- Documents workflow-mcp integration (optional)
+- Provides installation instructions for v2.0
+- Includes quick start examples with project_id
+
+### Migration Guide Created
+- Documents breaking changes (14 tools removed, schema changes)
+- Provides step-by-step migration from v1.x to v2.0
+- Includes database backup instructions
+- Explains rollback procedure if migration fails
+- Tested by following the guide end-to-end
+
+### Configuration Guide Created
+- Documents all environment variables (MAX_PROJECTS, MAX_CONNECTIONS_PER_POOL, etc.)
+- Provides PostgreSQL tuning recommendations
+- Explains connection pool configuration
+- Includes production deployment recommendations
+- Provides troubleshooting common configuration issues
+
+### Architecture Documentation Updated
+- Explains database-per-project architecture with diagrams
+- Documents connection pool design and LRU eviction
+- Describes workflow-mcp integration (optional)
+- Clarifies security model (project isolation)
+
+### API Reference Updated
+- Documents index_repository with project_id parameter
+- Documents search_code with project_id parameter
+- Provides example usage (basic and multi-project)
+- Removes documentation for deleted tools
+- Includes error handling examples
+
+### No Broken Links
+- All documentation links working (no 404s)
+- Cross-references between docs accurate
+- External links verified
+- Code examples tested and working
+
+## Constraints
+
+### Accuracy is NON-NEGOTIABLE
+- All examples must be tested and working
+- No references to removed tools (14 deleted tools)
+- Version numbers accurate (v2.0.0)
+- Migration steps verified by execution
+
+### Migration Guide Must Be Complete
+- Must cover all breaking changes
+- Must include backup instructions
+- Must include rollback procedure
+- Must address common migration issues
+
+### Production Focus
+- Configuration guide must include production recommendations
+- PostgreSQL tuning guidance required
+- Security considerations documented
+- Monitoring and observability guidance included
+
+## Out of Scope
+
+### Not Included in This Phase
+- Performance benchmark results (that's Phase 06)
+- Release notes and changelog (that's Phase 07)
+- Video tutorials or interactive documentation
+- Automated migration scripts (manual steps documented)
+
+### Explicitly NOT Doing
+- Creating new features
+- Code changes (documentation only)
+- Performance optimization
+- User training materials
+
+## Business Value
+
+### Reduces Support Burden
+Clear, accurate documentation reduces support questions and enables users to self-serve, freeing up maintainer time for development.
+
+### Enables Safe Migration
+A comprehensive migration guide with rollback procedures reduces risk for existing users upgrading to v2.0, increasing adoption confidence.
+
+### Improves Onboarding
+Updated README and quick start guide make it easy for new users to get started, reducing time-to-first-value and improving user satisfaction.
+
+### Facilitates Production Deployment
+Configuration and architecture documentation enable operators to deploy codebase-mcp in production with appropriate settings and understanding.
+
+### Supports Future Maintenance
+Well-documented architecture and design decisions make it easier for future maintainers to understand the codebase and make changes safely.
+
+## Additional Context
+
+This phase corresponds to Phases 9-10 from FINAL-IMPLEMENTATION-PLAN.md. It should take 3-4 hours to complete and depends on Phase 04 (connection management implemented).
+
+The migration guide is critical because v2.0 includes significant breaking changes (14 tools removed, database schema changed). Users need clear guidance to avoid data loss.
+
+All documentation should be written for clarity, with examples that can be copy-pasted and run successfully. Assume readers are unfamiliar with the refactoring history and need complete context.
+
+Architecture diagrams should use ASCII art or mermaid syntax so they can be viewed in plain text and don't require external tools.
