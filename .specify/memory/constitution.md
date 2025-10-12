@@ -27,6 +27,12 @@ Sync Impact Report:
 
 **Scope**: Do one thing exceptionally well - semantic code search. Not a generic knowledge base, not a full IDE, not reinventing RAG infrastructure.
 
+## Preamble
+
+This constitution defines the non-negotiable architectural and quality principles for the Codebase MCP Server. All feature specifications, implementation plans, and code contributions MUST comply with these standards. The `/analyze` command validates compliance before implementation begins. Constitutional violations flagged as CRITICAL block feature progression.
+
+This document serves as the authoritative governance framework for all development decisions. When in doubt, defer to constitutional principles. When principles conflict, follow the priority order defined in the Governance section.
+
 ## Core Principles
 
 ### I. Simplicity Over Features (NON-NEGOTIABLE)
