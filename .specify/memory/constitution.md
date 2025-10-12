@@ -155,6 +155,11 @@ All MCP server implementations MUST be built using FastMCP (https://github.com/j
 
 **Rationale**: FastMCP provides the shortest path from implementation to production while maintaining protocol compliance. Automatic schema generation from type hints ensures consistency between code and API contracts. Framework-level transport abstraction prevents protocol violations. Decorator patterns keep tool implementations clean and focused. Using established frameworks prevents reinventing protocol machinery and reduces maintenance burden.
 
+**Verification**:
+- Automated: Dependency check validates fastmcp and mcp package versions in requirements.txt, import analysis scans for direct MCP SDK usage (should use FastMCP wrapper), protocol compliance tests validate SSE transport
+- Manual: Code review validates @mcp.tool(), @mcp.resource(), @mcp.prompt() decorator usage, checks for direct protocol handling bypassing FastMCP
+- Tooling: FastMCP framework for all MCP operations, MCP Python SDK for protocol types, integration tests validate transport abstraction works correctly
+
 ## Technical Constraints
 
 ### Required Stack
