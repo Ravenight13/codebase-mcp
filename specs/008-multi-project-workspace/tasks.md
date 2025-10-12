@@ -35,13 +35,14 @@ Foundation tasks must complete before service layer. These establish the core da
   - **File**: `src/models/project_identifier.py` (NEW)
   - **Completed**: Commit 27aed973
 
-- [ ] **T002** Create WorkspaceConfig Pydantic model in `src/models/workspace_config.py`
+- [X] **T002** Create WorkspaceConfig Pydantic model in `src/models/workspace_config.py`
   - **Description**: Implement immutable workspace metadata model with frozen=True
   - **Fields**: project_id (str), schema_name (str), created_at (datetime), metadata (dict)
   - **Validation**: ConfigDict(frozen=True) for immutability
   - **Dependencies**: T001 (imports ProjectIdentifier)
   - **Traces to**: FR-009, FR-010
   - **File**: `src/models/workspace_config.py` (NEW)
+  - **Completed**: Commit 83c8127c
 
 - [X] **T003** Create WorkflowIntegrationContext Pydantic model in `src/models/workflow_context.py`
   - **Description**: Implement workflow-mcp integration context with TTL caching logic
@@ -70,7 +71,7 @@ Foundation tasks must complete before service layer. These establish the core da
   - **File**: N/A (command execution)
   - **Completed**: Commit 02fc27ec
 
-- [ ] **T005a** Provision default workspace schema for backward compatibility
+- [X] **T005a** Provision default workspace schema for backward compatibility
   - **Description**: Create project_default schema to support existing users without project_id parameter
   - **SQL**:
     1. `CREATE SCHEMA IF NOT EXISTS project_default;`
@@ -79,7 +80,8 @@ Foundation tasks must complete before service layer. These establish the core da
   - **Validation**: Query `information_schema.schemata` for 'project_default'
   - **Dependencies**: T005 (requires registry schema first)
   - **Traces to**: FR-018 (backward compatibility)
-  - **File**: N/A (SQL command or Alembic migration)
+  - **File**: `migrations/versions/007_provision_default_workspace.py` (NEW)
+  - **Completed**: Commit e1daec18
 
 ## Phase 3.2: Service Layer (Parallel after Foundation)
 
