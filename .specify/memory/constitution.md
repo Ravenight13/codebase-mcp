@@ -111,11 +111,21 @@ Test tasks MUST precede implementation tasks. Integration tests MUST validate MC
 
 **Rationale**: Tests define correct behavior before implementation. Protocol compliance testing prevents integration breakage. Performance tests prevent regression of guarantees.
 
+**Verification**:
+- Automated: pytest with pytest-cov for 80%+ coverage gates in CI, mypy --strict for type safety, performance benchmarks in test suite
+- Manual: Code review validates tests written before implementation, test scenarios match acceptance criteria in spec.md
+- Tooling: pytest-cov with --fail-under=80, pytest-asyncio for async tests, MCP protocol compliance test fixtures
+
 ### VIII. Pydantic-Based Type Safety
 
 All data models MUST use Pydantic with explicit types and validators. MCP protocol messages MUST inherit from `pydantic.BaseModel`. Configuration MUST use `pydantic_settings.BaseSettings` for environment variables. Database models MUST use SQLAlchemy with full type hints. Validation errors MUST be caught at system boundaries with clear field-level messages.
 
 **Rationale**: Pydantic provides runtime validation preventing invalid data propagation. Configuration validation fails fast on startup. Type safety catches bugs before production. Clear error messages enable quick debugging.
+
+**Verification**:
+- Automated: mypy --strict enforces complete type hints and Pydantic model usage, CI blocks on type errors, pydantic validators run at model instantiation
+- Manual: Code review validates BaseModel inheritance for all DTOs, checks pydantic_settings.BaseSettings usage for config
+- Tooling: mypy with strict mode, pydantic v2 with model_validator decorators, SQLAlchemy 2.0+ with Mapped[] type annotations
 
 ### IX. Orchestrated Subagent Execution
 
@@ -123,11 +133,21 @@ During implementation, the orchestrating agent MUST delegate code-writing tasks 
 
 **Rationale**: Specialized subagents focus without context switching. Parallel execution reduces implementation time. Orchestrator-level coordination maintains consistency and quality.
 
+**Verification**:
+- Automated: Task dependency analysis in tasks.md validates parallel task marking ([P]), integration tests verify all subagent outputs integrate correctly
+- Manual: /implement command reviews task completion markers ([X]), orchestrator validates subagent context delivery, conflict resolution documented in commit messages
+- Tooling: tasks.md template with [P] parallel markers, feature branch isolation for conflict detection, test suite validates cross-component integration
+
 ### X. Git Micro-Commit Strategy
 
 Every feature MUST be developed on a dedicated branch created from main. Commits MUST be atomic and frequent (micro-commits after each completed task or logical unit). Commit messages MUST follow Conventional Commits format (`type(scope): description`). Each commit MUST represent a working state (tests pass). Branch names MUST follow `###-feature-name` pattern with 3-digit prefix. Features MUST NOT be merged until all acceptance criteria pass.
 
 **Rationale**: Micro-commits create granular history enabling precise debugging and rollback. Branch-per-feature isolates work and enables parallel development. Atomic commits ensure bisectability. Conventional Commits enable automated changelog generation and semantic versioning.
+
+**Verification**:
+- Automated: commitlint validates Conventional Commits format in pre-commit hooks, CI runs full test suite per commit to verify working state, branch naming regex validation
+- Manual: Code review validates atomic commits (one logical change per commit), PR review checklist confirms all acceptance criteria met before merge
+- Tooling: pre-commit hooks with commitlint, create-new-feature.sh script enforces branch naming pattern, CI pipeline blocks failing tests
 
 ### XI. FastMCP and Python SDK Foundation
 
@@ -309,5 +329,67 @@ When implementation requires complexity:
 - Explain why simpler alternatives are insufficient
 - Ensure complexity serves a constitutional principle
 - Get approval before implementation begins
+
+
+### Exception Handling Process
+
+When a constitutional principle cannot be met, an exception may be requested:
+
+**Request Process**:
+1. Create GitHub issue with label `constitution-exception`
+2. Document specific principle(s) requiring exception
+3. Provide detailed justification:
+   - Why the principle cannot be met
+   - What alternatives were considered
+   - Quantified impact analysis
+   - Proposed mitigation strategy
+4. Specify time-bound duration (temporary) or permanent exception
+
+**Approval Requirements**:
+- **Temporary Exceptions** (<30 days): Project maintainer approval + documented in `exceptions.md`
+- **Extended Exceptions** (30-90 days): 2 approvals (maintainer + technical reviewer)
+- **Permanent Exceptions**: Constitution amendment required (MAJOR version bump)
+
+**Tracking**:
+- All exceptions logged in `.specify/memory/exceptions.md` with:
+  - Exception ID
+  - Principle affected
+  - Justification summary
+  - Approval date and approvers
+  - Sunset date (for temporary exceptions)
+  - Resolution status
+
+**Grace Periods**:
+- New principles have 30-day grace period for existing code
+- Breaking changes require migration plan before enforcement
+- Performance targets enforceable only after tooling setup complete
+
+### Compliance Tracking
+
+Constitutional compliance is monitored through:
+
+**Automated Monitoring**:
+- CI/CD pipeline runs enforcement checks (see Enforcement Matrix)
+- Pre-commit hooks block common violations (type safety, commit format)
+- `/analyze` command validates specifications against principles
+
+**Manual Review**:
+- Quarterly constitution audit reviewing:
+  - Active exceptions (review sunset dates)
+  - Principle violation trends
+  - Enforcement effectiveness
+  - Potential principle updates
+- Spec review process validates feature requests against scope
+- Implementation review validates orchestration and code quality
+
+**Violation Response**:
+1. **CRITICAL violations**: Block merge, require fix before proceeding
+2. **WARNING violations**: Document in PR, require justification or fix
+3. **INFO violations**: Advisory only, tracked for trends
+
+**Metrics**:
+- Track exception request rate (target: <5% of PRs)
+- Track CRITICAL violation block rate
+- Track automation coverage percentage (maintain >50%)
 
 **Version**: 2.2.0 | **Ratified**: 2025-10-06 | **Last Amended**: 2025-10-06
