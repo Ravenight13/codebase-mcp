@@ -30,6 +30,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision: str = '001'
@@ -95,7 +96,7 @@ def upgrade() -> None:
         sa.Column('start_line', sa.Integer(), nullable=False),
         sa.Column('end_line', sa.Integer(), nullable=False),
         sa.Column('chunk_type', sa.String(), nullable=False),
-        sa.Column('embedding', postgresql.ARRAY(sa.Float(), dimensions=1), nullable=True),  # pgvector type
+        sa.Column('embedding', Vector(768), nullable=True),  # pgvector VECTOR(768) type
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.ForeignKeyConstraint(['code_file_id'], ['code_files.id'], name=op.f('fk_code_chunks_code_file_id_code_files')),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_code_chunks'))

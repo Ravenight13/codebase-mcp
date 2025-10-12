@@ -370,9 +370,8 @@ VALUES
 ## Next Phase
 
 **Phase 2** (via /tasks command): Generate ordered task list for implementation
-- Write validation script (002_validate.sql)
-- Write forward migration script (002_remove_non_search_tables.sql)
-- Write rollback script (002_rollback.sql)
+- Write validation test suite (pytest)
+- Write Alembic migration (002_remove_non_search_tables.py with upgrade/downgrade)
 - Write integration tests
 - Execute migration on test database
 - Validate and document results

@@ -62,7 +62,7 @@ As a developer working on the Codebase MCP Server, I need the database schema to
 
 #### Scenario 1: Database Administrator Removes Unused Tables
 1. **Given** the database contains 9 unused tables from non-search features
-2. **When** the migration script is executed
+2. **When** the Alembic migration is executed
 3. **Then** only repositories and code_chunks tables remain
 4. **And** all unused tables are cleanly removed without affecting search functionality
 
@@ -120,7 +120,7 @@ As a developer working on the Codebase MCP Server, I need the database schema to
 - **FR-013**: System MUST provide forward migration in migrations/versions/002_remove_non_search_tables.py with upgrade() function using Alembic framework
 - **FR-014**: System MUST provide rollback in same migration file with downgrade() function for schema restoration
 - **FR-015**: System MUST provide validation test suite at tests/integration/test_migration_002_validation.py using pytest framework
-- **FR-016**: System MUST ensure migration script is idempotent or fails gracefully if run multiple times
+- **FR-016**: System MUST ensure Alembic migration is idempotent or fails gracefully if run multiple times
 - **FR-017**: System MUST preserve all existing data in repositories and code_chunks tables during migration
 - **FR-018**: System MUST execute forward migration as a single atomic transaction (all-or-nothing with automatic rollback on any error)
 - **FR-019**: System MUST fail fast with clear error messages if migration encounters any error (no auto-recovery, require explicit rollback script execution)
@@ -129,7 +129,7 @@ As a developer working on the Codebase MCP Server, I need the database schema to
 #### Data Isolation Foundation
 - **FR-021**: System MUST assign existing repositories (if any) to 'default' project automatically during migration via DEFAULT value
 - **FR-022**: System MUST assign existing code_chunks their project_id by copying from their parent repository (JOIN on repository_id) to maintain data model integrity
-- **FR-023**: System MUST support database-per-project architecture where each project gets database named codebase_<project_id>
+- **FR-023**: System MUST provide foundation for future database-per-project architecture where each project gets database named codebase_<project_id> (foundation established in Phase 01, full implementation in Phase 03)
 
 #### Validation Enforcement
 - **FR-024**: System MUST validate project_id values at database level via CHECK constraints

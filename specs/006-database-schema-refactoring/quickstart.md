@@ -865,5 +865,5 @@ All 31 functional requirements from spec.md are validated through these scenario
 
 **Next Steps**:
 - Execute `/tasks` command to generate implementation task list
-- Implement migration scripts following TDD approach
+- Implement Alembic migrations following TDD approach
 - Run automated integration tests (`pytest tests/integration/test_migration_002*.py`)

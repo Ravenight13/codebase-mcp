@@ -34,7 +34,7 @@
 Refactor the Codebase MCP Server database schema to remove 9 unused tables from non-search features (work tracking, vendor management, deployments) and add `project_id` columns to `repositories` and `code_chunks` tables. This establishes the foundation for multi-project support (Phase 03) while simplifying the database to focus exclusively on semantic code search functionality.
 
 **Key Technical Approach**:
-- SQL migration scripts with atomic transaction execution
+- Alembic migration with atomic transaction execution
 - Database-level validation via CHECK constraints (regex pattern `^[a-z0-9-]{1,50}$`)
 - Referential integrity preservation (code_chunks copy project_id from parent repository)
 - Performance target: < 5 minutes migration duration
@@ -100,7 +100,7 @@ Refactor the Codebase MCP Server database schema to remove 9 unused tables from 
 
 ### Principle VIII: Pydantic-Based Type Safety
 **Status**: ✅ PASS (post-migration)
-- **Rationale**: While SQL migration scripts don't use Pydantic directly, Phase 02 will update Pydantic models (Repository, CodeChunk) to include project_id field with validation. This phase lays database foundation.
+- **Rationale**: While Alembic migrations don't use Pydantic directly, Phase 02 will update Pydantic models (Repository, CodeChunk) to include project_id field with validation. This phase lays database foundation.
 
 ### Principle IX: Orchestrated Subagent Execution
 **Status**: ✅ PASS
@@ -374,7 +374,7 @@ See [quickstart.md](./quickstart.md) for complete test execution flow.
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 01 (this phase)**: Database schema migration scripts
+**Phase 01 (this phase)**: Alembic migration for database schema changes
 **Phase 02**: Update Python code (models, services, MCP tools) to use project_id
 **Phase 03**: Implement multi-project search/indexing logic
 **Phase 04**: Connection pool for database-per-project architecture
@@ -384,7 +384,7 @@ See [quickstart.md](./quickstart.md) for complete test execution flow.
 **No constitutional violations requiring justification**.
 
 All complexity in this feature is essential and serves constitutional principles:
-- SQL migration scripts: Required for schema evolution (Production Quality)
+- Alembic migrations: Required for schema evolution (Production Quality)
 - Transaction wrapping: Required for atomic operation (Production Quality)
 - Three-step column addition: Required for data integrity (Production Quality)
 - Validation layers: Required for security (Production Quality)
