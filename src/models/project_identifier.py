@@ -112,6 +112,7 @@ class ProjectIdentifier(BaseModel):
         """Convert validated identifier to PostgreSQL schema name.
 
         Schema names follow the format: project_{identifier}
+        Hyphens are replaced with underscores for PostgreSQL compatibility.
         Example: "client-a" → "project_client_a"
 
         Returns:
@@ -120,6 +121,7 @@ class ProjectIdentifier(BaseModel):
         Security:
             Safe to use in SQL queries because identifier has been validated
             to contain only lowercase alphanumeric characters and hyphens.
-            No risk of SQL injection or schema name conflicts.
+            Hyphens are replaced with underscores to comply with PostgreSQL
+            naming rules. No risk of SQL injection or schema name conflicts.
         """
-        return f"project_{self.value}"
+        return f"project_{self.value.replace('-', '_')}"

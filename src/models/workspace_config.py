@@ -107,9 +107,9 @@ class WorkspaceConfig(BaseModel):
         ...,
         min_length=1,
         max_length=60,
-        pattern=r"^project_[a-z0-9]+(-[a-z0-9]+)*$",
-        description="PostgreSQL schema name (e.g., project_client-a)",
-        examples=["project_client-a", "project_frontend-app", "project_my-project-123"],
+        pattern=r"^project_[a-z0-9]+(_[a-z0-9]+)*$",
+        description="PostgreSQL schema name (e.g., project_client_a)",
+        examples=["project_client_a", "project_frontend_app", "project_my_project_123"],
     )
 
     created_at: datetime = Field(
