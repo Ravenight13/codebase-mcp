@@ -1,0 +1,101 @@
+# Phase 01: Database Schema Refactoring
+
+## Problem Statement
+
+The codebase-mcp database currently contains 9 tables for non-search features (work items, tasks, vendors, deployments) that need to be removed. Additionally, the database needs to support multiple projects with complete data isolation. Without schema changes to add project identification and remove unused tables, we cannot proceed with tool removal or implement multi-project support.
+
+## User Stories
+
+### As a Database Administrator
+I want to remove unused database tables cleanly and safely, so that the database schema reflects only the semantic search functionality we're keeping.
+
+### As a Developer
+I want project_id columns added to repositories and code_chunks tables, so that I can support multiple projects with proper data isolation.
+
+### As a Security Engineer
+I want strict validation on project_id values to prevent SQL injection attacks, so that the multi-project feature is secure by default.
+
+### As a DevOps Engineer
+I want reversible database migrations with rollback scripts, so that we can undo changes if issues are discovered after deployment.
+
+## Success Criteria
+
+### Tables Removed
+- 9 tables dropped: work_items, work_item_dependencies, tasks, task_branches, task_commits, vendors, vendor_test_results, deployments, deployment_vendors
+- Database only contains tables needed for semantic search: repositories, code_chunks
+
+### Project ID Columns Added
+- `repositories` table has `project_id VARCHAR(50) NOT NULL DEFAULT 'default'` column
+- `code_chunks` table has `project_id VARCHAR(50) NOT NULL` column
+- Both tables have CHECK constraint: `CHECK (project_id ~ '^[a-z0-9-]{1,50}$')`
+- Index created on `(project_id, repository_id)` for search performance
+
+### Migration Scripts Created
+- Forward migration script: `migrations/002_remove_non_search_tables.sql`
+- Rollback script: `migrations/002_rollback.sql`
+- Validation script: `migrations/002_validate.sql` to verify changes
+
+### Validation Enforced
+- Pydantic model created for project_id validation
+- SQL injection test cases pass (malicious project_ids rejected)
+- Constraint enforcement verified (invalid patterns rejected at database level)
+
+### Migration Tested
+- Migration tested successfully on copy of production database
+- Rollback tested successfully
+- All schema tests pass
+
+## Constraints
+
+### Database Naming Strategy (NON-NEGOTIABLE)
+- Database-per-project architecture: Each project gets its own database named `codebase_<project_id>`
+- This phase only adds project_id column as foundation for Phase 03 implementation
+
+### Backward Compatibility
+- Default project_id value is 'default' to maintain compatibility
+- Existing data (if any) automatically assigned to 'default' project
+
+### Data Safety
+- No data loss for repositories and code_chunks tables
+- Dropped tables cannot be recovered (except from backup)
+- Migration must be tested on copy before running on production
+
+### Pattern Validation (NON-NEGOTIABLE)
+- project_id must match regex: `^[a-z0-9-]{1,50}$`
+- Lowercase only (no uppercase, no underscores, no spaces)
+- Length: 1-50 characters
+- No leading/trailing hyphens
+- No consecutive hyphens
+
+## Out of Scope
+
+### Not Included in This Phase
+- Removing code that references dropped tables (that's Phase 02)
+- Implementing multi-project search/indexing logic (that's Phase 03)
+- Connection pool implementation (that's Phase 04)
+- Database performance optimization (that's Phase 06)
+
+### Explicitly NOT Doing
+- Creating new database functionality
+- Modifying search or indexing algorithms
+- Changing existing data in repositories/code_chunks tables
+
+## Business Value
+
+### Reduced Maintenance Burden
+Removing 9 unused tables reduces database complexity, making it easier to maintain, backup, and optimize.
+
+### Foundation for Multi-Project Support
+The project_id column is the foundation for multi-project functionality (Phase 03), which will enable users to work with multiple codebases simultaneously without data contamination.
+
+### Improved Security
+Strict validation on project_id prevents SQL injection attacks and ensures data integrity across projects.
+
+### Cleaner Architecture
+A focused database schema (only search-related tables) aligns with the project's constitutional principle of "Simplicity Over Features".
+
+## Additional Context
+
+This phase corresponds to Phase 2 from FINAL-IMPLEMENTATION-PLAN.md. It should take 4-6 hours to complete and depends on Phase 00 (baseline established, branch created).
+
+The migration must be reversible via rollback script, but dropped tables can only be fully restored from the backup created in Phase 00.

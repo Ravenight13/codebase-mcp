@@ -1,295 +1,284 @@
-# MCP Split Plan: Executive Summary
+# codebase-mcp Refactoring Plan
+
+**Status**: Ready for Phase Execution
+**Last Updated**: 2025-10-11
+**Purpose**: Transform codebase-mcp from monolithic MCP (16 tools) to pure semantic code search (2 tools) with multi-project support
+
+---
 
 ## Overview
 
-This document outlines the comprehensive plan to split the current monolithic `codebase-mcp` into two focused, independent MCP servers, each with multi-project workspace support.
+This directory contains the complete planning and execution documentation for refactoring the codebase-mcp server. The refactoring follows Constitutional Principle I (Simplicity Over Features) by removing all non-search functionality while adding multi-project support.
 
-## What We're Doing
+### Key Objectives
 
-### Current State
-- **One monolithic MCP** (`codebase-mcp`) that handles:
-  - Semantic code search (pgvector + embeddings)
-  - Work item tracking (projects, sessions, tasks, research)
-  - Vendor management (commission extraction domain)
-  - Task management (legacy)
-  - Deployment tracking
-- **Single global namespace** - all entities mixed together
-- **Constitutional violation** - tool tries to do too much
+1. **Remove non-search features**: Work items, tasks, vendors, deployments (9 database tables dropped)
+2. **Add multi-project support**: One database per project with complete isolation
+3. **Maintain performance**: <500ms p95 search, <60s indexing (10k files)
+4. **Reduce complexity**: ~60% code reduction (4,500 → 1,800 lines)
+5. **Constitutional compliance**: All 11 principles maintained
 
-### Target State
-- **Two independent MCPs:**
-  1. **`codebase-mcp`** - Pure semantic code search
-  2. **`workflow-mcp`** - AI project management with generic entity system
-- **Multi-project support** - complete isolation between projects
-- **Database per project** - true physical separation
-- **Generic entity system** - adaptable to any domain (vendors, game mechanics, etc.)
+### Success Criteria
 
-## Why We're Doing This
+- Only 2 MCP tools remain: `index_repository`, `search_code`
+- Multi-project isolation validated (no cross-contamination)
+- Performance targets met with NO regression from baseline
+- 100% MCP protocol compliance (mcp-inspector)
+- Type-safe: mypy --strict passes
+- Test coverage >80%
 
-### Business Value
-1. **Clear Focus** - Each MCP does one thing exceptionally well
-2. **Reusability** - Use code search without project management (and vice versa)
-3. **Domain Flexibility** - Generic entity system adapts to commission work, game dev, etc.
-4. **Scalability** - Multi-project support for unlimited concurrent projects
-5. **Constitutional Alignment** - Tools follow "do one thing well" philosophy
+---
 
-### Technical Benefits
-1. **True Isolation** - Projects cannot interfere (separate databases)
-2. **Easy Cleanup** - Delete project = DROP DATABASE
-3. **Performance Isolation** - Heavy indexing doesn't affect other projects
-4. **Independent Scaling** - Each MCP can evolve separately
-5. **Smaller Codebases** - Easier to maintain and test
+## Directory Structure
 
-## How We're Going to Do It
-
-### Development Strategy: Modified Sequential
-
-**Phase 0: Foundation Setup (Week 1)**
-- Establish complete infrastructure foundation before feature implementation
-- workflow-mcp: Brand new repository initialization
-  - Project structure, pyproject.toml, test framework
-  - FastMCP server skeleton, database connection setup
-  - CI/CD pipeline, mypy --strict compliance
-- codebase-mcp: Baseline and refactor preparation
-  - Backup current state, create refactor branch
-  - Test framework updates, dependency audit
-- Database validation: CREATEDB permissions, pgvector setup
-
-**Phase 1: workflow-mcp Core (Weeks 2-4)**
-- Create brand new repository
-- Build project management foundation:
-  - Registry database
-  - `create_project`, `switch_active_project`, `get_active_project`
-  - Project-per-database architecture
-  - Connection pooling system
-- Stop before work items/tasks/entities
-
-**Phase 2: codebase-mcp Refactor (Weeks 5-7)**
-- Create refactoring branch in existing repo
-- Remove all non-search features (work items, vendors, tasks, deployments)
-- Add multi-project support to semantic search
-- Query workflow-mcp for active project
-- Keep only: `index_repository`, `search_code`
-
-**Phase 3: workflow-mcp Complete (Weeks 8-10)**
-- Add work item hierarchy system
-- Add task management
-- Add generic entity system (vendors, game mechanics, etc.)
-- Add deployment tracking
-- Complete multi-project feature set
-
-### Architecture Highlights
-
-#### Database Design
 ```
-PostgreSQL Server
-├── project_registry (special)
-│   └── projects (id, name, slug, codebase_db, workflow_db)
+mcp-split-plan/
+├── README.md                    # This file - start here
+├── START-HERE.md                # Quick start guide (archived original)
 │
-├── project_commission_extraction
-│   ├── codebase schema (repositories, code_chunks)
-│   └── workflow schema (work_items, tasks, entities)
+├── phases/                      # Phase-based execution folders
+│   ├── phase-00-preparation/    # Phase 0-1: Prerequisites, baseline, branch
+│   ├── phase-01-database-refactor/    # Phase 2: Schema changes
+│   ├── phase-02-remove-tools/   # Phases 3-6: Code removal
+│   ├── phase-03-multi-project/  # Phase 7: Multi-project support
+│   ├── phase-04-connection-mgmt/ # Phase 8: Connection pooling
+│   ├── phase-05-docs-migration/ # Phases 9-10: Documentation
+│   ├── phase-06-performance/    # Phase 11: Performance testing
+│   └── phase-07-final-validation/ # Phase 12: Release validation
 │
-└── project_ttrpg_starbound
-    ├── codebase schema
-    └── workflow schema
+└── _archive/                    # Historical/reference materials
+    ├── workflow-mcp/            # workflow-mcp docs (separate repo)
+    ├── shared-architecture/     # Shared architecture docs
+    ├── 01-codebase-mcp/         # Original planning docs
+    └── IMPLEMENTATION-ROADMAP.md # Original roadmap
 ```
 
-**Key Features:**
-- One database per project
-- Both MCPs access same project database (different schemas)
-- Registry tracks which database belongs to which project
-- Dynamic database creation on project creation
-- Connection pooling per project
+---
 
-#### Generic Entity System
-```python
-# Commission project: Register "vendor" entity
-register_entity_type(
-    entity_type="vendor",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "status": {"enum": ["operational", "broken"]},
-            "extractor_version": {"type": "string"}
-        }
-    }
-)
+## Execution Strategy: Phase-Based /specify Workflow
 
-# TTRPG project: Register "game_mechanic" entity
-register_entity_type(
-    entity_type="game_mechanic",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "mechanic_type": {"enum": ["dice", "skill", "combat"]},
-            "implementation_status": {"type": "string"}
-        }
-    }
-)
-```
+Each phase folder is designed to be used with the `/specify` slash command workflow. This enables:
 
-**No hardcoded vendor tables** - completely adaptable to any domain.
+1. **Incremental execution**: Complete one phase before starting the next
+2. **Clear scope**: Each phase has well-defined boundaries and deliverables
+3. **Rollback points**: Git commits and database backups at each phase boundary
+4. **Parallel work**: Some phases can be executed in parallel (documented in each phase README)
 
-## Implementation Principles
+### How to Execute a Phase
 
-Both MCPs follow these shared on-rails principles (duplicated in each constitution):
+For each phase:
 
-1. **Foundation-First Development** - Phase 0 establishes test framework and infrastructure before features
-2. **Pydantic-Based Type Safety** - All models use Pydantic with full validation
-3. **Git Micro-Commit Strategy** - Atomic commits after each task, Conventional Commits format
-4. **Orchestrated Subagent Execution** - Parallel subagents for independent tasks
-5. **Test-Driven Development** - Tests before implementation
-6. **FastMCP Framework** - Decorative patterns for tool registration
-7. **mypy --strict Compliance** - Complete type safety
-8. **Async Everything** - All I/O operations asynchronous
-9. **Protocol Compliance** - MCP via SSE, no stdout pollution
+1. **Navigate to phase folder**: `cd phases/phase-XX-name/`
+2. **Read the phase README**: Understand objectives, scope, and prerequisites
+3. **Run /specify**: Use the phase materials to create a feature spec
+4. **Run /plan**: Generate implementation plan from the spec
+5. **Run /tasks**: Break down plan into actionable tasks
+6. **Run /implement**: Execute the tasks
+7. **Verify completion**: Check acceptance criteria before moving to next phase
 
-## Quality Assurance: 4-Step Review Process
+---
 
-Each MCP's implementation plan goes through rigorous review:
+## Phase Overview
 
-1. **Initial Plan** (Subagent) - Draft implementation plan
-2. **Planning Review** (Subagent) - Validate completeness, catch gaps
-3. **Architectural Review** (Subagent) - Verify alignment with Specify framework
-4. **Final Revised Plan** (Subagent) - Integrate feedback, produce final plan
+### Phase 0: Preparation (Phase 00)
+**Duration**: 2-3 hours
+**Scope**: Prerequisites, performance baseline, rollback preparation
+**Key Deliverables**: Baseline metrics, database backup, git tag, refactor branch
 
-**Both MCPs developed in parallel tracks** using this process.
+**Why start here**: Establishes baseline for performance regression detection and creates rollback points.
+
+### Phase 1: Database Refactoring (Phase 01)
+**Duration**: 4-6 hours
+**Scope**: Remove non-search tables, add project_id column
+**Key Deliverables**: Migration script, updated schema, schema tests
+
+**Why this order**: Database changes first prevent orphaned code references.
+
+### Phase 2: Remove Tools (Phase 02)
+**Duration**: 8-12 hours
+**Scope**: Remove 14 non-search MCP tools and related code
+**Key Deliverables**: Clean codebase with only search tools, updated tests
+
+**Why this order**: Remove unused code before adding new features to reduce cognitive load.
+
+### Phase 3: Multi-Project Support (Phase 03)
+**Duration**: 6-8 hours
+**Scope**: Add project_id parameter, workflow-mcp integration
+**Key Deliverables**: Multi-project search/indexing, integration tests
+
+**Why this order**: Core feature implementation after cleanup is complete.
+
+### Phase 4: Connection Management (Phase 04)
+**Duration**: 4-6 hours
+**Scope**: Per-project connection pools, LRU eviction
+**Key Deliverables**: Connection pool manager, monitoring, resource limits
+
+**Why this order**: Infrastructure for multi-project must be robust before docs/testing.
+
+### Phase 5: Documentation & Migration (Phase 05)
+**Duration**: 3-4 hours
+**Scope**: Update docs, migration guide, configuration examples
+**Key Deliverables**: Complete documentation, migration playbook
+
+**Why this order**: Document what exists before final testing reveals gaps.
+
+### Phase 6: Performance Testing (Phase 06)
+**Duration**: 4-6 hours
+**Scope**: Benchmark against baseline, multi-tenant stress tests
+**Key Deliverables**: Performance report, optimization fixes (if needed)
+
+**Why this order**: Validate performance before final validation/release.
+
+### Phase 7: Final Validation (Phase 07)
+**Duration**: 2-3 hours
+**Scope**: MCP protocol compliance, security audit, release checklist
+**Key Deliverables**: mcp-inspector passing, release candidate
+
+**Why this order**: Comprehensive validation as final gate before release.
+
+---
 
 ## Timeline
 
-| Phase | Duration | Deliverable |
-|-------|----------|-------------|
-| Phase 0: Foundation Setup | Week 1 | Infrastructure and test framework |
-| Phase 1: workflow-mcp Core | Weeks 2-4 | Project management foundation |
-| Phase 2: codebase-mcp Refactor | Weeks 5-7 | Pure semantic search MCP |
-| Phase 3: workflow-mcp Complete | Weeks 8-10 | Full project management MCP |
-| **Total** | **10 weeks** | **Two production-ready MCPs** |
+| Phase | Duration | Cumulative | Status |
+|-------|----------|------------|--------|
+| **Phase 00: Preparation** | 2-3 hours | 3h | Ready |
+| **Phase 01: Database** | 4-6 hours | 9h | Planned |
+| **Phase 02: Remove Tools** | 8-12 hours | 21h | Planned |
+| **Phase 03: Multi-Project** | 6-8 hours | 29h | Planned |
+| **Phase 04: Connection Mgmt** | 4-6 hours | 35h | Planned |
+| **Phase 05: Docs/Migration** | 3-4 hours | 39h | Planned |
+| **Phase 06: Performance** | 4-6 hours | 45h | Planned |
+| **Phase 07: Final Validation** | 2-3 hours | 48h | Planned |
+| **TOTAL** | **37-48 hours** | **~1 week** | |
 
-## Success Criteria
+---
 
-### codebase-mcp
-- ✅ Only semantic search tools remain
-- ✅ Multi-project support (filter by project_id)
-- ✅ <500ms search latency (p95)
-- ✅ Constitutional compliance (focus on one thing)
-- ✅ Works independently without workflow-mcp
+## Getting Started
 
-### workflow-mcp
-- ✅ Complete project management (create/switch/list/delete projects)
-- ✅ Work item hierarchy (projects, sessions, tasks, research)
-- ✅ Generic entity system (adaptable to any domain)
-- ✅ Task management with status tracking
-- ✅ Deployment history with relationships
-- ✅ One database per project with true isolation
+### Prerequisites
 
-### Integration
-- ✅ Both MCPs run simultaneously on different ports
-- ✅ codebase-mcp queries workflow-mcp for active project
-- ✅ Seamless project switching affects both MCPs
-- ✅ No cross-project data leakage
-- ✅ Easy backup/restore per project (pg_dump one database)
+Before starting Phase 00:
 
-## Documentation Structure
-
-```
-/docs/mcp-split-plan/
-├── README.md (this file)
-│
-├── 00-architecture/
-│   ├── overview.md
-│   ├── database-design.md
-│   ├── connection-management.md
-│   ├── entity-system.md
-│   └── deployment-config.md
-│
-├── 01-codebase-mcp/
-│   ├── README.md
-│   ├── constitution.md
-│   ├── user-stories.md
-│   ├── specify-prompt.txt
-│   ├── tech-stack.md
-│   ├── refactoring-plan.md
-│   └── implementation-phases.md
-│
-├── 02-workflow-mcp/
-│   ├── README.md
-│   ├── constitution.md
-│   ├── user-stories.md
-│   ├── specify-prompt.txt
-│   ├── tech-stack.md
-│   ├── entity-system-examples.md
-│   └── implementation-phases.md
-│
-└── 03-orchestration/
-    ├── subagent-workflow.md
-    ├── git-strategy.md
-    ├── parallel-execution-plan.md
-    └── testing-strategy.md
-```
-
-## Prerequisites
-
-### Before Starting
-1. **Backup current codebase-mcp repository**
+1. **Backup existing state**:
    ```bash
    cd /Users/cliffclarke/Claude_Code/codebase-mcp
-   git tag backup-before-split
-   git push origin backup-before-split
+   git tag backup-before-refactor
+   git push origin backup-before-refactor
    ```
 
-2. **PostgreSQL setup**
-   - Verify PostgreSQL 14+ with pgvector extension
-   - Ensure `CREATEDB` permission for MCP user
-   - Test database creation: `createdb test_project && dropdb test_project`
+2. **PostgreSQL setup**:
+   - PostgreSQL 14+ with pgvector extension installed
+   - CREATEDB permission for MCP user
+   - Test: `createdb test_db && dropdb test_db`
 
-3. **Development environment**
+3. **Python environment**:
    - Python 3.11+
    - uv package manager
    - Ollama with nomic-embed-text model
 
-### Fresh Start Confirmed
-- ✅ No migration scripts needed
-- ✅ Can start both MCPs from scratch
-- ✅ Existing data can be recreated via full ingestion
+### Quick Start
 
-## Risk Mitigation
+**Option 1: Start Phase 00 (Recommended)**
 
-### Risks
-1. **Database per project overhead** - Many databases = resource usage
-2. **Connection pool complexity** - Dynamic pool management
-3. **Cross-MCP coordination** - codebase-mcp depends on workflow-mcp
-4. **Generic entity validation** - JSONB flexibility vs type safety
+```bash
+cd /Users/cliffclarke/Claude_Code/codebase-mcp/docs/mcp-split-plan/phases/phase-00-preparation
+cat README.md  # Read phase overview
+# Then run /specify workflow
+```
 
-### Mitigations
-1. **Resource monitoring** - PostgreSQL handles 20+ databases easily
-2. **Lazy pooling** - Only create pools for active projects
-3. **Registry database** - Shared source of truth for both MCPs
-4. **Pydantic validation** - JSON schemas validated at runtime
+**Option 2: Review all planning first**
 
-## Next Steps
-
-1. **Review this documentation** - Ensure alignment with goals
-2. **Execute Phase 0** - Establish infrastructure foundation (Week 1)
-   - Initialize workflow-mcp repository with complete test framework
-   - Prepare codebase-mcp refactor baseline
-   - Validate database permissions and pgvector setup
-3. **Launch subagent orchestration** - Create detailed plans with 4-step review
-4. **Execute Phase 1** - Build workflow-mcp project management core (Weeks 2-4)
-5. **Execute Phase 2** - Refactor codebase-mcp to pure search (Weeks 5-7)
-6. **Execute Phase 3** - Complete workflow-mcp feature set (Weeks 8-10)
-
-## Questions or Issues
-
-- Review subagent-generated plans before implementation
-- Each phase has clear acceptance criteria
-- Git micro-commits enable easy rollback if needed
-- Both MCPs maintain independent constitutions
+```bash
+cd /Users/cliffclarke/Claude_Code/codebase-mcp/docs/mcp-split-plan
+cat START-HERE.md  # Original execution guide
+cat _archive/01-codebase-mcp/FINAL-IMPLEMENTATION-PLAN.md  # Complete technical plan
+```
 
 ---
 
-**Status**: Documentation complete, ready for subagent orchestration
-**Last Updated**: 2025-10-11
-**Owner**: Cliff Clarke
+## Key Planning Documents (Archive)
+
+The following documents are in `_archive/` and provide comprehensive planning context:
+
+### Essential Reading
+
+1. **`_archive/01-codebase-mcp/FINAL-IMPLEMENTATION-PLAN.md`** - Complete refactoring plan (2.0)
+   - All 12 phases detailed
+   - Critical issues resolved (C1-C5)
+   - Architectural recommendations integrated (R1-R4)
+   - Rollback procedures for each phase
+
+2. **`_archive/01-codebase-mcp/constitution.md`** - Constitutional principles
+   - 11 non-negotiable principles
+   - Simplicity Over Features (Principle I)
+   - Performance guarantees
+   - Type safety requirements
+
+3. **`_archive/01-codebase-mcp/SUMMARY.md`** - Executive summary
+   - High-level overview
+   - Business value
+   - Risk assessment
+
+### Reference Materials
+
+4. **`_archive/01-codebase-mcp/ARCHITECTURAL-REVIEW.md`** - Architecture validation
+5. **`_archive/01-codebase-mcp/PLANNING-REVIEW.md`** - Planning critique
+6. **`_archive/01-codebase-mcp/refactoring-plan.md`** - Initial refactoring approach
+7. **`_archive/01-codebase-mcp/user-stories.md`** - User scenarios
+8. **`_archive/01-codebase-mcp/tech-stack.md`** - Technical stack decisions
+
+---
+
+## Safety & Rollback
+
+### Emergency Rollback
+
+If critical issues arise during execution:
+
+```bash
+# Return to pre-refactor state
+cd /Users/cliffclarke/Claude_Code/codebase-mcp
+git checkout main
+git reset --hard backup-before-refactor
+
+# Restore database (if needed)
+dropdb codebase_mcp
+psql -U your_user -d postgres -f backups/backup-before-002.sql
+```
+
+### Phase-Level Rollback
+
+Each phase includes specific rollback instructions in its README. Always:
+1. Create git tag before starting phase
+2. Commit after each completed task (micro-commits)
+3. Run tests before moving to next phase
+4. Document any deviations or issues
+
+---
+
+## Not Applicable to This Repo
+
+The `_archive/workflow-mcp/` directory contains planning for a **separate repository** (workflow-mcp) that handles project management features. This is NOT part of the codebase-mcp refactoring and can be safely ignored.
+
+---
+
+## Questions or Issues
+
+- **Phase scope unclear?** Read the phase README and FINAL-IMPLEMENTATION-PLAN.md
+- **Prerequisites not met?** Review Phase 00 prerequisites before starting
+- **Performance concerns?** Phase 06 includes comprehensive benchmarking
+- **Need to rollback?** Each phase has rollback procedures documented
+
+---
+
+## Status
+
+**Current State**: Planning Complete, Ready for Execution
+**Next Action**: Start Phase 00 (Preparation)
+**Branch**: `main` (will create `002-refactor-pure-search` in Phase 00)
+**Last Verified**: 2025-10-11
+
+---
+
+**Ready to begin? Navigate to `phases/phase-00-preparation/` and read the README!**

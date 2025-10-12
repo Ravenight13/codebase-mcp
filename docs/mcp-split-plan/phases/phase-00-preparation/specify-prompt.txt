@@ -1,0 +1,105 @@
+# Phase 00: Preparation & Baseline Establishment
+
+## Problem Statement
+
+Before refactoring the codebase-mcp server to remove non-search features, we need to establish a reliable baseline and ensure we have proper rollback capabilities. Without baseline performance metrics, we won't be able to validate that the refactoring doesn't introduce performance regressions. Without backup and rollback points, we risk data loss if the refactoring fails.
+
+## User Stories
+
+### As a Developer
+I want to have baseline performance metrics captured before starting the refactoring, so that I can compare post-refactoring performance and ensure no regression has occurred.
+
+### As a Project Manager
+I want complete backup and rollback procedures in place before code changes begin, so that we can recover quickly if the refactoring encounters critical issues.
+
+### As a DevOps Engineer
+I want all prerequisites validated (PostgreSQL version, extensions, permissions) before work begins, so that we don't discover missing capabilities mid-refactoring.
+
+### As a Quality Assurance Engineer
+I want documented baseline state (lines of code, test counts, database schema) so that I can verify the refactoring achieved its reduction goals.
+
+## Success Criteria
+
+### Baseline Metrics Captured
+- Indexing performance measured for 10,000 file repository (p50, p95, p99 latency)
+- Search performance measured for 100 queries (p50, p95, p99 latency)
+- Memory usage during indexing and search operations documented
+- Database size recorded
+- Metrics stored in `docs/baseline/performance-before.md`
+
+### Backups Created
+- Database backup created via pg_dump and verified with pg_restore --list
+- Codebase snapshot created as tar.gz archive
+- Git tag `pre-refactor` created and pushed to remote
+- Backup integrity verified
+
+### Prerequisites Validated
+- PostgreSQL 14+ confirmed with pgvector extension installed
+- CREATEDB permission verified by creating and dropping test database
+- Python 3.11+ environment confirmed
+- Ollama with nomic-embed-text model available and responsive
+
+### Baseline State Documented
+- Current lines of code counted (total, src/, tests/)
+- Current number of MCP tools recorded (should be 16)
+- Current test count and coverage percentage recorded
+- Current database table count recorded (should be 9)
+- All baseline metrics stored in `docs/baseline/baseline-state.md`
+
+### Feature Branch Ready
+- Branch `002-refactor-pure-search` created from main
+- Baseline documentation committed to branch
+- Branch pushed to remote
+- All tests passing on new branch
+
+## Constraints
+
+### Technical Stack (NON-NEGOTIABLE)
+- Python 3.11+
+- PostgreSQL 14+ with pgvector extension
+- Ollama for embeddings
+- FastMCP framework with MCP Python SDK
+
+### Performance Baselines Must Be Deterministic
+- Use seed=42 for test repository generation
+- Use same queries for search benchmarking
+- Ensure reproducible metrics for comparison
+
+### No Code Changes in This Phase
+- No modifications to src/ directory
+- No database schema changes
+- Only documentation and baseline collection
+
+### Backup Must Be Complete and Verified
+- Database backup must restore successfully
+- Codebase snapshot must extract successfully
+- Git tag must reference exact pre-refactor state
+
+## Out of Scope
+
+### Not Included in This Phase
+- Database schema modifications (that's Phase 01)
+- Tool removal or code changes (that's Phase 02)
+- Multi-project feature implementation (that's Phase 03+)
+- Performance optimization (that's Phase 06)
+- Documentation updates (that's Phase 05)
+
+## Business Value
+
+### Risk Mitigation
+By establishing complete baseline metrics and rollback capabilities, we reduce the risk of the refactoring project. If performance degrades or critical bugs appear, we can quickly restore the previous state and try a different approach.
+
+### Objective Validation
+Baseline metrics provide objective criteria for success. We'll know definitively whether the refactoring improved, maintained, or degraded performance.
+
+### Time Savings
+Validating prerequisites upfront prevents mid-project discoveries that would require stopping work to fix environmental issues (missing permissions, wrong PostgreSQL version, etc.).
+
+### Documentation Foundation
+The baseline documentation serves as a reference point for understanding the before/after state, which is valuable for future maintenance and audits.
+
+## Additional Context
+
+This phase combines Phases 0-1 from the FINAL-IMPLEMENTATION-PLAN.md. It should take 2-3 hours to complete and has no dependencies (it's the first phase).
+
+The deliverables from this phase (baseline metrics, backups, feature branch) are prerequisites for all subsequent phases.

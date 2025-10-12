@@ -1,0 +1,112 @@
+# Phase 02: Remove Non-Search MCP Tools
+
+## Problem Statement
+
+The codebase-mcp server currently exposes 16 MCP tools, but we only need 2 (index_repository and search_code) for semantic code search. The 14 non-search tools and their supporting code add ~2,700 unnecessary lines of code, increasing maintenance burden and violating the constitutional principle of "Simplicity Over Features". After Phase 01 used Alembic migration 002 to drop 9 database tables (archived_work_items, work_item_deployment_links, vendor_deployment_links, work_item_dependencies, future_enhancements, project_configuration, deployment_events, vendor_extractors, tasks), the code referencing those tables must be removed to avoid errors.
+
+## User Stories
+
+### As a Maintainer
+I want non-search MCP tools removed from the server, so that I only have to maintain code relevant to semantic search functionality.
+
+### As a User
+I want a focused MCP server with clear purpose (semantic search only), so that I understand exactly what capabilities it provides without confusion from unrelated features.
+
+### As a Developer
+I want supporting code for removed features deleted (database operations, Pydantic models, tests), so that the codebase is clean and doesn't reference non-existent database tables.
+
+### As a System Administrator
+I want the codebase reduced by 60% (~4,500 to ~1,800 lines), so that deployments are faster, security audits are easier, and the attack surface is smaller.
+
+## Success Criteria
+
+### Tools Removed
+- Only 2 MCP tools remain registered in server: index_repository, search_code
+- 14 tools removed: create_work_item, update_work_item, query_work_item, list_work_items, create_task, get_task, list_tasks, update_task, create_vendor, query_vendor_status, update_vendor_status, record_deployment, get_project_configuration, update_project_configuration
+
+### Code Deleted
+- 14 tool implementation files deleted from `src/mcp/tools/`
+- Database operation modules for removed features deleted
+- Pydantic models for removed features deleted
+- Server registration code updated to only register 2 tools
+- All imports for deleted code removed
+
+### Tests Cleaned Up
+- Test files for removed features deleted
+- Only search-related tests remain in `tests/`
+- All remaining tests pass
+- Type checking passes: `mypy --strict src/`
+
+### Code Reduction Achieved
+- Total lines of code reduced from ~4,500 to ~1,800 (60% reduction)
+- Only search-related code remains in src/ directory
+
+### Server Functionality
+- Server starts successfully with only 2 tools
+- No import errors or references to deleted code
+- MCP protocol compliance maintained
+
+## Constraints
+
+### Preserve Search Functionality (NON-NEGOTIABLE)
+- index_repository tool must remain fully functional
+- search_code tool must remain fully functional
+- No changes to search algorithm or indexing logic
+- All search-related tests must continue to pass
+
+### Type Safety (NON-NEGOTIABLE)
+- `mypy --strict` must pass after all deletions
+- No type: ignore comments added (or justified if necessary)
+- Pydantic models for remaining features must remain valid
+
+### Incremental Deletion Strategy
+- Delete in 4 sub-phases (tool files, database operations, server registration, tests)
+- One git commit per sub-phase for clear history
+- Verify compilation after each deletion step
+
+### No Database Changes
+- This phase only removes code, not database schema
+- Database changes were completed in Phase 01
+
+## Out of Scope
+
+### Not Included in This Phase
+- Multi-project feature implementation (that's Phase 03)
+- Connection pool implementation (that's Phase 04)
+- Documentation updates (that's Phase 05)
+- Performance optimization (that's Phase 06)
+
+### Explicitly NOT Doing
+- Modifying search or indexing algorithms
+- Changing remaining tool interfaces
+- Database schema modifications
+- Configuration changes
+
+## Business Value
+
+### Reduced Maintenance Burden
+With 60% less code, there are fewer files to maintain, fewer dependencies to manage, fewer potential bugs, and simpler onboarding for new developers.
+
+### Improved Security Posture
+Smaller codebase means smaller attack surface. Fewer dependencies means fewer potential vulnerabilities. Security audits become faster and more thorough.
+
+### Faster Deployments
+Smaller codebase means faster Docker builds, faster deployments, faster startup time, and reduced disk space usage.
+
+### Clearer Purpose
+Removing non-search features makes the purpose crystal clear: this is a semantic code search server. No confusion about feature scope or mission creep.
+
+### Constitutional Compliance
+Aligns with Constitutional Principle #1: "Simplicity Over Features - Focus exclusively on semantic code search".
+
+## Additional Context
+
+This phase corresponds to Phases 3-6 from FINAL-IMPLEMENTATION-PLAN.md. It should take 8-12 hours to complete and depends on Phase 01 (Alembic migration 002 applied: 9 tables dropped - archived_work_items, work_item_deployment_links, vendor_deployment_links, work_item_dependencies, future_enhancements, project_configuration, deployment_events, vendor_extractors, tasks - and project_id columns added to repositories and code_chunks).
+
+The deletion should be done incrementally in 4 sub-phases:
+1. Delete tool implementation files
+2. Delete database operation modules
+3. Update server registration
+4. Delete tests
+
+Each sub-phase should have its own git commit for clear history and easy rollback if needed.

@@ -177,6 +177,58 @@ Development consists of:
 3. **Updating scripts**: Edit `.specify/scripts/bash/*.sh`
 4. **Customizing constitution**: Use `/constitution` command
 
+## Running Database Migrations
+
+This project uses Alembic for database schema migrations. Follow these procedures for safe migration execution.
+
+### Standard Migration Workflow
+
+1. **Backup Database** (always backup before migrating):
+   ```bash
+   pg_dump -h localhost -d codebase_mcp > backup_$(date +%Y%m%d_%H%M%S).sql
+   ```
+
+2. **Apply Migrations**:
+   ```bash
+   DATABASE_URL=postgresql+asyncpg://localhost/codebase_mcp alembic upgrade head
+   ```
+
+3. **Validate Migration**:
+   ```bash
+   pytest tests/integration/test_migration_002_validation.py::TestPostMigrationValidation -v
+   ```
+
+4. **Monitor Logs** (during migration):
+   ```bash
+   tail -f /tmp/codebase-mcp-migration.log
+   ```
+
+### Rollback Procedure
+
+If issues occur after migration:
+
+1. **Downgrade Migration**:
+   ```bash
+   DATABASE_URL=postgresql+asyncpg://localhost/codebase_mcp alembic downgrade -1
+   ```
+
+2. **Validate Rollback**:
+   ```bash
+   pytest tests/integration/test_migration_002_validation.py::TestPostRollbackValidation -v
+   ```
+
+### Common Alembic Commands
+
+- `alembic current` - Show current migration version
+- `alembic history` - Show migration history
+- `alembic upgrade head` - Apply all pending migrations
+- `alembic downgrade -1` - Rollback one migration step
+
+### Migration Documentation
+
+- **Detailed migration docs**: `docs/migrations/002-schema-refactoring.md`
+- **Testing quickstart**: `specs/006-database-schema-refactoring/quickstart.md`
+
 ## Template Placeholders
 
 Templates use `[UPPERCASE_TOKENS]` as placeholders that must be replaced during execution. Common examples:
