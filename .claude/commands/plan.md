@@ -19,6 +19,15 @@ Given the implementation details provided as an argument, do this:
    - Any technical constraints or dependencies mentioned
 
 3. Read the constitution at `.specify/memory/constitution.md` to understand constitutional requirements.
+   - **Exception Handling**: If planning reveals that a constitutional principle cannot be met, consult the Exception Handling Process in constitution.md (§ Governance § Exception Handling Process):
+     * Create GitHub issue with label `constitution-exception`
+     * Document justification (why principle cannot be met, alternatives considered, impact analysis, mitigation strategy)
+     * Obtain approval based on duration:
+       - Temporary (<30 days): Maintainer approval
+       - Extended (30-90 days): 2 approvals (maintainer + reviewer)
+       - Permanent: Constitution amendment required (MAJOR version bump)
+     * Track in `.specify/memory/exceptions.md`
+     * Grace periods: New principles have 30-day grace period. Performance targets enforceable only after tooling setup.
 
 4. Execute the implementation plan template:
    - Load `.specify/templates/plan-template.md` (already copied to IMPL_PLAN path)
