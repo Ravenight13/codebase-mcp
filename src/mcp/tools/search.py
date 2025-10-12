@@ -21,8 +21,10 @@ from fastmcp import Context
 from pydantic import Field, ValidationError as PydanticValidationError
 
 from src.database import get_session_factory
+from src.database.session import get_session, resolve_project_id
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import mcp
+from src.models.project_identifier import ProjectIdentifier
 from src.services import SearchFilter, SearchResult
 from src.services.searcher import search_code as search_code_service
 
@@ -40,6 +42,7 @@ logger = get_logger(__name__)
 @mcp.tool()
 async def search_code(
     query: str,
+    project_id: str | None = None,
     repository_id: str | None = None,
     file_type: str | None = None,
     directory: str | None = None,
@@ -50,12 +53,13 @@ async def search_code(
 
     Performs semantic code search across indexed repositories using embeddings
     and pgvector similarity matching. Supports filtering by repository, file type,
-    and directory.
+    and directory with multi-project workspace isolation.
 
     Performance target: <500ms p95 latency
 
     Args:
         query: Natural language search query (required)
+        project_id: Optional project identifier for workspace isolation
         repository_id: Optional UUID string to filter by repository
         file_type: Optional file extension filter (e.g., "py", "js")
         directory: Optional directory path filter (supports wildcards)
@@ -78,6 +82,8 @@ async def search_code(
                 }
             ],
             "total_count": 42,
+            "project_id": "client-a" or None,
+            "schema_name": "project_client_a" or "project_default",
             "latency_ms": 250
         }
 
@@ -90,6 +96,9 @@ async def search_code(
     """
     start_time = time.perf_counter()
 
+    # Resolve project_id with workflow-mcp fallback
+    resolved_project_id = await resolve_project_id(project_id)
+
     # Dual logging: Context logging for MCP client + file logging for server
     if ctx:
         await ctx.info(f"Searching for: {query[:100]}")
@@ -99,6 +108,7 @@ async def search_code(
         extra={
             "context": {
                 "query": query[:100],  # Truncate for logging
+                "project_id": resolved_project_id,
                 "repository_id": repository_id,
                 "file_type": file_type,
                 "directory": directory,
@@ -116,6 +126,17 @@ async def search_code(
         # Validate limit
         if limit < 1 or limit > 50:
             raise ValueError(f"Limit must be between 1 and 50, got {limit}")
+
+        # Validate project_id format if provided
+        schema_name: str
+        if resolved_project_id is not None:
+            try:
+                identifier = ProjectIdentifier(value=resolved_project_id)
+                schema_name = identifier.to_schema_name()
+            except PydanticValidationError as e:
+                raise ValueError(f"Invalid project_id: {e}") from e
+        else:
+            schema_name = "project_default"
 
         # Validate repository_id format (UUID)
         repo_uuid: UUID | None = None
@@ -160,17 +181,17 @@ async def search_code(
         )
         raise ValueError(f"Input validation failed: {e}") from e
 
-    # Perform semantic search
+    # Perform semantic search with project isolation
     try:
-        async with get_session_factory()() as db:
+        async with get_session(project_id=resolved_project_id) as db:
             results: list[SearchResult] = await search_code_service(query, db, filters)
-            await db.commit()
     except Exception as e:
         logger.error(
             "Search operation failed",
             extra={
                 "context": {
                     "query": query[:100],
+                    "project_id": resolved_project_id,
                     "repository_id": repository_id,
                     "error": str(e),
                 }
@@ -199,6 +220,8 @@ async def search_code(
             for result in results
         ],
         "total_count": len(results),
+        "project_id": resolved_project_id,
+        "schema_name": schema_name,
         "latency_ms": latency_ms,
     }
 
@@ -207,6 +230,8 @@ async def search_code(
         extra={
             "context": {
                 "query": query[:100],
+                "project_id": resolved_project_id,
+                "schema_name": schema_name,
                 "results_count": len(results),
                 "latency_ms": latency_ms,
             }
