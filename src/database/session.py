@@ -108,33 +108,43 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
 
 
 @asynccontextmanager
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """Async context manager for database sessions with automatic transaction management.
 
     Provides a database session with automatic commit on success and rollback on error.
     This is the primary way to interact with the database in MCP tools.
 
+    Args:
+        project_id: Optional project identifier for workspace isolation.
+                   If None, uses default workspace (backward compatibility).
+
     Yields:
-        AsyncSession: Configured database session
+        AsyncSession: Configured database session with search_path set to project schema
 
     Raises:
+        ValueError: If project_id format is invalid (from ProjectIdentifier validation)
         Exception: Any exception from database operations (after rollback)
 
     Transaction Management:
+        - Sets search_path to project schema before yielding session
         - Automatically commits on successful completion
         - Automatically rolls back on any exception
         - Ensures session is closed after use
 
     Example:
-        >>> # In MCP tool:
-        >>> async with get_session() as session:
+        >>> # In MCP tool with project isolation:
+        >>> async with get_session(project_id="client-a") as session:
         ...     result = await session.execute(select(Repository))
         ...     repos = result.scalars().all()
-        ...     await session.commit()  # Optional - auto-commits on exit
+
+        >>> # Backward compatible (no project_id):
+        >>> async with get_session() as session:
+        ...     result = await session.execute(select(Repository))
+        ...     # Uses default workspace (project_default schema)
 
         >>> # With error handling:
         >>> try:
-        ...     async with get_session() as session:
+        ...     async with get_session(project_id="frontend") as session:
         ...         await session.execute(insert(Repository).values(...))
         ... except IntegrityError:
         ...     logger.error("Duplicate repository")
@@ -143,16 +153,59 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         - Uses connection pooling for efficient resource usage
         - Pre-ping ensures valid connections before use
         - Connection recycling prevents stale connections
+        - Schema existence check cached for performance
 
     Constitutional Compliance:
         - Principle V: Production quality (proper error handling, cleanup)
+        - Principle VIII: Type safety (mypy --strict compliance)
         - Principle XI: FastMCP Foundation (async pattern for MCP tools)
+
+    Multi-Project Support (FR-001, FR-002, FR-003, FR-009):
+        - Resolves project_id to PostgreSQL schema name
+        - Auto-provisions workspace if needed (FR-010)
+        - Sets search_path to isolated schema (FR-017 data isolation)
+        - Backward compatible with project_id=None (FR-018)
     """
     async with SessionLocal() as session:
         try:
+            # Resolve schema name based on project_id
+            if project_id is None:
+                # Backward compatibility: use default workspace
+                schema_name = "project_default"
+                logger.debug(
+                    "Using default workspace (backward compatibility)",
+                    extra={"context": {"operation": "get_session", "schema_name": schema_name}},
+                )
+            else:
+                # Project workspace: ensure exists and get schema name
+                from src.services.workspace_manager import ProjectWorkspaceManager
+
+                manager = ProjectWorkspaceManager(engine)
+                schema_name = await manager.ensure_workspace_exists(project_id)
+
+                logger.debug(
+                    "Using project workspace",
+                    extra={
+                        "context": {
+                            "operation": "get_session",
+                            "project_id": project_id,
+                            "schema_name": schema_name,
+                        }
+                    },
+                )
+
+            # Set search_path to project schema (include public for pgvector extension)
+            await session.execute(text(f"SET search_path TO {schema_name}, public"))
+
             logger.debug(
-                "Database session started",
-                extra={"context": {"operation": "get_session"}},
+                "Database session started with search_path set",
+                extra={
+                    "context": {
+                        "operation": "get_session",
+                        "schema_name": schema_name,
+                        "project_id": project_id,
+                    }
+                },
             )
 
             yield session
