@@ -52,20 +52,18 @@ Create Date: 2025-10-11 00:00:00.000000
 """
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 import logging
 import time
 
 from alembic import op
 from sqlalchemy import text
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '002'
-down_revision: Union[str, None] = '005'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "002"
+down_revision: str | None = "005"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -233,9 +231,9 @@ def upgrade() -> None:
         # Using IF NOT EXISTS pattern for idempotency (manual DROP INDEX IF EXISTS first)
         conn.execute(text("DROP INDEX IF EXISTS idx_project_repository"))
         op.create_index(
-            'idx_project_repository',
-            'repositories',
-            ['project_id', 'id']
+            "idx_project_repository",
+            "repositories",
+            ["project_id", "id"]
         )
         logger.info("Step 6/10: Complete - Index idx_project_repository created on repositories(project_id, id)")
     except Exception as e:
@@ -248,14 +246,14 @@ def upgrade() -> None:
         # Drop tables in order respecting dependencies
         # CASCADE ensures dependent objects are dropped
         tables_to_drop = [
-            'archived_work_items',
-            'work_item_deployment_links',
-            'vendor_deployment_links',
-            'work_item_dependencies',
-            'future_enhancements',
-            'project_configuration',
-            'deployment_events',
-            'vendor_extractors',
+            "archived_work_items",
+            "work_item_deployment_links",
+            "vendor_deployment_links",
+            "work_item_dependencies",
+            "future_enhancements",
+            "project_configuration",
+            "deployment_events",
+            "vendor_extractors",
         ]
 
         for table_name in tables_to_drop:
@@ -373,7 +371,7 @@ def downgrade() -> None:
     # Rollback Step 1: Drop performance index
     logger.info("Rollback Step 1/6: Dropping performance index...")
     try:
-        op.drop_index('idx_project_repository', table_name='repositories', if_exists=True)
+        op.drop_index("idx_project_repository", table_name="repositories", if_exists=True)
         logger.info("Rollback Step 1/6: Complete - Performance index dropped")
     except Exception as e:
         logger.error(f"Rollback Step 1/6: FAILED - Error dropping performance index: {e}")

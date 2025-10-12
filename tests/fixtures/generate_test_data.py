@@ -47,16 +47,15 @@ Exit Codes:
 from __future__ import annotations
 
 import argparse
+import asyncio
+from dataclasses import dataclass
+from datetime import UTC, datetime
 import os
 import sys
-import uuid
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import NoReturn
+import uuid
 
-import asyncio
 import asyncpg  # type: ignore[import-untyped]
-
 
 # ==============================================================================
 # Type Definitions
@@ -266,7 +265,7 @@ def generate_repositories(count: int) -> list[Repository]:
         '/tmp/test_repo_001'
     """
     repositories: list[Repository] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     for i in range(count):
         repo = Repository(
@@ -304,7 +303,7 @@ def generate_code_files(
         True
     """
     files: list[CodeFile] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     for repo in repositories:
         for i in range(files_per_repo):
@@ -361,7 +360,7 @@ def generate_code_chunks(
         True
     """
     chunks: list[CodeChunk] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Chunk types to cycle through
     chunk_types = ["function", "class", "block"]
@@ -618,7 +617,7 @@ async def generate_test_data(
         >>> stats.code_chunks_created
         1000
     """
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
 
     print("\nGenerating test data...")
     print(f"Connected to database: {database_url.split('/')[-1]}")
@@ -655,7 +654,7 @@ async def generate_test_data(
         repo_count, file_count, chunk_count = await verify_data(conn)
 
         # Calculate duration
-        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+        duration = (datetime.now(UTC) - start_time).total_seconds()
 
         # Print summary
         print("\n" + "=" * 60)
