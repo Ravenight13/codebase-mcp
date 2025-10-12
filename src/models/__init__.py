@@ -8,9 +8,6 @@ Model Organization:
 - repository: Repository entity and schemas
 - code_file: CodeFile entity and schemas
 - code_chunk: CodeChunk entity with pgvector embeddings and schemas
-- task: Task entity and schemas
-- task_relations: Task relationship entities (planning, branches, commits, history)
-- tracking: Operational tracking entities (changes, embeddings, search analytics)
 
 Constitutional Compliance:
 - Principle VIII: Type safety (all models fully typed with mypy --strict)
@@ -37,22 +34,8 @@ from .code_file import CodeFile, CodeFileResponse
 # CodeChunk models and schemas with pgvector
 from .code_chunk import CodeChunk, CodeChunkCreate, CodeChunkResponse
 
-# Task models and schemas
-from .task import Task, TaskCreate, TaskResponse, TaskUpdate
-
-# Task schemas (optimized for token efficiency - Feature 004)
-from .task_schemas import BaseTaskFields, TaskResponse as TaskResponseV2, TaskSummary
-
-# Task relationship models
-from .task_relations import (
-    TaskBranchLink,
-    TaskCommitLink,
-    TaskPlanningReference,
-    TaskStatusHistory,
-)
-
-# Tracking and analytics models
-from .tracking import ChangeEvent, EmbeddingMetadata, SearchQuery
+# Analytics models (non-essential tracking)
+from .analytics import ChangeEvent, EmbeddingMetadata
 
 # Export all models and schemas
 __all__ = [
@@ -74,22 +57,7 @@ __all__ = [
     "CodeChunk",
     "CodeChunkCreate",
     "CodeChunkResponse",
-    # Task
-    "Task",
-    "TaskCreate",
-    "TaskUpdate",
-    "TaskResponse",
-    # Task schemas (optimized)
-    "BaseTaskFields",
-    "TaskSummary",
-    "TaskResponseV2",
-    # Task relationships
-    "TaskPlanningReference",
-    "TaskBranchLink",
-    "TaskCommitLink",
-    "TaskStatusHistory",
-    # Tracking and analytics
+    # Analytics
     "ChangeEvent",
     "EmbeddingMetadata",
-    "SearchQuery",
 ]

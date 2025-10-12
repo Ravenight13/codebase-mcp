@@ -180,12 +180,8 @@ def main() -> None:
     # correct mcp instance (the one that will be used by the protocol handlers)
     try:
         logger.info("Importing tool modules...")
-        import src.mcp.tools.configuration  # noqa: F401
         import src.mcp.tools.indexing  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
-        import src.mcp.tools.tasks  # noqa: F401
-        import src.mcp.tools.tracking  # noqa: F401
-        import src.mcp.tools.work_items  # noqa: F401
         logger.info("✓ Tool modules imported successfully")
     except ImportError as e:
         logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
@@ -201,22 +197,8 @@ def main() -> None:
 
         # List expected tools for diagnostics
         expected_tools = [
-            "create_task",
-            "create_vendor",
-            "create_work_item",
-            "get_project_configuration",
-            "get_task",
             "index_repository",
-            "list_tasks",
-            "list_work_items",
-            "query_vendor_status",
-            "query_work_item",
-            "record_deployment",
             "search_code",
-            "update_project_configuration",
-            "update_task",
-            "update_vendor_status",
-            "update_work_item",
         ]
 
         logger.info(f"✓ Tool modules imported successfully")

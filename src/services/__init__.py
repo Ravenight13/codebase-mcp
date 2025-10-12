@@ -1,20 +1,18 @@
 """Service layer for Codebase MCP Server.
 
 This module exports all service implementations for repository indexing,
-code chunking, embedding generation, semantic search, and task management.
+code chunking, embedding generation, and semantic search.
 
 Service Organization:
 - scanner: File scanning with ignore pattern support
 - chunker: Tree-sitter AST-based code chunking
 - embedder: Ollama embedding generation with retry logic
 - searcher: Semantic code search with pgvector similarity
-- tasks: Task CRUD with git integration and status history
 
 Constitutional Compliance:
 - Principle IV: Performance (async operations, caching, batching, <500ms search)
-- Principle V: Production quality (error handling, retry logic, validation, audit trails)
+- Principle V: Production quality (error handling, retry logic, validation)
 - Principle VIII: Type safety (full mypy --strict compliance)
-- Principle X: Git micro-commits (branch/commit tracking)
 """
 
 # Scanner service
@@ -45,17 +43,6 @@ from .embedder import (
 # Searcher service
 from .searcher import SearchFilter, SearchResult, search_code
 
-# Tasks service
-from .tasks import (
-    InvalidCommitHashError,
-    InvalidStatusError,
-    TaskNotFoundError,
-    create_task,
-    get_task,
-    list_tasks,
-    update_task,
-)
-
 __all__ = [
     # Scanner
     "ChangeSet",
@@ -81,12 +68,4 @@ __all__ = [
     "SearchFilter",
     "SearchResult",
     "search_code",
-    # Tasks
-    "TaskNotFoundError",
-    "InvalidStatusError",
-    "InvalidCommitHashError",
-    "create_task",
-    "get_task",
-    "list_tasks",
-    "update_task",
 ]
