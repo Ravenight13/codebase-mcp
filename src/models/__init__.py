@@ -8,6 +8,8 @@ Model Organization:
 - repository: Repository entity and schemas
 - code_file: CodeFile entity and schemas
 - code_chunk: CodeChunk entity with pgvector embeddings and schemas
+- project_identifier: Validated project identifier for multi-workspace support
+- workflow_context: WorkflowIntegrationContext for workflow-mcp integration
 
 Constitutional Compliance:
 - Principle VIII: Type safety (all models fully typed with mypy --strict)
@@ -37,6 +39,10 @@ from .code_chunk import CodeChunk, CodeChunkCreate, CodeChunkResponse
 # Analytics models (non-essential tracking)
 from .analytics import ChangeEvent, EmbeddingMetadata
 
+# Project workspace models
+from .project_identifier import ProjectIdentifier
+from .workflow_context import WorkflowIntegrationContext
+
 # Export all models and schemas
 __all__ = [
     # Database infrastructure
@@ -60,4 +66,7 @@ __all__ = [
     # Analytics
     "ChangeEvent",
     "EmbeddingMetadata",
+    # Project workspace
+    "ProjectIdentifier",
+    "WorkflowIntegrationContext",
 ]
