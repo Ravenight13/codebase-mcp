@@ -199,44 +199,61 @@ MCP tools are independent endpoints. Can be updated in parallel.
 
 Contract tests validate MCP tool parameter additions per contracts/mcp-tools.yaml. All are independent test files.
 
-- [ ] **T013 [P]** Contract test: index_repository with valid project_id in `tests/contract/test_index_project_id.py`
+- [X] **T013 [P]** Contract test: index_repository with valid project_id in `tests/contract/test_index_project_id.py`
   - **Description**: Test index_repository accepts valid project_id parameter
+  - **Completed**: Commit 8836307f
   - **Test Cases**:
     - Valid project_id "client-a" returns status 200, schema_name "project_client_a"
     - Null project_id returns default workspace (backward compatibility)
-  - **Expected**: Tests FAIL (implementation in T011 not done yet)
-  - **Dependencies**: None (write tests first)
+    - Multi-hyphen identifiers (my-project-123)
+    - Maximum 50-character length validation
+  - **Result**: 4 tests PASSING
+  - **Dependencies**: T011 (implementation)
   - **Traces to**: contracts/mcp-tools.yaml lines 93-174
   - **File**: `tests/contract/test_index_project_id.py` (NEW)
 
-- [ ] **T014 [P]** Contract test: search_code with valid project_id in `tests/contract/test_search_project_id.py`
+- [X] **T014 [P]** Contract test: search_code with valid project_id in `tests/contract/test_search_project_id.py`
   - **Description**: Test search_code accepts valid project_id parameter
+  - **Completed**: Commit 8836307f
   - **Test Cases**:
     - Valid project_id "frontend" returns results from that schema only
     - Null project_id uses default workspace
-  - **Expected**: Tests FAIL (implementation in T012 not done yet)
-  - **Dependencies**: None (write tests first)
+    - Empty results handling
+    - workflow-mcp auto-detection fallback
+    - Multiple results from project workspace
+  - **Result**: 5 tests PASSING
+  - **Dependencies**: T012 (implementation)
   - **Traces to**: contracts/mcp-tools.yaml lines 175-274
   - **File**: `tests/contract/test_search_project_id.py` (NEW)
 
-- [ ] **T015 [P]** Contract test: invalid project_id validation in `tests/contract/test_invalid_project_id.py`
+- [X] **T015 [P]** Contract test: invalid project_id validation in `tests/contract/test_invalid_project_id.py`
   - **Description**: Test ValidationError for invalid project identifiers
+  - **Completed**: Commit 8836307f
   - **Test Cases**:
     - Uppercase "My_Project" returns 400 ValidationError
     - Leading hyphen "-project" returns 400 ValidationError
     - SQL injection attempt "project'; DROP TABLE--" returns 400 ValidationError
     - 51+ character identifier returns 400 ValidationError
-  - **Expected**: Tests FAIL (validation in T001 not integrated yet)
-  - **Dependencies**: None (write tests first)
+    - Comprehensive parametrized tests for 15+ invalid formats
+    - Direct ProjectIdentifier model validation
+  - **Result**: 41 tests PASSING (comprehensive validation coverage)
+  - **Dependencies**: T001 (ProjectIdentifier validation)
   - **Traces to**: contracts/mcp-tools.yaml lines 50-71, FR-016 (security)
   - **File**: `tests/contract/test_invalid_project_id.py` (NEW)
 
-- [ ] **T016 [P]** Contract test: permission denied error in `tests/contract/test_permission_denied.py`
+- [X] **T016 [P]** Contract test: permission denied error in `tests/contract/test_permission_denied.py`
   - **Description**: Test PermissionError when schema creation fails
+  - **Completed**: Commit 8836307f
   - **Setup**: Mock PostgreSQL to reject CREATE SCHEMA command
-  - **Test Case**: New project_id triggers 403 PermissionError with suggested action
-  - **Expected**: Tests FAIL (error handling in T006 not done yet)
-  - **Dependencies**: None (write tests first)
+  - **Test Cases**:
+    - index_repository handles permission denied
+    - search_code handles permission denied
+    - WorkspaceManager wraps errors with actionable messages
+    - Transaction rollback handling
+    - Error message format validation
+    - Error schema documentation
+  - **Result**: 6 tests PASSING
+  - **Dependencies**: T006 (WorkspaceManager error handling)
   - **Traces to**: contracts/mcp-tools.yaml lines 72-91, FR-011
   - **File**: `tests/contract/test_permission_denied.py` (NEW)
 
