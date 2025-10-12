@@ -180,8 +180,9 @@ MCP tools are independent endpoints. Can be updated in parallel.
   - **Completed**: Commit 8f59103f
   - **File**: `src/mcp/tools/indexing.py` (EDIT)
 
-- [ ] **T012 [P]** Update search_code tool to accept project_id in `src/mcp/tools/search.py`
+- [X] **T012 [P]** Update search_code tool to accept project_id in `src/mcp/tools/search.py`
   - **Description**: Add optional project_id parameter to search_code MCP tool
+  - **Completed**: Commit 17543e67
   - **Parameter**: `project_id: str | None = None` (optional, backward compatible)
   - **Logic**:
     1. Resolve project_id (explicit or workflow-mcp)
