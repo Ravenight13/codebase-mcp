@@ -125,7 +125,7 @@ Service implementations are independent and can run in parallel. Each service op
 
 Database layer changes modify shared session management. Must complete in order.
 
-- [ ] **T009** Update get_session() to accept project_id parameter in `src/database/session.py`
+- [X] **T009** Update get_session() to accept project_id parameter in `src/database/session.py`
   - **Description**: Add optional project_id parameter and SET search_path logic
   - **Signature**: `async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSession, None]`
   - **Logic**:
@@ -135,6 +135,7 @@ Database layer changes modify shared session management. Must complete in order.
   - **Dependencies**: T006 (uses ProjectWorkspaceManager)
   - **Traces to**: FR-001, FR-002, FR-003, FR-009
   - **File**: `src/database/session.py` (EDIT)
+  - **Completed**: Commit 277b884b
 
 - [ ] **T009a** Test get_session() backward compatibility in `tests/unit/test_session_backward_compat.py`
   - **Description**: Validate get_session() with project_id=None uses default workspace
