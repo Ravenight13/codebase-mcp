@@ -99,7 +99,7 @@ Service implementations are independent and can run in parallel. Each service op
   - **File**: `src/services/workspace_manager.py` (NEW)
   - **Completed**: Commit 6c55a3f8
 
-- [ ] **T007 [P]** Implement WorkflowIntegrationClient service in `src/services/workflow_client.py`
+- [X] **T007 [P]** Implement WorkflowIntegrationClient service in `src/services/workflow_client.py`
   - **Description**: Create optional HTTP client for workflow-mcp integration
   - **Methods**:
     - `get_active_project() -> str | None`: Query workflow-mcp with timeout and caching
@@ -109,6 +109,7 @@ Service implementations are independent and can run in parallel. Each service op
   - **Dependencies**: T003 (imports WorkflowIntegrationContext)
   - **Traces to**: FR-012, FR-013, FR-014, FR-015
   - **File**: `src/services/workflow_client.py` (NEW)
+  - **Completed**: Commit b2e7f0c7
 
 - [X] **T008 [P]** Add Settings fields for workflow-mcp in `src/config/settings.py`
   - **Description**: Extend Settings Pydantic model with workflow-mcp configuration
