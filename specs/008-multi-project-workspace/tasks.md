@@ -166,7 +166,7 @@ Database layer changes modify shared session management. Must complete in order.
 
 MCP tools are independent endpoints. Can be updated in parallel.
 
-- [ ] **T011 [P]** Update index_repository tool to accept project_id in `src/mcp/tools/indexing.py`
+- [X] **T011 [P]** Update index_repository tool to accept project_id in `src/mcp/tools/indexing.py`
   - **Description**: Add optional project_id parameter to index_repository MCP tool
   - **Parameter**: `project_id: str | None = None` (optional, backward compatible)
   - **Logic**:
@@ -177,6 +177,7 @@ MCP tools are independent endpoints. Can be updated in parallel.
     5. Return project_id and schema_name in response
   - **Dependencies**: T009 (uses updated get_session)
   - **Traces to**: FR-001, FR-009, FR-010
+  - **Completed**: Commit 8f59103f
   - **File**: `src/mcp/tools/indexing.py` (EDIT)
 
 - [ ] **T012 [P]** Update search_code tool to accept project_id in `src/mcp/tools/search.py`
