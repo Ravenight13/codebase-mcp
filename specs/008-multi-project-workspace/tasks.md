@@ -109,7 +109,7 @@ Service implementations are independent and can run in parallel. Each service op
   - **Traces to**: FR-012, FR-013, FR-014, FR-015
   - **File**: `src/services/workflow_client.py` (NEW)
 
-- [ ] **T008 [P]** Add Settings fields for workflow-mcp in `src/config/settings.py`
+- [X] **T008 [P]** Add Settings fields for workflow-mcp in `src/config/settings.py`
   - **Description**: Extend Settings Pydantic model with workflow-mcp configuration
   - **New Fields**:
     - `workflow_mcp_url: HttpUrl | None = None` (optional)
@@ -117,6 +117,7 @@ Service implementations are independent and can run in parallel. Each service op
     - `workflow_mcp_cache_ttl: int = 60` (seconds)
   - **Dependencies**: None (independent config change)
   - **File**: `src/config/settings.py` (EDIT)
+  - **Completed**: Commit 4df5ed25
 
 ## Phase 3.3: Database Layer (Sequential)
 
