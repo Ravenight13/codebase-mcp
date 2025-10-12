@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-The codebase-mcp server currently exposes 16 MCP tools, but we only need 2 (index_repository and search_code) for semantic code search. The 14 non-search tools and their supporting code add ~2,700 unnecessary lines of code, increasing maintenance burden and violating the constitutional principle of "Simplicity Over Features". After Phase 01 removed database tables, the code referencing those tables must be removed to avoid errors.
+The codebase-mcp server currently exposes 16 MCP tools, but we only need 2 (index_repository and search_code) for semantic code search. The 14 non-search tools and their supporting code add ~2,700 unnecessary lines of code, increasing maintenance burden and violating the constitutional principle of "Simplicity Over Features". After Phase 01 used Alembic migration 002 to drop 9 database tables (archived_work_items, work_item_deployment_links, vendor_deployment_links, work_item_dependencies, future_enhancements, project_configuration, deployment_events, vendor_extractors, tasks), the code referencing those tables must be removed to avoid errors.
 
 ## User Stories
 
@@ -25,14 +25,14 @@ I want the codebase reduced by 60% (~4,500 to ~1,800 lines), so that deployments
 - 14 tools removed: create_work_item, update_work_item, query_work_item, list_work_items, create_task, get_task, list_tasks, update_task, create_vendor, query_vendor_status, update_vendor_status, record_deployment, get_project_configuration, update_project_configuration
 
 ### Code Deleted
-- 14 tool implementation files deleted from `src/codebase_mcp/tools/`
+- 14 tool implementation files deleted from `src/mcp/tools/`
 - Database operation modules for removed features deleted
 - Pydantic models for removed features deleted
 - Server registration code updated to only register 2 tools
 - All imports for deleted code removed
 
 ### Tests Cleaned Up
-- ~30 test files for removed features deleted
+- Test files for removed features deleted
 - Only search-related tests remain in `tests/`
 - All remaining tests pass
 - Type checking passes: `mypy --strict src/`
@@ -101,7 +101,7 @@ Aligns with Constitutional Principle #1: "Simplicity Over Features - Focus exclu
 
 ## Additional Context
 
-This phase corresponds to Phases 3-6 from FINAL-IMPLEMENTATION-PLAN.md. It should take 8-12 hours to complete and depends on Phase 01 (database tables removed).
+This phase corresponds to Phases 3-6 from FINAL-IMPLEMENTATION-PLAN.md. It should take 8-12 hours to complete and depends on Phase 01 (Alembic migration 002 applied: 9 tables dropped - archived_work_items, work_item_deployment_links, vendor_deployment_links, work_item_dependencies, future_enhancements, project_configuration, deployment_events, vendor_extractors, tasks - and project_id columns added to repositories and code_chunks).
 
 The deletion should be done incrementally in 4 sub-phases:
 1. Delete tool implementation files
