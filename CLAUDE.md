@@ -228,6 +228,8 @@ If issues occur after migration:
 
 - **Detailed migration docs**: `docs/migrations/002-schema-refactoring.md`
 - **Testing quickstart**: `specs/006-database-schema-refactoring/quickstart.md`
+- **Database operations guide**: `docs/operations/DATABASE_RESET.md`
+- **Rollback procedures**: `docs/operations/ROLLBACK.md`
 
 ## Template Placeholders
 
