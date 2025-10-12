@@ -148,7 +148,7 @@ Database layer changes modify shared session management. Must complete in order.
   - **Traces to**: FR-018 (backward compatibility)
   - **File**: `tests/unit/test_session_backward_compat.py` (NEW)
 
-- [ ] **T010** Create resolve_project_id() utility function in `src/database/session.py`
+- [X] **T010** Create resolve_project_id() utility function in `src/database/session.py`
   - **Description**: Resolve project_id with workflow-mcp fallback logic
   - **Signature**: `async def resolve_project_id(explicit_id: str | None) -> str | None`
   - **Logic**:
@@ -157,6 +157,7 @@ Database layer changes modify shared session management. Must complete in order.
     3. If workflow-mcp unavailable or timeout: return None (default workspace)
   - **Dependencies**: T007 (uses WorkflowIntegrationClient)
   - **Traces to**: FR-012, FR-013, FR-014
+  - **Completed**: Commit 660f73ce
   - **File**: `src/database/session.py` (EDIT)
 
 ## Phase 3.4: MCP Tool Updates (Parallel after Database Layer)
