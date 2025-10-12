@@ -1,0 +1,111 @@
+# Phase 03: Multi-Project Support
+
+## Problem Statement
+
+Users working on multiple codebases need to keep them isolated - searching one project should never return results from another project. Currently, the codebase-mcp server can only index and search a single codebase. Users need the ability to maintain multiple projects simultaneously without data contamination or complex manual database management.
+
+## User Stories
+
+### As a Full-Stack Developer
+I want to work with multiple codebases simultaneously (frontend, backend, shared libraries), so that I can search each codebase independently without cross-contamination.
+
+### As a Consultant
+I want to maintain separate projects for each client, so that client code remains isolated and I can quickly switch between client contexts.
+
+### As an Engineering Manager
+I want teams to be able to use the same codebase-mcp server for different projects, so that we can reduce infrastructure costs while maintaining data isolation.
+
+### As a Workflow Automation User
+I want codebase-mcp to automatically detect my active project from workflow-mcp, so that I don't have to manually specify project_id with every search.
+
+## Success Criteria
+
+### Project ID Parameter Added
+- `index_repository` accepts optional `project_id` parameter (default: "default")
+- `search_code` accepts optional `project_id` parameter (default: "default")
+- Parameter validation enforces pattern: `^[a-z0-9-]{1,50}$`
+- Clear error messages for invalid project_ids
+
+### Database Per Project Created
+- Each project gets its own database: `codebase_<project_id>`
+- Database created automatically on first index_repository call
+- User must have CREATEDB permission (validated with helpful error)
+- Database name follows pattern: `codebase_default`, `codebase_my-app`, etc.
+
+### Data Isolation Verified
+- Searching in project-a returns ZERO results from project-b
+- Indexing in project-a does NOT affect project-b data
+- Each project database is completely independent
+- Integration tests verify no cross-contamination
+
+### workflow-mcp Integration (Optional)
+- If workflow-mcp is available, query it for active project
+- Use active project if no project_id parameter provided
+- Gracefully degrade to "default" if workflow-mcp unavailable
+- Cache active project for 1 minute to reduce HTTP calls
+- Clear error categorization: unavailable, timeout, invalid response
+
+### Security Validated
+- SQL injection attempts blocked (test with malicious project_ids)
+- project_id validated before database name construction
+- No shell injection possible via project_id
+
+## Constraints
+
+### Database Naming Strategy (NON-NEGOTIABLE)
+- Format: `codebase_<project_id>` (e.g., `codebase_default`, `codebase_my-app`)
+- All lowercase, no special characters except hyphen
+- Maximum length: 50 characters for project_id portion
+
+### Backward Compatibility
+- Default project_id is "default"
+- Existing users continue to work without specifying project_id
+- No breaking changes to tool interfaces (project_id is optional)
+
+### CREATEDB Permission Required
+- User must have PostgreSQL CREATEDB permission
+- Clear, actionable error message if permission missing
+- Validation happens on first database creation attempt
+
+### workflow-mcp Integration is Optional
+- System must work without workflow-mcp present
+- No hard dependency on workflow-mcp
+- Fallback to "default" project if integration unavailable
+
+## Out of Scope
+
+### Not Included in This Phase
+- Connection pooling implementation (that's Phase 04)
+- Performance optimization (that's Phase 06)
+- Documentation updates (that's Phase 05)
+
+### Explicitly NOT Doing
+- Cross-project search (searching multiple projects simultaneously)
+- Project management UI or CLI
+- Project deletion or archival features
+- Project configuration or metadata
+
+## Business Value
+
+### Enables Multi-Tenant Usage
+Multiple users or teams can share the same codebase-mcp server without data conflicts, reducing infrastructure costs and operational complexity.
+
+### Simplifies User Workflow
+Users can maintain multiple codebases (frontend, backend, libraries) without manual database management or complex configuration.
+
+### Supports Context Switching
+Developers can quickly switch between projects by changing project_id, supporting modern multi-repo development workflows.
+
+### Workflow Automation Integration
+Integration with workflow-mcp enables automatic project detection, reducing manual parameter specification and improving user experience.
+
+### Foundation for Future Features
+The multi-project architecture provides a foundation for future features like project-specific settings, cross-project analytics, or team collaboration features.
+
+## Additional Context
+
+This phase corresponds to Phase 7 from FINAL-IMPLEMENTATION-PLAN.md. It should take 6-8 hours to complete and depends on Phase 02 (tools removed, clean codebase).
+
+The database-per-project strategy provides the strongest isolation guarantee but requires CREATEDB permission. This trade-off was chosen over project_id columns because it guarantees no possibility of cross-project data leakage.
+
+workflow-mcp integration is optional but recommended for users who use the Specify workflow system, as it enables automatic project context detection.
