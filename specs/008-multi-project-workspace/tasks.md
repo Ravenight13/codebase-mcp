@@ -137,16 +137,18 @@ Database layer changes modify shared session management. Must complete in order.
   - **File**: `src/database/session.py` (EDIT)
   - **Completed**: Commit 277b884b
 
-- [ ] **T009a** Test get_session() backward compatibility in `tests/unit/test_session_backward_compat.py`
+- [X] **T009a** Test get_session() backward compatibility in `tests/unit/test_session_backward_compat.py`
   - **Description**: Validate get_session() with project_id=None uses default workspace
   - **Test Cases**:
     - Call get_session(project_id=None) → verify search_path set to "project_default"
     - Call get_session() (parameter omitted) → verify search_path set to "project_default"
-    - Verify existing database operations work unchanged
+    - Test backward compatibility logging
+    - Test WorkspaceManager not called for None (performance optimization)
   - **Expected**: Tests PASS (validates backward compatibility)
   - **Dependencies**: T009, T005a (requires get_session updated and default schema exists)
   - **Traces to**: FR-018 (backward compatibility)
   - **File**: `tests/unit/test_session_backward_compat.py` (NEW)
+  - **Completed**: Commit 57c5707c
 
 - [X] **T010** Create resolve_project_id() utility function in `src/database/session.py`
   - **Description**: Resolve project_id with workflow-mcp fallback logic
