@@ -41,6 +41,7 @@ from .analytics import ChangeEvent, EmbeddingMetadata
 
 # Project workspace models
 from .project_identifier import ProjectIdentifier
+from .workspace_config import WorkspaceConfig
 from .workflow_context import WorkflowIntegrationContext
 
 # Export all models and schemas
@@ -68,5 +69,6 @@ __all__ = [
     "EmbeddingMetadata",
     # Project workspace
     "ProjectIdentifier",
+    "WorkspaceConfig",
     "WorkflowIntegrationContext",
 ]
