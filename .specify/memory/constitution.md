@@ -163,6 +163,31 @@ All MCP server implementations MUST be built using FastMCP (https://github.com/j
 - Feature branches MUST be created from main
 - No direct commits to main (all changes via feature branches)
 
+## Enforcement Matrix
+
+This matrix documents which constitutional principles have automated enforcement and which require manual validation. Target: >50% automation coverage.
+
+| Principle | Enforcement Type | Tool/Process | CI Stage |
+|-----------|------------------|--------------|----------|
+| I. Simplicity Over Features | Manual | Spec review, /analyze CRITICAL flags | Pre-planning |
+| II. Local-First Architecture | Automated | Network call detection, offline tests | Pre-commit, CI |
+| III. Protocol Compliance (MCP) | Automated | MCP integration tests, log analysis | CI |
+| IV. Performance Guarantees | Automated | pytest-benchmark, k6 load tests | CI |
+| V. Production Quality Standards | Automated | mypy --strict, pylint, error checks | Pre-commit, CI |
+| VI. Specification-First Development | Manual | Workflow gates (/plan requires spec) | Pre-planning |
+| VII. Test-Driven Development | Mixed | pytest-cov (80% gate), task ordering | CI, planning |
+| VIII. Pydantic Type Safety | Automated | mypy --strict, pydantic validators | Pre-commit, CI |
+| IX. Orchestrated Subagent Execution | Manual | Implementation review, parallelism check | Post-implementation |
+| X. Git Micro-Commit Strategy | Automated | commitlint, branch name validation | Pre-push |
+| XI. FastMCP Foundation | Automated | Dependency check, import analysis | CI |
+
+**Automation Coverage**: 7/11 (64%) - exceeds >50% threshold ✅
+
+**Notes**:
+- **Automated**: Enforcement via CI/CD pipelines, pre-commit hooks, or runtime validation
+- **Manual**: Human review required (spec validation, architecture review)
+- **Mixed**: Combination of automated metrics + human judgment
+
 ## Success Criteria
 
 The MCP server is production-ready when:
