@@ -12,7 +12,7 @@ Goal: Identify inconsistencies, duplications, ambiguities, and underspecified it
 
 STRICTLY READ-ONLY: Do **not** modify any files. Output a structured analysis report. Offer an optional remediation plan (user must explicitly approve before any follow-up editing commands would be invoked manually).
 
-Constitution Authority: The project constitution (`.specify/memory/constitution.md`) is **non-negotiable** within this analysis scope. Constitution conflicts are automatically CRITICAL and require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring of the principle. If a principle itself needs to change, that must occur in a separate, explicit constitution update outside `/analyze`.
+Constitution Authority: The project constitution (`.specify/memory/constitution.md` v3.0.0) is **non-negotiable** within this analysis scope. Constitution conflicts are flagged with severity based on Verification enforcement type: automated violations (CI-blockable) are CRITICAL, manual violations (human review) are HIGH. Violations require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring of the principle. If a principle itself needs to change, that must occur in a separate, explicit constitution update outside `/analyze`.
 
 Execution steps:
 
@@ -47,6 +47,14 @@ Execution steps:
    D. Constitution alignment:
       - Any requirement or plan element conflicting with a MUST principle.
       - Missing mandated sections or quality gates from constitution.
+      - **Verification-based validation**: For each constitutional principle, cross-reference the Verification section (constitution v3.0.0):
+        * **Automated enforcement** violations → Flag as CRITICAL (blocking CI/CD)
+          Example: "Principle V violation: mypy --strict will fail in CI due to missing type hints in module X"
+        * **Manual enforcement** violations → Flag as HIGH (human review required)
+          Example: "Principle I violation: feature extends beyond semantic search scope, requires spec review"
+        * **Mixed enforcement** violations → Apply judgment based on automated checks; flag tooling-detectable issues as CRITICAL
+          Example: "Principle VII violation: test coverage below 80% threshold (automated), task ordering requires manual review (HIGH)"
+        * Include specific tool references from Verification sections in violation messages (e.g., pytest-cov, commitlint, check-prerequisites.sh)
    E. Coverage gaps:
       - Requirements with zero associated tasks.
       - Tasks with no mapped requirement/story.
@@ -58,10 +66,15 @@ Execution steps:
       - Conflicting requirements (e.g., one requires to use Next.js while other says to use Vue as the framework).
 
 5. Severity assignment heuristic:
-   - CRITICAL: Violates constitution MUST, missing core spec artifact, or requirement with zero coverage that blocks baseline functionality.
-   - HIGH: Duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion.
+   - CRITICAL: Violates constitution MUST with automated enforcement (will block CI/CD per Verification section), missing core spec artifact, or requirement with zero coverage that blocks baseline functionality.
+   - HIGH: Violates constitution MUST with manual enforcement (requires human review), duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion.
    - MEDIUM: Terminology drift, missing non-functional task coverage, underspecified edge case.
    - LOW: Style/wording improvements, minor redundancy not affecting execution order.
+
+   For constitutional violations, severity is determined by Verification enforcement type (see constitution v3.0.0):
+   - Automated violations (CI/CD blockable) → CRITICAL
+   - Manual violations (human review required) → HIGH
+   - Advisory/tooling recommendations → INFO (mentioned in report without blocking)
 
 6. Produce a Markdown report (no file writes) with sections:
 

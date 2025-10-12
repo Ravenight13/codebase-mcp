@@ -47,6 +47,11 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
+**Enforcement Reference**: Consult the Enforcement Matrix in `.specify/memory/constitution.md` to understand which constitutional principles have automated enforcement (64% automation coverage) versus manual validation. This helps identify:
+- Which design decisions can be validated automatically (CI/CD, pre-commit hooks)
+- Which require human architectural review
+- Where to invest in additional automation tooling
+
 [Gates determined based on constitution file]
 
 ## Project Structure
@@ -63,50 +68,58 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 ```
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+src/                          # Main source code
+├── config/                   # Configuration management
+├── database/                 # Database session and utilities
+├── mcp/                      # MCP server implementation (FastMCP)
+├── models/                   # Pydantic models and SQLAlchemy entities
+└── services/                 # Business logic services
+    ├── indexer.py           # Repository indexing
+    ├── searcher.py          # Semantic search
+    ├── embedder.py          # Embedding generation
+    ├── chunker.py           # Code chunking (AST-based)
+    └── scanner.py           # File system scanning
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+tests/                        # Test suite
+├── contract/                 # MCP protocol compliance tests
+├── integration/              # End-to-end workflow tests
+├── unit/                     # Component unit tests
+├── performance/              # Benchmark tests (60s/500ms targets)
+└── fixtures/                 # Test data and helpers
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
+migrations/                   # Alembic database migrations
+├── env.py                   # Migration environment config
+└── versions/                # Versioned migration scripts
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
+scripts/                      # Utility scripts
+├── init_db.py               # Database initialization
+├── reset_database.sh        # Development database reset
+└── collect_baseline.sh      # Performance baseline collection
 
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
+docs/                         # Documentation
+├── architecture/            # Architecture decision records
+├── guides/                  # User and developer guides
+├── operations/              # Operational procedures
+└── specifications/          # Technical specifications
 
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+specs/                        # Feature specifications (per-feature)
+└── ###-feature-name/        # Individual feature directories
+    ├── spec.md              # Feature specification
+    ├── plan.md              # Implementation plan
+    ├── research.md          # Research decisions
+    ├── data-model.md        # Data model definitions
+    ├── contracts/           # API contracts
+    ├── quickstart.md        # Integration test scenarios
+    └── tasks.md             # Ordered task breakdown
+
+.specify/                     # Workflow automation
+├── memory/                  # Project memory (constitution, exceptions)
+├── scripts/bash/            # Workflow scripts
+└── templates/               # Document templates
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Single Python project with MCP server architecture. The codebase follows a service-oriented structure with clear separation between MCP protocol handling (src/mcp/), core services (src/services/), and data models (src/models/). Test organization mirrors constitutional requirements: contract tests for protocol compliance, integration tests for workflows, unit tests for components, and performance tests for 60s/500ms guarantees.
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
@@ -216,4 +229,4 @@ directories captured above]
 - [ ] Complexity deviations documented
 
 ---
-*Based on Constitution v2.1.1 - See `/memory/constitution.md`*
+*Based on Constitution v3.0.0 - See `.specify/memory/constitution.md`*
