@@ -83,7 +83,7 @@ Repository = "https://github.com/cliffclarke/codebase-mcp"
 Issues = "https://github.com/cliffclarke/codebase-mcp/issues"
 
 [project.scripts]
-codebase-mcp = "src.main:main"
+codebase-mcp = "src.mcp.server_fastmcp:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

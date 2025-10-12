@@ -2,6 +2,8 @@
 
 Production-grade async SQLAlchemy session factory for PostgreSQL with connection pooling, automatic transaction management, and comprehensive error handling.
 
+**Note**: This documentation reflects the simplified schema after removing project configuration, task management, work item tracking, vendor tracking, and deployment tracking features. The database now focuses exclusively on semantic code search functionality.
+
 ## Features
 
 - **Async SQLAlchemy**: Full async/await support using asyncpg driver
