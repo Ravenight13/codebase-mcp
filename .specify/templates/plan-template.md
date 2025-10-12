@@ -47,6 +47,11 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
+**Enforcement Reference**: Consult the Enforcement Matrix in `.specify/memory/constitution.md` to understand which constitutional principles have automated enforcement (64% automation coverage) versus manual validation. This helps identify:
+- Which design decisions can be validated automatically (CI/CD, pre-commit hooks)
+- Which require human architectural review
+- Where to invest in additional automation tooling
+
 [Gates determined based on constitution file]
 
 ## Project Structure
@@ -216,4 +221,4 @@ directories captured above]
 - [ ] Complexity deviations documented
 
 ---
-*Based on Constitution v2.1.1 - See `/memory/constitution.md`*
+*Based on Constitution v3.0.0 - See `.specify/memory/constitution.md`*
