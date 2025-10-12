@@ -1,18 +1,28 @@
 <!--
 Sync Impact Report:
-- Version change: 2.1.0 → 2.2.0 (MINOR - new principle added)
-- Principles added:
-  * XI. FastMCP and Python SDK Foundation (MCP server implementation framework)
+- Version change: 2.2.0 → 3.0.0 (MAJOR - structural enhancement for governance compliance)
+- Principles added: None (all 11 principles remain unchanged)
+- Sections added:
+  * Preamble - Establishes constitutional authority and governance framework
+  * Verification subsections added to ALL 11 principles (Automated/Manual/Tooling enforcement)
+  * Enforcement Matrix - Documents automation coverage (64% automated, exceeds >50% threshold)
+  * Exception Handling Process - Defines exception request, approval, tracking workflow
+  * Compliance Tracking - Documents automated monitoring, manual review, violation response
 - Sections modified:
-  * Technical Constraints → Required Stack (updated MCP framework dependencies)
-  * Architectural Decisions (added FastMCP design pattern requirement)
+  * Governance expanded significantly (2 new subsections: Exception Handling, Compliance Tracking)
+  * All Core Principles (I-XI) now include Verification subsections with enforcement details
 - Removed sections: None
 - Templates requiring updates:
-  * ✅ .specify/templates/plan-template.md - Technical Context includes MCP dependencies
+  * ⚠️ .specify/templates/plan-template.md - Should reference Enforcement Matrix during Phase 0 validation
+  * ⚠️ .claude/commands/analyze.md - Should validate against Verification sections per principle
+  * ⚠️ .claude/commands/plan.md - Should cross-reference Exception Handling Process
   * ✅ .specify/templates/spec-template.md - No changes needed (tech-agnostic)
-  * ⚠ Future plans should validate against FastMCP decorative patterns
-- Follow-up TODOs: None
+- Follow-up TODOs:
+  * Create .specify/memory/exceptions.md file for exception tracking
+  * Update /analyze command to leverage Verification sections for compliance checks
+  * Consider adding pre-commit hooks for automated enforcement (see Enforcement Matrix)
 - Previous version history:
+  * 2.1.0 → 2.2.0: Added FastMCP and Python SDK Foundation principle
   * 2.0.0 → 2.1.0: Added Git Micro-Commit Strategy principle
   * 1.1.0 → 2.0.0: Project identity change from Specify Template to Codebase MCP Server
   * 1.0.0 → 1.1.0: Added Pydantic and Orchestration principles
@@ -397,4 +407,4 @@ Constitutional compliance is monitored through:
 - Track CRITICAL violation block rate
 - Track automation coverage percentage (maintain >50%)
 
-**Version**: 2.2.0 | **Ratified**: 2025-10-06 | **Last Amended**: 2025-10-06
+**Version**: 3.0.0 | **Ratified**: 2025-10-06 | **Last Amended**: 2025-10-12
