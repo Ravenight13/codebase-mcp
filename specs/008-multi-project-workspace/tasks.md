@@ -87,16 +87,17 @@ Foundation tasks must complete before service layer. These establish the core da
 
 Service implementations are independent and can run in parallel. Each service operates on different modules.
 
-- [ ] **T006 [P]** Implement ProjectWorkspaceManager service in `src/services/workspace_manager.py`
+- [X] **T006 [P]** Implement ProjectWorkspaceManager service in `src/services/workspace_manager.py`
   - **Description**: Create workspace provisioning and validation service
   - **Methods**:
     - `ensure_workspace_exists(project_id: str) -> str`: Auto-provision schema on first use
     - `_schema_exists(schema_name: str) -> bool`: Check if schema exists (cached)
-    - `_create_schema(schema_name: str) -> None`: Create schema + table structure
+    - `_create_schema(schema_name: str) -> None`: Create schema + table structure + pgvector extension
     - `_register_workspace(project_id, schema_name) -> None`: Register in workspace_config
   - **Dependencies**: T001, T002, T005 (requires Pydantic models and registry schema)
   - **Traces to**: FR-009, FR-010, FR-011
   - **File**: `src/services/workspace_manager.py` (NEW)
+  - **Completed**: Commit 6c55a3f8
 
 - [ ] **T007 [P]** Implement WorkflowIntegrationClient service in `src/services/workflow_client.py`
   - **Description**: Create optional HTTP client for workflow-mcp integration
