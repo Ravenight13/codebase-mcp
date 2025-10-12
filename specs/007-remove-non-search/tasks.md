@@ -30,7 +30,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Validation Tasks
 
-- [ ] **T000** [VALIDATE] Verify prerequisites before starting
+- [X] **T000** [VALIDATE] Verify prerequisites before starting
   - Check 1: PostgreSQL running: `pg_isready -h localhost`
   - Check 2: Database exists: `psql -lqt | cut -d \| -f 1 | grep -qw codebase_mcp`
   - Check 3: Migration 002 applied: `cd alembic && alembic current` (expect revision from migration 002)
@@ -39,7 +39,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
   - Dependencies: None
   - Blocker for: T002 (renamed from old T002)
 
-- [ ] **T002** [VALIDATE] Run search integration tests to establish baseline
+- [X] **T002** [VALIDATE] Run search integration tests to establish baseline
   - File: `tests/integration/test_semantic_search.py`
   - Command: `pytest tests/integration/test_semantic_search.py -v`
   - Success: Record passing test count (use in T070)
@@ -47,7 +47,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
   - Dependencies: T000 must pass
   - Blocker for: T003 (must pass before proceeding)
 
-- [ ] **T003** [VALIDATE] Run indexing integration tests to establish baseline
+- [X] **T003** [VALIDATE] Run indexing integration tests to establish baseline
   - File: `tests/integration/test_repository_indexing.py`
   - Command: `pytest tests/integration/test_repository_indexing.py -v`
   - Success: All tests pass, record count
@@ -55,7 +55,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
   - Dependencies: T002 must pass
   - Blocker for: T004 (must pass before proceeding)
 
-- [ ] **T004** [VALIDATE] Verify server starts and registers 16 tools
+- [X] **T004** [VALIDATE] Verify server starts and registers 16 tools
   - File: `src/mcp/server_fastmcp.py`
   - Command: `python -m src.mcp.server_fastmcp` (inspect output)
   - Success: Server starts, 16 tools registered
@@ -73,31 +73,31 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Deletion Tasks
 
-- [ ] **T005** [DELETE] Delete task management tools file
+- [X] **T005** [DELETE] Delete task management tools file
   - File: `src/mcp/tools/tasks.py`
   - Command: `rm src/mcp/tools/tasks.py`
   - Contains: get_task, list_tasks, create_task, update_task (4 tools)
   - Dependencies: T004 checkpoint passed
 
-- [ ] **T006** [DELETE] Delete work item tools file
+- [X] **T006** [DELETE] Delete work item tools file
   - File: `src/mcp/tools/work_items.py`
   - Command: `rm src/mcp/tools/work_items.py`
   - Contains: create_work_item, update_work_item, query_work_item, list_work_items (4 tools)
   - Dependencies: T004 checkpoint passed
 
-- [ ] **T007** [DELETE] Delete vendor tracking tools file
+- [X] **T007** [DELETE] Delete vendor tracking tools file
   - File: `src/mcp/tools/tracking.py`
   - Command: `rm src/mcp/tools/tracking.py`
   - Contains: query_vendor_status, update_vendor_status, create_vendor (3 tools)
   - Dependencies: T004 checkpoint passed
 
-- [ ] **T008** [DELETE] Delete project configuration tools file
+- [X] **T008** [DELETE] Delete project configuration tools file
   - File: `src/mcp/tools/configuration.py`
   - Command: `rm src/mcp/tools/configuration.py`
   - Contains: get_project_configuration, update_project_configuration, record_deployment (3 tools)
   - Dependencies: T004 checkpoint passed
 
-- [ ] **T009** [UPDATE] Update tools module init to remove deleted tool imports
+- [X] **T009** [UPDATE] Update tools module init to remove deleted tool imports
   - File: `src/mcp/tools/__init__.py`
   - Action: Remove imports for tasks.py, work_items.py, tracking.py, configuration.py
   - Keep: indexing.py, search.py imports only
@@ -105,7 +105,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Git Commit
 
-- [ ] **T010** [GIT] Commit Sub-Phase 1 deletion
+- [X] **T010** [GIT] Commit Sub-Phase 1 deletion
   - Command: `git add src/mcp/tools/ && git commit -m "chore(tools): delete 14 non-search MCP tools"`
   - Message: Include "Intermediate breakage acceptable. Related: #007-remove-non-search Sub-Phase 1"
   - Files: 4 deletions (tasks.py, work_items.py, tracking.py, configuration.py), 1 update (__init__.py)
@@ -122,7 +122,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Analysis Task
 
-- [ ] **T011** [VALIDATE] Run import analysis on 7 ANALYZE files
+- [X] **T011** [VALIDATE] Run import analysis on 7 ANALYZE files
   - Files: `src/models/types.py`, `src/services/cache.py`, `src/services/validation.py`, `src/services/locking.py`, `src/services/git_history.py`, `src/services/markdown.py`, `src/services/fallback.py`
   - Command: Check imports in all search code AND infrastructure files
   - Example: `grep -r "from src.services.cache import" src/mcp/tools/indexing.py src/mcp/tools/search.py src/services/indexer.py src/services/searcher.py src/services/embedder.py src/services/chunker.py src/services/scanner.py src/models/repository.py src/models/code_chunk.py src/models/code_file.py src/mcp/server_fastmcp.py src/database/session.py src/config/settings.py`
@@ -134,118 +134,118 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Model Deletion Tasks
 
-- [ ] **T012** [P] [DELETE] Delete Task model
+- [X] **T012** [P] [DELETE] Delete Task model
   - File: `src/models/task.py`
   - Rationale: Exclusively used by task tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T013** [P] [DELETE] Delete Task schemas
+- [X] **T013** [P] [DELETE] Delete Task schemas
   - File: `src/models/task_schemas.py`
   - Rationale: Exclusively used by task tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T014** [P] [DELETE] Delete Task relations
+- [X] **T014** [P] [DELETE] Delete Task relations
   - File: `src/models/task_relations.py`
   - Rationale: Exclusively used by task tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T015** [P] [DELETE] Delete Tracking models
+- [X] **T015** [P] [DELETE] Delete Tracking models
   - File: `src/models/tracking.py`
   - Rationale: Contains Vendor, DeploymentEvent, ProjectConfig models
   - Dependencies: T011 analysis complete
 
-- [ ] **T016** [P] [DELETE] Delete Tracking models backup file
+- [X] **T016** [P] [DELETE] Delete Tracking models backup file
   - File: `src/models/tracking.py.backup`
   - Rationale: Backup of deleted tracking.py
   - Dependencies: T011 analysis complete
 
 ### Service Deletion Tasks
 
-- [ ] **T017** [P] [DELETE] Delete TaskService
+- [X] **T017** [P] [DELETE] Delete TaskService
   - File: `src/services/tasks.py`
   - Rationale: Exclusively used by task tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T018** [P] [DELETE] Delete WorkItemService
+- [X] **T018** [P] [DELETE] Delete WorkItemService
   - File: `src/services/work_items.py`
   - Rationale: Exclusively used by work item tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T019** [P] [DELETE] Delete VendorService
+- [X] **T019** [P] [DELETE] Delete VendorService
   - File: `src/services/vendor.py`
   - Rationale: Exclusively used by vendor tracking tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T020** [P] [DELETE] Delete DeploymentService
+- [X] **T020** [P] [DELETE] Delete DeploymentService
   - File: `src/services/deployment.py`
   - Rationale: Exclusively used by deployment tracking tools
   - Dependencies: T011 analysis complete
 
-- [ ] **T021** [P] [DELETE] Delete HierarchyService
+- [X] **T021** [P] [DELETE] Delete HierarchyService
   - File: `src/services/hierarchy.py`
   - Rationale: Exclusively used by work item hierarchy
   - Dependencies: T011 analysis complete
 
-- [ ] **T022** [P] [DELETE] Delete HierarchyService stub file
+- [X] **T022** [P] [DELETE] Delete HierarchyService stub file
   - File: `src/services/hierarchy.pyi`
   - Rationale: Type stub for deleted hierarchy.py
   - Dependencies: T011 analysis complete
 
 ### Utility Deletion Tasks (from ANALYZE files)
 
-- [ ] **T023** [P] [DELETE] Delete types utility
+- [X] **T023** [P] [DELETE] Delete types utility
   - File: `src/models/types.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T024** [P] [DELETE] Delete cache utility
+- [X] **T024** [P] [DELETE] Delete cache utility
   - File: `src/services/cache.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T025** [P] [DELETE] Delete validation utility
+- [X] **T025** [P] [DELETE] Delete validation utility
   - File: `src/services/validation.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T026** [P] [DELETE] Delete locking utility
+- [X] **T026** [P] [DELETE] Delete locking utility
   - File: `src/services/locking.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T027** [P] [DELETE] Delete git_history utility
+- [X] **T027** [P] [DELETE] Delete git_history utility
   - File: `src/services/git_history.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T028** [P] [DELETE] Delete git_history stub file
+- [X] **T028** [P] [DELETE] Delete git_history stub file
   - File: `src/services/git_history.pyi`
   - Rationale: Type stub for deleted git_history.py
   - Dependencies: T011 analysis complete
 
-- [ ] **T029** [P] [DELETE] Delete markdown utility
+- [X] **T029** [P] [DELETE] Delete markdown utility
   - File: `src/services/markdown.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T030** [P] [DELETE] Delete markdown stub file
+- [X] **T030** [P] [DELETE] Delete markdown stub file
   - File: `src/services/markdown.pyi`
   - Rationale: Type stub for deleted markdown.py
   - Dependencies: T011 analysis complete
 
-- [ ] **T031** [P] [DELETE] Delete fallback utility
+- [X] **T031** [P] [DELETE] Delete fallback utility
   - File: `src/services/fallback.py`
   - Rationale: NOT imported by search code (per import analysis)
   - Dependencies: T011 analysis complete
 
-- [ ] **T032** [P] [DELETE] Delete hierarchy README documentation
+- [X] **T032** [P] [DELETE] Delete hierarchy README documentation
   - File: `src/services/README_hierarchy.md`
   - Rationale: Documentation for deleted hierarchy.py
   - Dependencies: T011 analysis complete
 
 ### Git Commit
 
-- [ ] **T033** [GIT] Commit Sub-Phase 2 deletion
+- [X] **T033** [GIT] Commit Sub-Phase 2 deletion
   - Command: `git add src/models/ src/services/ && git commit -m "chore(models,services): delete non-search database operations"`
   - Message: Include "Intermediate breakage acceptable. Related: #007-remove-non-search Sub-Phase 2"
   - Files: 5 model deletions, 5 service deletions, 7 utility deletions, 4 stub/doc deletions (21 total)
@@ -262,32 +262,32 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Update Tasks
 
-- [ ] **T034** [UPDATE] Remove deleted tool imports from server.py
+- [X] **T034** [UPDATE] Remove deleted tool imports from server.py
   - File: `src/mcp/server_fastmcp.py`
   - Action: Remove imports for tasks, work_items, tracking, configuration tools
   - Keep: indexing, search tool imports only
   - Verify: Only @mcp.tool() decorators for index_repository and search_code remain
   - Dependencies: T033 commit complete
 
-- [ ] **T033b** [UPDATE] Fix pyproject.toml entry point
+- [X] **T033b** [UPDATE] Fix pyproject.toml entry point
   - File: `pyproject.toml`
   - Action: Change entry point from `codebase-mcp = "src.main:main"` to `codebase-mcp = "src.mcp.server_fastmcp:main"`
   - Rationale: Current entry point references non-existent src/main.py file
   - Dependencies: T033 commit complete
 
-- [ ] **T035** [UPDATE] Update database README to remove deleted table references
+- [X] **T035** [UPDATE] Update database README to remove deleted table references
   - File: `src/database/README.md`
   - Action: Remove documentation for tasks, work_items, vendors, deployments, project_config tables
   - Keep: Documentation for repositories, code_chunks tables only
   - Dependencies: T033 commit complete
 
-- [ ] **T036** [UPDATE] Clean up model module init
+- [X] **T036** [UPDATE] Clean up model module init
   - File: `src/models/__init__.py`
   - Action: Remove imports for task.py, task_schemas.py, task_relations.py, tracking.py
   - Keep: repository.py, code_chunk.py, code_file.py, database.py imports only
   - Dependencies: T033 commit complete
 
-- [ ] **T037** [UPDATE] Clean up service module init
+- [X] **T037** [UPDATE] Clean up service module init
   - File: `src/services/__init__.py`
   - Action: Remove imports for tasks.py, work_items.py, vendor.py, deployment.py, hierarchy.py
   - Keep: indexer.py, embedder.py, chunker.py, scanner.py, searcher.py imports only
@@ -295,7 +295,7 @@ This feature removes 14 non-search MCP tools through 4 atomic sub-phases with co
 
 ### Git Commit
 
-- [ ] **T038** [GIT] Commit Sub-Phase 3 cleanup
+- [X] **T038** [GIT] Commit Sub-Phase 3 cleanup
   - Command: `git add src/mcp/server_fastmcp.py pyproject.toml src/database/README.md src/models/__init__.py src/services/__init__.py && git commit -m "chore(server): verify 2-tool registration and cleanup imports"`
   - Message: Include "Intermediate breakage acceptable. Related: #007-remove-non-search Sub-Phase 3"
   - Files: 5 updates (server.py, pyproject.toml, README.md, 2 __init__.py files)
@@ -355,218 +355,218 @@ Note: Parallel deletion is optional - sequential deletion (T039-T078) is safer f
 
 ### Integration Test Deletion Tasks (Task-Related)
 
-- [ ] **T039** [P] [DELETE] Delete task lifecycle integration tests
+- [X] **T039** [P] [DELETE] Delete task lifecycle integration tests
   - File: `tests/integration/test_task_lifecycle.py`
   - Rationale: Tests deleted task tools
   - Dependencies: T038 commit complete
 
-- [ ] **T040** [P] [DELETE] Delete list tasks optimization integration tests
+- [X] **T040** [P] [DELETE] Delete list tasks optimization integration tests
   - File: `tests/integration/test_list_tasks_optimization.py`
   - Rationale: Tests deleted task tools
   - Dependencies: T038 commit complete
 
-- [ ] **T041** [P] [DELETE] Delete session detachment fix integration tests
+- [X] **T041** [P] [DELETE] Delete session detachment fix integration tests
   - File: `tests/integration/test_session_detachment_fix.py`
   - Rationale: Tests deleted task/session tools
   - Dependencies: T038 commit complete
 
-- [ ] **T042** [P] [DELETE] Delete filtered summary integration tests
+- [X] **T042** [P] [DELETE] Delete filtered summary integration tests
   - File: `tests/integration/test_filtered_summary.py`
   - Rationale: Tests deleted task tools
   - Dependencies: T038 commit complete
 
 ### Integration Test Deletion Tasks (Work Item-Related)
 
-- [ ] **T043** [P] [DELETE] Delete hierarchical work item query integration tests
+- [X] **T043** [P] [DELETE] Delete hierarchical work item query integration tests
   - File: `tests/integration/test_hierarchical_work_item_query.py`
   - Rationale: Tests deleted work item tools
   - Dependencies: T038 commit complete
 
-- [ ] **T044** [P] [DELETE] Delete concurrent work item updates integration tests
+- [X] **T044** [P] [DELETE] Delete concurrent work item updates integration tests
   - File: `tests/integration/test_concurrent_work_item_updates.py`
   - Rationale: Tests deleted work item tools
   - Dependencies: T038 commit complete
 
-- [ ] **T045** [P] [DELETE] Delete two-tier pattern integration tests
+- [X] **T045** [P] [DELETE] Delete two-tier pattern integration tests
   - File: `tests/integration/test_two_tier_pattern.py`
   - Rationale: Tests deleted work item tools
   - Dependencies: T038 commit complete
 
-- [ ] **T046** [P] [DELETE] Delete multi-client concurrent access integration tests
+- [X] **T046** [P] [DELETE] Delete multi-client concurrent access integration tests
   - File: `tests/integration/test_multi_client_concurrent_access.py`
   - Rationale: Tests deleted work item tools
   - Dependencies: T038 commit complete
 
 ### Integration Test Deletion Tasks (Vendor/Tracking-Related)
 
-- [ ] **T047** [P] [DELETE] Delete deployment event recording integration tests
+- [X] **T047** [P] [DELETE] Delete deployment event recording integration tests
   - File: `tests/integration/test_deployment_event_recording.py`
   - Rationale: Tests deleted deployment tracking tools
   - Dependencies: T038 commit complete
 
-- [ ] **T048** [P] [DELETE] Delete create vendor integration tests
+- [X] **T048** [P] [DELETE] Delete create vendor integration tests
   - File: `tests/integration/test_create_vendor_integration.py`
   - Rationale: Tests deleted vendor tracking tools
   - Dependencies: T038 commit complete
 
-- [ ] **T049** [P] [DELETE] Delete create vendor performance integration tests
+- [X] **T049** [P] [DELETE] Delete create vendor performance integration tests
   - File: `tests/integration/test_create_vendor_performance.py`
   - Rationale: Tests deleted vendor tracking tools
   - Dependencies: T038 commit complete
 
-- [ ] **T050** [P] [DELETE] Delete vendor query performance integration tests
+- [X] **T050** [P] [DELETE] Delete vendor query performance integration tests
   - File: `tests/integration/test_vendor_query_performance.py`
   - Rationale: Tests deleted vendor tracking tools
   - Dependencies: T038 commit complete
 
-- [ ] **T051** [P] [DELETE] Delete vendor case insensitive uniqueness integration tests
+- [X] **T051** [P] [DELETE] Delete vendor case insensitive uniqueness integration tests
   - File: `tests/integration/test_vendor_case_insensitive_uniqueness.py`
   - Rationale: Tests deleted vendor tracking tools
   - Dependencies: T038 commit complete
 
-- [ ] **T052** [P] [DELETE] Delete full status generation performance integration tests
+- [X] **T052** [P] [DELETE] Delete full status generation performance integration tests
   - File: `tests/integration/test_full_status_generation_performance.py`
   - Rationale: Tests deleted vendor tracking tools
   - Dependencies: T038 commit complete
 
 ### Integration Test Deletion Tasks (Utility-Related)
 
-- [ ] **T053** [P] [DELETE] Delete database unavailable fallback integration tests
+- [X] **T053** [P] [DELETE] Delete database unavailable fallback integration tests
   - File: `tests/integration/test_database_unavailable_fallback.py`
   - Rationale: Tests deleted fallback service
   - Dependencies: T038 commit complete
 
 ### Unit Test Deletion Tasks
 
-- [ ] **T054** [P] [DELETE] Delete base task fields unit tests
+- [X] **T054** [P] [DELETE] Delete base task fields unit tests
   - File: `tests/unit/test_base_task_fields.py`
   - Rationale: Tests deleted Task model
   - Dependencies: T038 commit complete
 
-- [ ] **T055** [P] [DELETE] Delete task summary model unit tests
+- [X] **T055** [P] [DELETE] Delete task summary model unit tests
   - File: `tests/unit/test_task_summary_model.py`
   - Rationale: Tests deleted Task schemas
   - Dependencies: T038 commit complete
 
-- [ ] **T056** [P] [DELETE] Delete hierarchical queries unit tests
+- [X] **T056** [P] [DELETE] Delete hierarchical queries unit tests
   - File: `tests/unit/test_hierarchical_queries.py`
   - Rationale: Tests deleted HierarchyService
   - Dependencies: T038 commit complete
 
-- [ ] **T057** [P] [DELETE] Delete locking service unit tests
+- [X] **T057** [P] [DELETE] Delete locking service unit tests
   - File: `tests/unit/test_locking_service.py`
   - Rationale: Tests deleted locking utility
   - Dependencies: T038 commit complete
 
-- [ ] **T058** [P] [DELETE] Delete vendor validation unit tests
+- [X] **T058** [P] [DELETE] Delete vendor validation unit tests
   - File: `tests/unit/test_vendor_validation.py`
   - Rationale: Tests deleted VendorService
   - Dependencies: T038 commit complete
 
-- [ ] **T059** [P] [DELETE] Delete status translation unit tests
+- [X] **T059** [P] [DELETE] Delete status translation unit tests
   - File: `tests/unit/test_status_translation.py`
   - Rationale: Tests deleted task/work item status translation
   - Dependencies: T038 commit complete
 
 ### Contract Test Deletion Tasks (Task-Related)
 
-- [ ] **T060** [P] [DELETE] Delete create task contract tests
+- [X] **T060** [P] [DELETE] Delete create task contract tests
   - File: `tests/contract/test_create_task_contract.py`
   - Rationale: Contract tests for deleted create_task tool
   - Dependencies: T038 commit complete
 
-- [ ] **T061** [P] [DELETE] Delete get task contract tests
+- [X] **T061** [P] [DELETE] Delete get task contract tests
   - File: `tests/contract/test_get_task_contract.py`
   - Rationale: Contract tests for deleted get_task tool
   - Dependencies: T038 commit complete
 
-- [ ] **T062** [P] [DELETE] Delete list tasks contract tests
+- [X] **T062** [P] [DELETE] Delete list tasks contract tests
   - File: `tests/contract/test_list_tasks_contract.py`
   - Rationale: Contract tests for deleted list_tasks tool
   - Dependencies: T038 commit complete
 
-- [ ] **T063** [P] [DELETE] Delete update task contract tests
+- [X] **T063** [P] [DELETE] Delete update task contract tests
   - File: `tests/contract/test_update_task_contract.py`
   - Rationale: Contract tests for deleted update_task tool
   - Dependencies: T038 commit complete
 
-- [ ] **T064** [P] [DELETE] Delete list tasks full details contract tests
+- [X] **T064** [P] [DELETE] Delete list tasks full details contract tests
   - File: `tests/contract/test_list_tasks_full_details.py`
   - Rationale: Contract tests for deleted list_tasks tool
   - Dependencies: T038 commit complete
 
-- [ ] **T065** [P] [DELETE] Delete list tasks summary contract tests
+- [X] **T065** [P] [DELETE] Delete list tasks summary contract tests
   - File: `tests/contract/test_list_tasks_summary.py`
   - Rationale: Contract tests for deleted list_tasks tool
   - Dependencies: T038 commit complete
 
 ### Contract Test Deletion Tasks (Work Item-Related)
 
-- [ ] **T066** [P] [DELETE] Delete list work items contract tests
+- [X] **T066** [P] [DELETE] Delete list work items contract tests
   - File: `tests/contract/test_list_work_items_contract.py`
   - Rationale: Contract tests for deleted work item tools
   - Dependencies: T038 commit complete
 
-- [ ] **T067** [P] [DELETE] Delete update work item contract tests
+- [X] **T067** [P] [DELETE] Delete update work item contract tests
   - File: `tests/contract/test_update_work_item_contract.py`
   - Rationale: Contract tests for deleted work item tools
   - Dependencies: T038 commit complete
 
-- [ ] **T068** [P] [DELETE] Delete work item CRUD contract tests
+- [X] **T068** [P] [DELETE] Delete work item CRUD contract tests
   - File: `tests/contract/test_work_item_crud_contract.py`
   - Rationale: Contract tests for deleted work item tools
   - Dependencies: T038 commit complete
 
 ### Contract Test Deletion Tasks (Vendor/Tracking-Related)
 
-- [ ] **T069** [P] [DELETE] Delete vendor tracking contract tests
+- [X] **T069** [P] [DELETE] Delete vendor tracking contract tests
   - File: `tests/contract/test_vendor_tracking_contract.py`
   - Rationale: Contract tests for deleted vendor tools
   - Dependencies: T038 commit complete
 
-- [ ] **T070** [P] [DELETE] Delete deployment tracking contract tests
+- [X] **T070** [P] [DELETE] Delete deployment tracking contract tests
   - File: `tests/contract/test_deployment_tracking_contract.py`
   - Rationale: Contract tests for deleted deployment tools
   - Dependencies: T038 commit complete
 
-- [ ] **T071** [P] [DELETE] Delete create vendor contract tests
+- [X] **T071** [P] [DELETE] Delete create vendor contract tests
   - File: `tests/contract/test_create_vendor_contract.py`
   - Rationale: Contract tests for deleted vendor tools
   - Dependencies: T038 commit complete
 
-- [ ] **T072** [P] [DELETE] Delete configuration contract tests
+- [X] **T072** [P] [DELETE] Delete configuration contract tests
   - File: `tests/contract/test_configuration_contract.py`
   - Rationale: Contract tests for deleted configuration tools
   - Dependencies: T038 commit complete
 
 ### Root-Level Test Deletion Tasks
 
-- [ ] **T073** [P] [DELETE] Delete cache service root tests
+- [X] **T073** [P] [DELETE] Delete cache service root tests
   - File: `tests/test_cache.py`
   - Rationale: Tests deleted cache.py service
   - Dependencies: T038 commit complete
 
-- [ ] **T074** [P] [DELETE] Delete MCP server root tests
+- [X] **T074** [P] [DELETE] Delete MCP server root tests
   - File: `tests/test_mcp_server.py`
   - Rationale: Tests all MCP tools (including deleted ones)
   - Dependencies: T038 commit complete
 
-- [ ] **T075** [P] [DELETE] Delete MCP tools root tests
+- [X] **T075** [P] [DELETE] Delete MCP tools root tests
   - File: `tests/test_mcp_tools.py`
   - Rationale: Tests all 6 tools including deleted task tools
   - Dependencies: T038 commit complete
 
-- [ ] **T076** [P] [DELETE] Delete tool handlers root tests
+- [X] **T076** [P] [DELETE] Delete tool handlers root tests
   - File: `tests/test_tool_handlers.py`
   - Rationale: Tests deleted task tool handlers
   - Dependencies: T038 commit complete
 
-- [ ] **T077** [P] [DELETE] Delete minimal MCP test script
+- [X] **T077** [P] [DELETE] Delete minimal MCP test script
   - File: `tests/test_minimal_mcp.py`
   - Rationale: Test harness for deleted tools
   - Dependencies: T038 commit complete
 
-- [ ] **T078** [P] [DELETE] Delete ultra minimal test script
+- [X] **T078** [P] [DELETE] Delete ultra minimal test script
   - File: `tests/ultra_minimal.py`
   - Rationale: Test harness no longer needed
   - Dependencies: T038 commit complete
@@ -583,7 +583,7 @@ Analysis: Manual inspection confirmed these root tests exercise deleted function
 
 ### Final Validation Tasks (ALL MUST PASS)
 
-- [ ] **T079** [VALIDATE] Run import checks on all preserved modules
+- [X] **T079** [VALIDATE] Run import checks on all preserved modules
   - Command: Check all preserved modules can import:
     * `python -c "import src.mcp.server_fastmcp"`
     * `python -c "import src.mcp.tools.indexing"`
@@ -603,35 +603,35 @@ Analysis: Manual inspection confirmed these root tests exercise deleted function
   - Dependencies: T039-T078 complete
   - Blocker for: T080 (critical gate)
 
-- [ ] **T080** [VALIDATE] Run mypy type checking with strict mode
+- [X] **T080** [VALIDATE] Run mypy type checking with strict mode
   - Command: `mypy --strict src/`
   - Success: "Success: no issues found" (zero type errors)
   - Additional Check: Verify no new `type: ignore` comments added (run `git diff main -- src/ | grep "type: ignore"` - expect zero results)
   - Dependencies: T079 passes
   - Blocker for: T081 (critical gate)
 
-- [ ] **T081** [VALIDATE] Run search integration tests (verify match baseline)
+- [X] **T081** [VALIDATE] Run search integration tests (verify match baseline)
   - File: `tests/integration/test_semantic_search.py`
   - Command: `pytest tests/integration/test_semantic_search.py -v`
   - Success: All tests pass, count MATCHES T002 baseline
   - Dependencies: T080 passes
   - Blocker for: T082 (critical gate)
 
-- [ ] **T082** [VALIDATE] Run indexing integration tests (verify match baseline)
+- [X] **T082** [VALIDATE] Run indexing integration tests (verify match baseline)
   - File: `tests/integration/test_repository_indexing.py`
   - Command: `pytest tests/integration/test_repository_indexing.py -v`
   - Success: All tests pass, count MATCHES T003 baseline
   - Dependencies: T081 passes
   - Blocker for: T083 (critical gate)
 
-- [ ] **T083** [VALIDATE] Verify server startup and 2-tool registration
+- [X] **T083** [VALIDATE] Verify server startup and 2-tool registration
   - File: `src/mcp/server_fastmcp.py`
   - Command: `python -m src.mcp.server_fastmcp` (inspect output)
   - Success: Server starts, exactly 2 tools registered (index_repository, search_code)
   - Dependencies: T082 passes
   - Blocker for: T084 (critical gate)
 
-- [ ] **T084** [VALIDATE] Run full test suite (all preserved tests)
+- [X] **T084** [VALIDATE] Run full test suite (all preserved tests)
   - Command: `pytest tests/ -v`
   - Success: All preserved tests pass (unit + integration + contract for search/indexing)
   - Dependencies: T083 passes
@@ -639,7 +639,7 @@ Analysis: Manual inspection confirmed these root tests exercise deleted function
 
 ### Git Commit
 
-- [ ] **T085** [GIT] Commit Sub-Phase 4 deletion and validation results
+- [X] **T085** [GIT] Commit Sub-Phase 4 deletion and validation results
   - Command: `git add tests/ && git commit -m "chore(tests): delete non-search tests and verify final state"`
   - Message: Include validation results (import ✅, mypy ✅, tests ✅, server ✅, tool count ✅)
   - Message: Include edge case validation checklist:
@@ -725,35 +725,35 @@ Task: "Delete HierarchyService stub (src/services/hierarchy.pyi)"
 **ALL criteria must be met before marking feature complete**:
 
 ### Prerequisites
-- [ ] T000: Database prerequisites verified (PostgreSQL running, database exists, migration 002 applied)
+- [X] T000: Database prerequisites verified (PostgreSQL running, database exists, migration 002 applied)
 
 ### Import Validation
-- [ ] T079: All modules import without errors (ZERO ModuleNotFoundError)
+- [X] T079: All modules import without errors (ZERO ModuleNotFoundError)
 
 ### Type Safety
-- [ ] T080: mypy --strict passes with 0 errors ("Success: no issues found")
+- [X] T080: mypy --strict passes with 0 errors ("Success: no issues found")
 
 ### Search Functionality Preservation
-- [ ] T081: All search integration tests pass (count matches T002 baseline)
-- [ ] T082: All indexing integration tests pass (count matches T003 baseline)
-- [ ] T084: Full test suite passes (all preserved tests)
+- [X] T081: All search integration tests pass (count matches T002 baseline)
+- [X] T082: All indexing integration tests pass (count matches T003 baseline)
+- [X] T084: Full test suite passes (all preserved tests)
 
 ### Server Health
-- [ ] T083: Server starts successfully (no exceptions)
-- [ ] T083: Server responds to MCP protocol
+- [X] T083: Server starts successfully (no exceptions)
+- [X] T083: Server responds to MCP protocol
 
 ### Tool Count Verification
-- [ ] T083: Exactly 2 tools registered (index_repository, search_code)
-- [ ] T083: No deleted tools present in registration
+- [X] T083: Exactly 2 tools registered (index_repository, search_code)
+- [X] T083: No deleted tools present in registration
 
 ### Git History
-- [ ] 4 atomic commits created (T010, T033, T038, T085)
-- [ ] Commit messages follow Conventional Commits format
-- [ ] Each commit references #007-remove-non-search
+- [X] 4 atomic commits created (T010, T033, T038, T085)
+- [X] Commit messages follow Conventional Commits format
+- [X] Each commit references #007-remove-non-search
 
 ### Code Reduction
-- [ ] ~60% code reduction achieved (outcome estimate, not hard requirement per clarification #4)
-- [ ] 16 → 2 MCP tools (87.5% tool reduction)
+- [X] ~60% code reduction achieved (outcome estimate, not hard requirement per clarification #4)
+- [X] 16 → 2 MCP tools (87.5% tool reduction)
 
 ---
 
