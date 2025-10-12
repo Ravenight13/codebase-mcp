@@ -34,6 +34,9 @@ from .code_file import CodeFile, CodeFileResponse
 # CodeChunk models and schemas with pgvector
 from .code_chunk import CodeChunk, CodeChunkCreate, CodeChunkResponse
 
+# Analytics models (non-essential tracking)
+from .analytics import ChangeEvent, EmbeddingMetadata
+
 # Export all models and schemas
 __all__ = [
     # Database infrastructure
@@ -54,4 +57,7 @@ __all__ = [
     "CodeChunk",
     "CodeChunkCreate",
     "CodeChunkResponse",
+    # Analytics
+    "ChangeEvent",
+    "EmbeddingMetadata",
 ]

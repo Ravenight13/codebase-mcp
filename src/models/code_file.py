@@ -30,7 +30,7 @@ from .database import Base
 if TYPE_CHECKING:
     from .code_chunk import CodeChunk
     from .repository import Repository
-    from .tracking import ChangeEvent
+    from .analytics import ChangeEvent
 
 
 class CodeFile(Base):
