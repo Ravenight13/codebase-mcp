@@ -39,6 +39,8 @@ from sqlalchemy.pool import NullPool, QueuePool
 from sqlalchemy.sql import text
 
 from src.mcp.mcp_logging import get_logger
+from src.config.settings import Settings, get_settings
+from src.services.workflow_client import WorkflowIntegrationClient
 
 # ==============================================================================
 # Module Configuration
@@ -100,6 +102,167 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+# ==============================================================================
+# Project Resolution Utility
+# ==============================================================================
+
+
+async def resolve_project_id(
+    explicit_id: str | None,
+    settings: Settings | None = None,
+) -> str | None:
+    """Resolve project_id with workflow-mcp fallback logic.
+
+    Implements the multi-project workspace resolution strategy with three-tier
+    fallback logic to determine which workspace context to use for database
+    operations.
+
+    Resolution Order (FR-012, FR-013, FR-014):
+        1. **Explicit ID**: If explicit_id is provided, return immediately
+           (highest priority, user-specified context)
+        2. **workflow-mcp Integration**: Query external workflow-mcp server
+           for active project context with timeout protection
+        3. **Default Workspace**: Fallback to None when workflow-mcp is
+           unavailable, timeout occurs, or no active project exists
+
+    Args:
+        explicit_id: Explicitly provided project identifier (from MCP tool parameters).
+                    Takes precedence over all other resolution methods.
+        settings: Optional Settings instance for workflow-mcp configuration.
+                 If not provided, uses global settings singleton.
+
+    Returns:
+        Resolved project_id string or None for default workspace:
+        - str: Project UUID from explicit_id or workflow-mcp
+        - None: Default workspace (backward compatibility)
+
+    Error Handling:
+        All workflow-mcp errors are handled gracefully by returning None:
+        - Timeout: workflow-mcp query exceeds timeout threshold
+        - Connection refused: workflow-mcp server not running
+        - Invalid response: malformed JSON or unexpected error
+
+    Performance:
+        - Explicit ID: <1μs (immediate return)
+        - workflow-mcp query: <1000ms (timeout protection)
+        - Default fallback: <1μs (no I/O)
+
+    Example:
+        >>> # Explicit ID takes precedence
+        >>> project = await resolve_project_id("client-a")
+        >>> assert project == "client-a"
+
+        >>> # Query workflow-mcp when no explicit ID
+        >>> project = await resolve_project_id(None)
+        >>> # Returns active project UUID or None if unavailable
+
+        >>> # Fallback to None when workflow-mcp timeout
+        >>> project = await resolve_project_id(None)
+        >>> if project is None:
+        ...     print("Using default workspace")
+
+    Constitutional Compliance:
+        - Principle II: Local-first (graceful degradation when workflow-mcp unavailable)
+        - Principle V: Production quality (comprehensive error handling)
+        - Principle VIII: Type safety (mypy --strict compliance)
+
+    Functional Requirements:
+        - FR-012: Detect workflow-mcp active project with caching
+        - FR-013: Handle workflow-mcp unavailability gracefully
+        - FR-014: TTL-based cache invalidation (60s default)
+    """
+    # 1. Explicit ID takes precedence (highest priority)
+    if explicit_id is not None:
+        logger.debug(
+            "Using explicit project_id",
+            extra={
+                "context": {
+                    "operation": "resolve_project_id",
+                    "project_id": explicit_id,
+                    "resolution_method": "explicit",
+                }
+            },
+        )
+        return explicit_id
+
+    # 2. Try workflow-mcp integration (if configured)
+    if settings is None:
+        settings = get_settings()
+
+    if settings.workflow_mcp_url is not None:
+        logger.debug(
+            "Querying workflow-mcp for active project",
+            extra={
+                "context": {
+                    "operation": "resolve_project_id",
+                    "workflow_mcp_url": str(settings.workflow_mcp_url),
+                    "timeout": settings.workflow_mcp_timeout,
+                }
+            },
+        )
+
+        client = WorkflowIntegrationClient(
+            base_url=str(settings.workflow_mcp_url),
+            timeout=settings.workflow_mcp_timeout,
+            cache_ttl=settings.workflow_mcp_cache_ttl,
+        )
+
+        try:
+            active_project = await client.get_active_project()
+
+            if active_project is not None:
+                logger.info(
+                    "Resolved project from workflow-mcp",
+                    extra={
+                        "context": {
+                            "operation": "resolve_project_id",
+                            "project_id": active_project,
+                            "resolution_method": "workflow_mcp",
+                        }
+                    },
+                )
+                return active_project
+            else:
+                logger.debug(
+                    "workflow-mcp returned no active project, using default workspace",
+                    extra={
+                        "context": {
+                            "operation": "resolve_project_id",
+                            "resolution_method": "default_fallback",
+                        }
+                    },
+                )
+
+        except Exception as e:
+            logger.warning(
+                "Failed to query workflow-mcp, using default workspace",
+                extra={
+                    "context": {
+                        "operation": "resolve_project_id",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "resolution_method": "default_fallback",
+                    }
+                },
+            )
+
+        finally:
+            # Always close client connection to prevent resource leaks
+            await client.close()
+
+    # 3. Fallback to default workspace
+    logger.debug(
+        "Using default workspace (no explicit ID, workflow-mcp unavailable/disabled)",
+        extra={
+            "context": {
+                "operation": "resolve_project_id",
+                "resolution_method": "default_fallback",
+            }
+        },
+    )
+    return None
 
 
 # ==============================================================================
@@ -468,6 +631,7 @@ __all__ = [
     "SessionLocal",
     "get_session",
     "get_session_factory",
+    "resolve_project_id",
     "check_database_health",
     "init_db_connection",
     "close_db_connection",
