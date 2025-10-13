@@ -1,0 +1,626 @@
+# Documentation Structure Specification
+# Feature: 010-v2-documentation
+# Version: v2.0
+# Date: 2025-10-13
+
+# This YAML contract defines the structure specification for all 5 documentation artifacts
+# in the codebase-mcp v2.0 documentation overhaul. It specifies required sections, validation
+# rules, audience mappings, and quality criteria based on research.md decisions.
+
+documentation_artifacts:
+  readme:
+    type: "README"
+    file_path: "README.md"
+    audience:
+      - new_user
+      - existing_user
+    description: "Primary entry point for all users, introducing codebase-mcp v2.0 with installation, quick start, and navigation to specialized guides"
+
+    required_sections:
+      - section_id: "title_and_description"
+        heading: "# Codebase MCP Server"
+        content: "Project title with brief description (1-2 sentences)"
+        validation: "Must accurately describe 2-tool semantic search functionality"
+
+      - section_id: "whats_new_v2"
+        heading: "## What's New in v2.0"
+        content: "Breaking changes summary with link to migration guide"
+        validation: "Must link to docs/migration/v1-to-v2-migration.md"
+        required_for_audiences: ["existing_user"]
+
+      - section_id: "features"
+        heading: "## Features"
+        content: "List of 2 tools with multi-project support explanation"
+        validation: "Must list exactly 2 tools: index_repository, search_code (FR-001)"
+
+      - section_id: "installation"
+        heading: "## Installation"
+        content: "Prerequisites, installation commands, verification steps"
+        validation: "Must document PostgreSQL 14+, Python 3.11+, pip install command (FR-004)"
+
+      - section_id: "quick_start"
+        heading: "## Quick Start"
+        content: "Basic usage (default project), multi-project usage examples"
+        validation: "Must show default project behavior and project_id parameter usage (FR-002)"
+
+      - section_id: "workflow_integration"
+        heading: "## workflow-mcp Integration (Optional)"
+        content: "Explanation of optional workflow-mcp integration with standalone usage documented first"
+        validation: "Must mark workflow-mcp as optional, document standalone usage first (FR-003)"
+
+      - section_id: "documentation"
+        heading: "## Documentation"
+        content: "Links to 4 specialized guides with brief descriptions"
+        validation: "Must link to migration guide, configuration guide, architecture docs, API reference"
+
+      - section_id: "contributing"
+        heading: "## Contributing"
+        content: "Link to architecture docs for maintainers"
+        validation: "Must link to docs/architecture/multi-project-design.md"
+
+    validation_rules:
+      - rule_id: "tool_count_accuracy"
+        description: "README must document exactly 2 tools, no more"
+        requirement: "FR-001"
+        validation_method: "Manual count of tools listed in Features section"
+
+      - rule_id: "multi_project_explanation"
+        description: "README must explain multi-project support with use case examples"
+        requirement: "FR-002"
+        validation_method: "Manual verification of project_id parameter explanation in Quick Start"
+
+      - rule_id: "workflow_optional"
+        description: "workflow-mcp integration must be marked optional with standalone usage first"
+        requirement: "FR-003"
+        validation_method: "Manual verification of workflow-mcp section heading and content order"
+
+      - rule_id: "installation_accuracy"
+        description: "Installation instructions must match v2.0 requirements"
+        requirement: "FR-004"
+        validation_method: "Manual testing of installation procedure"
+
+  migration_guide:
+    type: "Migration Guide"
+    file_path: "docs/migration/v1-to-v2-migration.md"
+    audience:
+      - existing_user
+    description: "Complete upgrade guide for v1.x users with breaking changes, step-by-step procedures, and rollback instructions"
+
+    required_sections:
+      - section_id: "title_and_overview"
+        heading: "# Migration Guide: Upgrading from v1.x to v2.0"
+        content: "Purpose, scope, target audience, data preservation policy"
+        validation: "Must explain v1.x data discarded, repositories preserved (FR-019)"
+
+      - section_id: "breaking_changes_summary"
+        heading: "## Breaking Changes Summary"
+        content: "All breaking changes listed upfront before procedures"
+        validation: "Must appear before Prerequisites section (FR-009)"
+        subsections:
+          - "### Tool API Changes (14 tools removed, 2 tools modified)"
+          - "### Database Schema Changes (9 tables dropped, project_id added)"
+          - "### Environment Variable Changes (new required variables)"
+          - "### Data Preservation Policy (repositories preserved, v1.x data discarded)"
+
+      - section_id: "removed_tools_list"
+        heading: "### Removed Tools (14 total)"
+        content: "Explicit list of all 14 removed tools by name with v2.0 removal notation"
+        validation: "Must list all 14 tools: create_project, switch_project, get_active_project, list_projects, register_entity_type, create_entity, query_entities, update_entity, delete_entity, update_entity_type_schema, create_work_item, update_work_item, query_work_items, get_work_item_hierarchy (FR-010)"
+
+      - section_id: "prerequisites"
+        heading: "## Prerequisites"
+        content: "Requirements before starting migration"
+        validation: "Must include v1.x running, PostgreSQL access, disk space, downtime window"
+
+      - section_id: "pre_migration_checklist"
+        heading: "## Pre-Migration Checklist"
+        content: "Checklist of preparatory tasks"
+        validation: "Must include review breaking changes, verify versions, test rollback in non-prod"
+
+      - section_id: "backup_procedures"
+        heading: "## Backup Procedures"
+        content: "Exact commands for database and configuration backup"
+        validation: "Must provide exact pg_dump command with date formatting (FR-015)"
+
+      - section_id: "upgrade_procedure"
+        heading: "## Upgrade Procedure"
+        content: "Step-by-step upgrade from backup through validation"
+        validation: "Must include stop server, update deps, run migration script, update config, restart, verify (FR-014, FR-018)"
+
+      - section_id: "post_migration_validation"
+        heading: "## Post-Migration Validation"
+        content: "Commands to verify v2.0 functionality working"
+        validation: "Must provide test commands for index_repository and search_code (FR-017)"
+
+      - section_id: "diagnostic_commands"
+        heading: "## Diagnostic Commands"
+        content: "Commands to detect partial migration state"
+        validation: "Must provide SQL queries checking table existence, schema version (FR-036)"
+
+      - section_id: "rollback_procedure"
+        heading: "## Rollback Procedure"
+        content: "Complete restoration to v1.x with v1.x functionality and data intact"
+        validation: "Must cover stop server, restore DB backup, restore config backup, reinstall v1.x, start server, verify v1.x restoration (FR-016)"
+
+      - section_id: "rollback_validation"
+        heading: "## Rollback Validation"
+        content: "Commands to confirm v1.x restoration successful"
+        validation: "Must provide validation commands verifying v1.x tools work (FR-017)"
+
+      - section_id: "troubleshooting"
+        heading: "## Troubleshooting"
+        content: "Common issues and solutions"
+        validation: "Must address migration script failures, missing env vars, PostgreSQL connection errors, data validation failures"
+
+      - section_id: "faq"
+        heading: "## Frequently Asked Questions"
+        content: "Common questions about migration"
+        validation: "Must answer: What data is lost? Can I migrate incrementally? How long does migration take? (Note: FR-020 defers duration estimates to Phase 06)"
+
+    validation_rules:
+      - rule_id: "breaking_changes_first"
+        description: "Breaking changes must be documented upfront before procedures"
+        requirement: "FR-009"
+        validation_method: "Manual verification of section order"
+
+      - rule_id: "removed_tools_complete"
+        description: "All 14 removed tools must be listed by name"
+        requirement: "FR-010"
+        validation_method: "Manual count and name verification"
+
+      - rule_id: "schema_changes_documented"
+        description: "Database schema changes (9 tables dropped, project_id added) documented"
+        requirement: "FR-011"
+        validation_method: "Manual verification in Breaking Changes section"
+
+      - rule_id: "api_changes_documented"
+        description: "API changes (project_id parameter added to both tools) documented"
+        requirement: "FR-012"
+        validation_method: "Manual verification in Breaking Changes section"
+
+      - rule_id: "env_vars_documented"
+        description: "New environment variables required for v2.0 listed"
+        requirement: "FR-013"
+        validation_method: "Manual verification in Breaking Changes section"
+
+      - rule_id: "backup_commands_exact"
+        description: "Backup procedures include exact commands with explanations"
+        requirement: "FR-015"
+        validation_method: "Manual testing of pg_dump command"
+
+      - rule_id: "rollback_complete"
+        description: "Rollback procedure provides complete restoration to v1.x"
+        requirement: "FR-016"
+        validation_method: "Manual testing of rollback procedure in test environment"
+
+      - rule_id: "validation_steps_provided"
+        description: "Validation steps confirm successful upgrade and rollback"
+        requirement: "FR-017"
+        validation_method: "Manual testing of validation commands"
+
+      - rule_id: "migration_script_documented"
+        description: "Migration script execution procedure documented"
+        requirement: "FR-018"
+        validation_method: "Manual verification in Upgrade Procedure section"
+
+      - rule_id: "data_preservation_explained"
+        description: "Data preservation guarantees (repositories preserved, v1.x data discarded) explained"
+        requirement: "FR-019"
+        validation_method: "Manual verification in Breaking Changes and Overview"
+
+      - rule_id: "diagnostic_commands_provided"
+        description: "Diagnostic commands detect partial migration state"
+        requirement: "FR-036"
+        validation_method: "Manual testing of diagnostic SQL queries"
+
+  configuration_guide:
+    type: "Configuration Guide"
+    file_path: "docs/configuration/production-config.md"
+    audience:
+      - administrator
+    description: "Comprehensive configuration reference for production deployments with environment variables, connection pool tuning, and PostgreSQL optimization"
+
+    required_sections:
+      - section_id: "title_and_overview"
+        heading: "# Configuration Guide: Production Deployment"
+        content: "Purpose, quick links to sections"
+        validation: "Must include TOC with links to major sections"
+
+      - section_id: "env_vars_reference"
+        heading: "## Environment Variables Reference"
+        content: "Tables of all environment variables with defaults"
+        validation: "Must use table format with columns: Variable, Required, Default, Description, Example (FR-021)"
+        subsections:
+          - "### Core Configuration (DATABASE_URL, OLLAMA_BASE_URL, EMBEDDING_MODEL)"
+          - "### Multi-Project Configuration (MAX_PROJECTS, MAX_CONNECTIONS_PER_POOL, PROJECT_POOL_TIMEOUT)"
+          - "### workflow-mcp Integration (WORKFLOW_MCP_URL, WORKFLOW_MCP_TIMEOUT)"
+
+      - section_id: "connection_pool_tuning"
+        heading: "## Connection Pool Tuning"
+        content: "Explanation of MAX_PROJECTS and MAX_CONNECTIONS_PER_POOL with tradeoffs"
+        validation: "Must document calculation formula, tradeoffs, recommendations (FR-022, FR-023)"
+
+      - section_id: "postgresql_calculation"
+        heading: "## PostgreSQL max_connections Requirement"
+        content: "Calculation formula with examples"
+        validation: "Must provide formula: Total = MAX_PROJECTS × MAX_CONNECTIONS_PER_POOL + buffer (FR-024)"
+
+      - section_id: "postgresql_tuning"
+        heading: "## PostgreSQL Configuration"
+        content: "Production tuning parameters with rationale"
+        validation: "Must provide postgresql.conf settings for production: shared_buffers, effective_cache_size, work_mem, max_connections (FR-025)"
+
+      - section_id: "monitoring"
+        heading: "## Monitoring & Health Checks"
+        content: "Connection pool metrics and health indicators"
+        validation: "Must document SQL queries for connection monitoring, pool eviction tracking (FR-038)"
+
+      - section_id: "validation_checklist"
+        heading: "## Configuration Validation Checklist"
+        content: "Pre-deployment validation commands"
+        validation: "Must provide checklist with commands testing DATABASE_URL, OLLAMA_BASE_URL, model availability, max_connections calculation, test indexing, test search (FR-027)"
+
+      - section_id: "troubleshooting"
+        heading: "## Troubleshooting"
+        content: "Common configuration issues and solutions"
+        validation: "Must address: 'Too many connections' error, slow query performance, frequent pool evictions"
+
+    validation_rules:
+      - rule_id: "env_vars_table_format"
+        description: "All environment variables documented in table format with defaults"
+        requirement: "FR-021"
+        validation_method: "Manual verification of table structure and completeness"
+
+      - rule_id: "max_projects_documented"
+        description: "MAX_PROJECTS limit and connection pool implications explained"
+        requirement: "FR-022"
+        validation_method: "Manual verification of tradeoffs and recommendations"
+
+      - rule_id: "max_connections_per_pool_documented"
+        description: "MAX_CONNECTIONS_PER_POOL tuning guidance with tradeoffs provided"
+        requirement: "FR-023"
+        validation_method: "Manual verification of tradeoffs and recommendations"
+
+      - rule_id: "calculation_formula_provided"
+        description: "PostgreSQL max_connections calculation formula provided with examples"
+        requirement: "FR-024"
+        validation_method: "Manual verification of formula and scenario table accuracy"
+
+      - rule_id: "postgresql_tuning_provided"
+        description: "PostgreSQL tuning parameters recommended for production"
+        requirement: "FR-025"
+        validation_method: "Manual testing of postgresql.conf settings in staging"
+
+      - rule_id: "workflow_integration_vars_documented"
+        description: "workflow-mcp integration environment variables documented"
+        requirement: "FR-026"
+        validation_method: "Manual verification in Multi-Project Configuration table"
+
+      - rule_id: "validation_checklist_provided"
+        description: "Configuration validation checklist with commands provided"
+        requirement: "FR-027"
+        validation_method: "Manual testing of checklist commands in staging"
+
+      - rule_id: "monitoring_documented"
+        description: "Connection pool monitoring metrics and health indicators documented"
+        requirement: "FR-038"
+        validation_method: "Manual testing of monitoring SQL queries"
+
+  architecture_docs:
+    type: "Architecture Documentation"
+    file_path: "docs/architecture/multi-project-design.md"
+    audience:
+      - maintainer
+      - developer
+    description: "Technical overview of codebase-mcp v2.0 architecture covering database-per-project strategy, connection pool management, and workflow-mcp integration"
+
+    required_sections:
+      - section_id: "title_and_overview"
+        heading: "# Architecture: Multi-Project Design"
+        content: "High-level description of system components and design philosophy"
+        validation: "Must introduce multi-project architecture motivation"
+
+      - section_id: "architecture_diagram"
+        heading: "## Multi-Project Architecture Diagram"
+        content: "Mermaid diagram showing components: MCP Client, codebase-mcp Server, Connection Pool Manager, workflow-mcp Server, PostgreSQL databases"
+        validation: "Must use Mermaid graph TB format with component responsibilities documented (FR-028)"
+
+      - section_id: "database_per_project_strategy"
+        heading: "## Database-Per-Project Strategy"
+        content: "Explanation of database naming convention with examples"
+        validation: "Must provide naming pattern: codebase_{sanitized_project_id} with 5-10 examples showing sanitization rules (FR-029)"
+
+      - section_id: "connection_pool_design"
+        heading: "## Connection Pool Design"
+        content: "Pool lifecycle, LRU eviction policy, configuration"
+        validation: "Must include state diagram of pool lifecycle and LRU eviction timeline example (FR-030)"
+
+      - section_id: "workflow_integration_architecture"
+        heading: "## workflow-mcp Integration Architecture"
+        content: "Sequence diagram showing integration points and fallback behavior"
+        validation: "Must use Mermaid sequenceDiagram showing automatic project detection and fallback to default (FR-031)"
+
+      - section_id: "component_interactions"
+        heading: "## Component Interactions"
+        content: "Indexing flow and search flow diagrams"
+        validation: "Must show complete flow from MCP client through database"
+
+      - section_id: "design_rationale"
+        heading: "## Design Rationale Summary"
+        content: "Why multi-project? Why database-per-project? Why connection pool manager? Why optional workflow-mcp?"
+        validation: "Must answer all four 'why' questions with rationale"
+
+    validation_rules:
+      - rule_id: "architecture_diagram_provided"
+        description: "Multi-project architecture diagram showing components included"
+        requirement: "FR-028"
+        validation_method: "Manual verification of Mermaid diagram completeness"
+
+      - rule_id: "database_naming_documented"
+        description: "Database-per-project naming strategy with examples documented"
+        requirement: "FR-029"
+        validation_method: "Manual verification of naming pattern and sanitization rules"
+
+      - rule_id: "connection_pool_explained"
+        description: "Connection pool design and LRU eviction behavior documented"
+        requirement: "FR-030"
+        validation_method: "Manual verification of lifecycle diagram and eviction timeline"
+
+      - rule_id: "workflow_integration_explained"
+        description: "workflow-mcp integration architecture with diagrams explained"
+        requirement: "FR-031"
+        validation_method: "Manual verification of sequence diagram and fallback behavior"
+
+  api_reference:
+    type: "API Reference"
+    file_path: "docs/api/tool-reference.md"
+    audience:
+      - developer
+      - new_user
+    description: "Complete reference for codebase-mcp v2.0 MCP tools with parameters, return values, examples, and removed tools list"
+
+    required_sections:
+      - section_id: "title_and_overview"
+        heading: "# API Reference: MCP Tools"
+        content: "Overview of 2 MCP tools with breaking changes callout"
+        validation: "Must list exactly 2 tools and link to Removed Tools section"
+
+      - section_id: "index_repository"
+        heading: "## index_repository"
+        content: "Complete tool documentation: parameters, return value, examples, error handling"
+        validation: "Must document project_id parameter with default behavior (FR-005)"
+        subsections:
+          - "### Parameters (table format)"
+          - "### Parameter Details (prose)"
+          - "### Return Value (JSON schema + table)"
+          - "### Examples (basic, multi-project, force re-index)"
+          - "### Error Handling (table)"
+
+      - section_id: "search_code"
+        heading: "## search_code"
+        content: "Complete tool documentation: parameters, return value, examples, error handling"
+        validation: "Must document project_id parameter with default behavior (FR-006)"
+        subsections:
+          - "### Parameters (table format)"
+          - "### Parameter Details (prose)"
+          - "### Return Value (JSON schema + table)"
+          - "### Examples (basic, multi-project, filtered)"
+          - "### Error Handling (table)"
+
+      - section_id: "removed_tools"
+        heading: "## Removed Tools (v2.0)"
+        content: "List of all 14 removed tools with v2.0 removal notation and migration link"
+        validation: "Must list all 14 tools by name with '❌ Removed in v2.0' notation and link to workflow-mcp (FR-007, FR-008)"
+        subsections:
+          - "### Removed Project Management Tools (4 tools)"
+          - "### Removed Entity Management Tools (6 tools)"
+          - "### Removed Work Item Management Tools (4 tools)"
+
+      - section_id: "tool_discovery"
+        heading: "## Tool Discovery"
+        content: "MCP tool discovery via SSE with JSON schema validation"
+        validation: "Must explain tools/list request and inputSchema validation"
+
+    validation_rules:
+      - rule_id: "index_repository_documented"
+        description: "index_repository tool with project_id parameter showing default behavior documented"
+        requirement: "FR-005"
+        validation_method: "Manual verification of parameter table and examples"
+
+      - rule_id: "search_code_documented"
+        description: "search_code tool with project_id parameter showing default behavior documented"
+        requirement: "FR-006"
+        validation_method: "Manual verification of parameter table and examples"
+
+      - rule_id: "removed_tools_marked"
+        description: "All references to 14 deleted tools removed or marked 'Removed in v2.0'"
+        requirement: "FR-007"
+        validation_method: "Manual verification of removal notation"
+
+      - rule_id: "removed_tools_listed"
+        description: "List of removed tools with v2.0 removal notation provided"
+        requirement: "FR-008"
+        validation_method: "Manual count and verification of 14 tools"
+
+# Validation Criteria (Cross-Artifact)
+validation_criteria:
+  link_checking:
+    - rule: "All internal links use relative paths and resolve to existing files"
+      requirement: "FR-032"
+      method: "Manual link validation procedure in quickstart.md"
+
+    - rule: "All external links return 200 status (not 404)"
+      requirement: "FR-032"
+      method: "Manual URL testing in browser"
+
+    - rule: "All anchor links reference existing headings"
+      requirement: "FR-032"
+      method: "Manual verification of heading existence"
+
+    - rule: "Link inventory spreadsheet tracks all links with status"
+      requirement: "FR-032"
+      method: "Spreadsheet completion and 100% pass rate"
+
+  code_examples:
+    - rule: "All bash commands execute successfully with expected output"
+      requirement: "FR-033"
+      method: "Manual execution of each command in terminal"
+
+    - rule: "All SQL queries execute successfully against test database"
+      requirement: "FR-033"
+      method: "Manual execution of each query with psql"
+
+    - rule: "All JSON examples validate against schemas"
+      requirement: "FR-033"
+      method: "Manual validation with jq or MCP client"
+
+    - rule: "All configuration examples tested in staging environment"
+      requirement: "FR-033"
+      method: "Manual application and verification in staging"
+
+    - rule: "Code example test log tracks all examples with status"
+      requirement: "FR-033"
+      method: "Test log completion and 100% pass rate"
+
+  terminology_consistency:
+    - rule: "Glossary terms (project_id, connection pool, LRU eviction, database-per-project, workflow-mcp integration, default project) used consistently"
+      requirement: "FR-034"
+      method: "Manual review with glossary.md reference"
+
+    - rule: "Technical terms match implementation (codebase-mcp, PostgreSQL, FastMCP)"
+      requirement: "FR-034"
+      method: "Manual review for capitalization and spelling"
+
+    - rule: "Abbreviations defined on first use"
+      requirement: "FR-034"
+      method: "Manual review of first mentions"
+
+  formatting_consistency:
+    - rule: "Markdown style guide followed throughout"
+      requirement: "FR-035"
+      method: "Manual review against project markdown style guide"
+
+    - rule: "Code blocks have language specifiers (bash, sql, json, python, yaml, ini)"
+      requirement: "FR-035"
+      method: "Manual review of all code blocks"
+
+    - rule: "Tables formatted consistently with pipes and alignment"
+      requirement: "FR-035"
+      method: "Manual review of table formatting"
+
+    - rule: "Heading hierarchy correct (no skipped levels H1→H3)"
+      requirement: "FR-035"
+      method: "Manual review of heading structure"
+
+    - rule: "File names follow convention (lowercase-with-hyphens.md)"
+      requirement: "FR-035"
+      method: "Manual verification of file paths"
+
+# Audience Definitions
+audiences:
+  - id: new_user
+    description: "Developers installing codebase-mcp for first time with no prior version experience"
+    primary_artifacts: ["README", "API Reference"]
+    needs:
+      - "Clear installation instructions"
+      - "Quick start examples"
+      - "Basic usage patterns"
+      - "Tool parameter documentation"
+
+  - id: existing_user
+    description: "Users upgrading from v1.x to v2.0 with production deployments"
+    primary_artifacts: ["README", "Migration Guide", "API Reference"]
+    needs:
+      - "Breaking changes summary"
+      - "Step-by-step upgrade procedure"
+      - "Rollback instructions"
+      - "Data preservation policy"
+      - "Removed tools list with alternatives"
+
+  - id: administrator
+    description: "System administrators preparing production deployments and tuning configuration"
+    primary_artifacts: ["Configuration Guide", "Migration Guide"]
+    needs:
+      - "Environment variable reference"
+      - "Connection pool tuning guidance"
+      - "PostgreSQL optimization parameters"
+      - "Monitoring and health checks"
+      - "Validation checklist"
+
+  - id: developer
+    description: "Developers integrating codebase-mcp into applications or building on workflow-mcp ecosystem"
+    primary_artifacts: ["API Reference", "Architecture Documentation"]
+    needs:
+      - "Complete tool parameter documentation"
+      - "workflow-mcp integration examples"
+      - "Return value schemas"
+      - "Error handling patterns"
+      - "Integration architecture diagrams"
+
+  - id: maintainer
+    description: "Contributors to codebase-mcp project needing to understand architecture and make contributions"
+    primary_artifacts: ["Architecture Documentation", "Configuration Guide"]
+    needs:
+      - "Architecture diagrams and design rationale"
+      - "Database-per-project strategy explanation"
+      - "Connection pool design details"
+      - "Component interaction flows"
+      - "Development environment setup"
+
+# Glossary Terms (FR-034)
+canonical_terms:
+  - term: "project_id"
+    definition: "String identifier for multi-project isolation, sanitized to PostgreSQL database name format"
+    usage: "Always lowercase, use 'project_id' not 'project ID' or 'projectId'"
+
+  - term: "connection pool"
+    definition: "Set of open PostgreSQL connections maintained for a specific project to amortize connection overhead"
+    usage: "Always 'connection pool' not 'conn pool' or 'connection-pool'"
+
+  - term: "LRU eviction"
+    definition: "Least Recently Used eviction policy for removing connection pools when MAX_PROJECTS limit exceeded"
+    usage: "Spell out on first use: 'LRU (Least Recently Used) eviction', then 'LRU eviction'"
+
+  - term: "database-per-project"
+    definition: "Architectural strategy where each project gets isolated PostgreSQL database"
+    usage: "Always 'database-per-project' (hyphenated) not 'database per project'"
+
+  - term: "workflow-mcp integration"
+    definition: "Optional automatic project detection via workflow-mcp server's get_active_project tool"
+    usage: "Always mark as optional, use 'workflow-mcp' (lowercase 'w') not 'Workflow-MCP' or 'WorkflowMCP'"
+
+  - term: "default project"
+    definition: "Project named 'default' used when no project_id specified and workflow-mcp unavailable"
+    usage: "Always 'default project' not 'default-project', database name is 'codebase_default'"
+
+# Success Metrics (from spec.md Success Criteria)
+success_metrics:
+  - metric_id: "SC-001"
+    description: "100% of documented tool names match actual implementation (exactly 2 tools with correct names)"
+    target: "2 tools documented, 0 discrepancies"
+    measurement: "Manual count of tools in README and API Reference"
+
+  - metric_id: "SC-002"
+    description: "100% of removed tools (14 total) are documented in migration guide with names"
+    target: "14 tools listed by name with removal notation"
+    measurement: "Manual count in Migration Guide and API Reference"
+
+  - metric_id: "SC-003"
+    description: "0 broken links in all documentation files (manually verified during authoring)"
+    target: "0 broken links"
+    measurement: "Link inventory spreadsheet with 100% pass rate"
+
+  - metric_id: "SC-004"
+    description: "100% of code examples are tested and execute successfully before publication"
+    target: "All examples pass manual testing"
+    measurement: "Code example test log with 100% pass rate"
+
+  - metric_id: "SC-005"
+    description: "100% of breaking changes are documented with corresponding migration steps"
+    target: "All breaking changes mapped to migration steps"
+    measurement: "Manual verification of breaking changes vs migration steps"
+
+  - metric_id: "SC-006"
+    description: "100% of environment variables are documented with default values and descriptions"
+    target: "All env vars in configuration guide tables"
+    measurement: "Manual comparison of implementation vs documentation"

@@ -1,59 +1,66 @@
-# codebase-mcp
-
-> **⚠️ REFACTORING IN PROGRESS**
-> This MCP is being refactored to focus exclusively on semantic code search
-> with multi-project support. See [`docs/REFACTORING-JOURNAL.md`](docs/REFACTORING-JOURNAL.md) for status.
-
-## Current Refactoring Status
-
-**Phase 0: Preparation** 🚧 (In Progress)
-- [x] Refactor branch created
-- [x] Rollback procedures established
-- [ ] Performance baseline collected
-- [ ] Database permissions validated
-
-**Phases 1-12: Implementation** ⏳ (Pending)
-- Database refactor (per-project databases)
-- Remove non-search features (14 tools → 0)
-- Keep core search tools (2 tools)
-- Add multi-project support
-- Target: 16 → 2 tools, 4500 → 1800 LOC
-
-## Emergency Rollback
-
-If issues occur during refactoring:
-
-```bash
-./scripts/emergency_rollback.sh
-```
-
-This restores the codebase to tag: `backup-before-refactor`
-
----
-
-## Overview
+# Codebase MCP Server
 
 A production-grade MCP (Model Context Protocol) server that indexes code repositories into PostgreSQL with pgvector for semantic search, designed specifically for AI coding assistants.
 
-The Codebase MCP Server provides semantic code search capabilities through a focused, local-first architecture. It enables AI assistants to understand and navigate codebases efficiently by combining tree-sitter AST parsing with vector embeddings.
+## What's New in v2.0
 
-### Key Features
+Version 2.0 represents a major architectural refactoring focused exclusively on semantic code search capabilities. This release removes project management, entity tracking, and work item features to maintain single-responsibility focus.
 
-- **Semantic Code Search**: Natural language queries across indexed repositories
-- **Repository Indexing**: Fast scanning and chunking with tree-sitter parsers
-- **Task Management**: Development task tracking with git integration
-- **MCP Protocol**: Six focused tools via Server-Sent Events (SSE) and stdio (JSON-RPC)
-- **Performance Guaranteed**: 60-second indexing for 10K files, 500ms p95 search latency
-- **Production Ready**: Comprehensive error handling, structured logging, type safety
+**Breaking Changes**:
+- 14 tools removed (project management, entity tracking, work item features extracted to workflow-mcp)
+- 2 tools remaining: `index_repository` and `search_code` with multi-project support
+- Database schema simplified (9 tables dropped, `project_id` parameter added)
+- New environment variables for optional workflow-mcp integration
 
-### MCP Tools
+**Migration Required**: Existing v1.x users must follow the migration guide to upgrade safely. See [Migration Guide](docs/migration/v1-to-v2-migration.md) for complete upgrade and rollback procedures.
 
-1. **search_code**: Semantic search across indexed code
-2. **index_repository**: Index a repository for searching
-3. **get_task**: Retrieve a specific development task
-4. **list_tasks**: List tasks with filtering options
-5. **create_task**: Create a new development task
-6. **update_task**: Update task status with git integration
+**What's Preserved**: All indexed repositories and code embeddings remain searchable after migration.
+
+**What's Discarded**: All v1.x project management data, entities, and work items are permanently removed.
+
+---
+
+## Features
+
+The Codebase MCP Server provides exactly 2 MCP tools for semantic code search with multi-project workspace support:
+
+1. **`index_repository`**: Index a code repository for semantic search
+   - Accepts optional `project_id` parameter for workspace isolation
+   - Default behavior: indexes to default project workspace if `project_id` not specified
+   - Performance target: 60-second indexing for 10,000 files
+
+2. **`search_code`**: Semantic code search with natural language queries
+   - Accepts optional `project_id` parameter to restrict search scope
+   - Default behavior: searches default project workspace if `project_id` not specified
+   - Performance target: 500ms p95 search latency
+
+### Multi-Project Support
+
+The v2.0 architecture supports isolated project workspaces through the optional `project_id` parameter:
+
+**Single Project Workflow** (default):
+```python
+# Index without project_id - uses default workspace
+index_repository(repo_path="/path/to/repo")
+
+# Search without project_id - searches default workspace
+search_code(query="authentication logic")
+```
+
+**Multi-Project Workflow**:
+```python
+# Index to specific project workspace
+index_repository(repo_path="/path/to/client-a-repo", project_id="client-a")
+
+# Search specific project workspace
+search_code(query="authentication logic", project_id="client-a")
+```
+
+**Use Cases**:
+- **Single Project**: Individual developers or small teams working on one codebase
+- **Multi-Project**: Consultants managing multiple client codebases, organizations with separate product lines, or multi-tenant deployments requiring workspace isolation
+
+**Optional Integration**: The `project_id` can be automatically resolved from Git repository context when the optional [workflow-mcp](https://github.com/workflow-mcp) server is configured. Without workflow-mcp, all operations default to a single shared workspace.
 
 ## Quick Start
 
@@ -146,7 +153,7 @@ uv run python tests/test_embeddings.py
 ✅ Task Management: 7/7 tests passed
 ✅ Repository Indexing: 2 files indexed, 6 chunks created
 ✅ Embeddings: 100% coverage (768-dim vectors)
-✅ Database: Connection pooling, async operations working
+✅ Database: Connection pool, async operations working
 ```
 
 ## Tool Usage Examples
@@ -235,14 +242,13 @@ Claude Desktop ↔ FastMCP Server ↔ Tool Handlers ↔ Services ↔ PostgreSQL
 - Dual logging (file + MCP protocol) without stdout pollution
 - Async/await support throughout
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
+See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for detailed component diagrams.
 
 ## Documentation
 
-- **[docs/status/MCP_SERVER_STATUS.md](docs/status/MCP_SERVER_STATUS.md)** - Current status, test results, configuration
-- **[docs/status/SESSION_HANDOFF.md](docs/status/SESSION_HANDOFF.md)** - Recent problems solved, current working state
-- **[docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md)** - Complete setup instructions with troubleshooting
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and data flow
+- **[Multi-Project Architecture](docs/architecture/multi-project-design.md)** - System architecture and data flow
+- **[Configuration Guide](docs/configuration/production-config.md)** - Production deployment and tuning
+- **[API Reference](docs/api/tool-reference.md)** - Complete MCP tool documentation
 - **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
 
 ## Database Schema
@@ -256,7 +262,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
 - `tasks` - Development tasks with git tracking
 - `task_status_history` - Audit trail
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete schema documentation.
+See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for complete schema documentation.
 
 ## Technology Stack
 
@@ -313,127 +319,73 @@ codebase-mcp/
 - Services in `src/services/` contain all business logic
 - Dual logging: file (`/tmp/codebase-mcp.log`) + MCP protocol
 
-## Prerequisites
-
-### System Requirements
-
-- **Python 3.11+** (3.13 compatible)
-- **PostgreSQL 14+** with pgvector extension
-- **Ollama** for embedding generation
-- **4GB+ RAM** recommended
-- **SSD storage** for optimal performance
-
-### PostgreSQL with pgvector
-
-```bash
-# Install PostgreSQL 14+
-# macOS
-brew install postgresql@14
-brew services start postgresql@14
-
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install postgresql-14 postgresql-contrib-14
-
-# Install pgvector extension
-# macOS
-brew install pgvector
-
-# Ubuntu/Debian
-sudo apt install postgresql-14-pgvector
-
-# Enable pgvector in your database
-psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-### Ollama Setup
-
-```bash
-# Install Ollama
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Start Ollama service
-ollama serve
-
-# Pull required embedding model
-ollama pull nomic-embed-text
-```
-
 ## Installation
 
-### 1. Clone the Repository
+### Prerequisites
+
+Before installing Codebase MCP Server v2.0, ensure the following requirements are met:
+
+**Required Software:**
+- **PostgreSQL 14+** - Database with pgvector extension for vector similarity search
+- **Python 3.11+** - Runtime environment (Python 3.13 compatible)
+- **Ollama** - Local embedding model server with nomic-embed-text model
+
+**System Requirements:**
+- 4GB+ RAM recommended for typical workloads
+- SSD storage for optimal performance (database and embedding operations are I/O intensive)
+- Network access to Ollama server (default: localhost:11434)
+
+### Installation Commands
+
+Install Codebase MCP Server v2.0 using pip:
 
 ```bash
+# Install latest v2.0 release
+pip install codebase-mcp
+```
+
+**Alternative Installation Methods:**
+
+```bash
+# Install specific v2.0 version
+pip install codebase-mcp==2.0.0
+
+# Install from source (for development)
 git clone https://github.com/cliffclarke/codebase-mcp.git
 cd codebase-mcp
+pip install -e .
 ```
 
-### 2. Create Virtual Environment
-
-```bash
-# Create virtual environment
-python3.11 -m venv .venv
-
-# Activate virtual environment
-# macOS/Linux
-source .venv/bin/activate
-
-# Windows
-.venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-
-```bash
-# Install production dependencies (includes FastMCP)
-pip install -r requirements.txt
-
-# For development (includes testing and linting tools)
-pip install -r requirements-dev.txt
-
-# Or with uv (recommended)
-uv sync
-```
-
-**Key Dependencies Installed:**
+**Key Dependencies Installed Automatically:**
 - `fastmcp>=0.1.0` - Modern MCP framework
 - `sqlalchemy>=2.0` - Async database ORM
 - `pgvector` - PostgreSQL vector extension Python bindings
 - `ollama` - Embedding generation client
 - `pydantic>=2.0` - Data validation and settings
 
-### 4. Configure Environment
+### Verification Steps
+
+After installation, verify the setup is correct:
 
 ```bash
-# Copy example environment file
-cp .env.example .env
+# Verify codebase-mcp is installed
+codebase-mcp --version
+# Expected output: codebase-mcp 2.0.0
 
-# Edit .env with your configuration
-nano .env
+# Check PostgreSQL is accessible
+psql --version
+# Expected output: psql (PostgreSQL) 14.x or higher
+
+# Verify Ollama is running
+curl http://localhost:11434/api/tags
+# Expected output: JSON response with available models
+
+# Confirm embedding model is available
+ollama list | grep nomic-embed-text
+# Expected output: nomic-embed-text model listed
 ```
 
-**Environment Variables:**
-
-```bash
-# Database Configuration
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp
-
-# Ollama Configuration
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=embeddinggemma
-
-# Performance Tuning
-EMBEDDING_BATCH_SIZE=50        # Batch size for embedding generation
-MAX_CONCURRENT_REQUESTS=10     # Max parallel Ollama requests
-
-# Logging
-LOG_LEVEL=INFO                  # DEBUG, INFO, WARNING, ERROR
-LOG_FILE=/tmp/codebase-mcp.log  # Log file location
-```
+**Setup Complete**: If all verification steps pass, Codebase MCP Server v2.0 is ready for use. Proceed to the Quick Start section for first-time indexing and search operations.
 
 ## Database Setup
 
@@ -480,7 +432,7 @@ alembic current
 
 ### 4. Database Reset & Cleanup
 
-During development, you may need to reset your database. See [DATABASE_RESET.md](DATABASE_RESET.md) for three reset options:
+During development, you may need to reset your database using the following reset options:
 
 - **scripts/clear_data.sh** - Clear all data, keep schema (fastest, no restart needed)
 - **scripts/reset_database.sh** - Drop and recreate all tables (recommended for schema changes)
@@ -820,7 +772,7 @@ EMBEDDING_BATCH_SIZE=25      # For constrained environments
    - Monitor query performance: See logs at LOG_FILE path
    - Adjust batch sizes and connection pool
 
-For detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md) and [docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md).
+For detailed troubleshooting, see the Configuration Guide troubleshooting section.
 
 ## Contributing
 
@@ -940,13 +892,141 @@ FastMCP maintains performance targets:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License (LICENSE file pending).
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/cliffclarke/codebase-mcp/issues)
 - **Documentation**: [Full documentation](docs/)
 - **Logs**: Check `/tmp/codebase-mcp.log` for detailed debugging
+
+## Quick Start
+
+### Basic Usage (Default Project)
+
+For most users, the default project workspace is sufficient:
+
+```bash
+# Index a repository (uses default project)
+codebase-mcp index /path/to/your/repo
+
+# Search code
+codebase-mcp search "function to handle authentication"
+
+# Search with filters
+codebase-mcp search "database query" --file-type py --limit 20
+```
+
+The CLI automatically uses a default project workspace (`project_default`) if no project ID is specified.
+
+### Multi-Project Usage
+
+For users managing multiple codebases or client projects, use the `--project-id` flag to isolate repositories:
+
+```bash
+# Index repositories with project_id
+codebase-mcp index /path/to/client-a-repo --project-id client-a
+codebase-mcp index /path/to/client-b-repo --project-id client-b
+
+# Search within specific project
+codebase-mcp search "authentication logic" --project-id client-a
+codebase-mcp search "payment processing" --project-id client-b
+
+# List all projects
+codebase-mcp projects list
+```
+
+Each project has its own isolated database schema, ensuring repositories and embeddings are completely separated.
+
+## workflow-mcp Integration (Optional)
+
+The Codebase MCP Server can **optionally** integrate with [workflow-mcp](https://github.com/cliffclarke/workflow-mcp) for automatic project context resolution. This is an advanced feature and not required for basic usage.
+
+### Standalone Usage (Default)
+
+By default, Codebase MCP operates independently:
+
+```bash
+# Works out of the box without workflow-mcp
+codebase-mcp index /path/to/repo
+codebase-mcp search "search query"
+```
+
+### Integration with workflow-mcp
+
+If you're using workflow-mcp to manage development projects, Codebase MCP can automatically resolve project context:
+
+```bash
+# Set workflow-mcp URL in environment
+export WORKFLOW_MCP_URL=http://localhost:8001
+
+# Now project_id is automatically resolved from workflow-mcp's active project
+codebase-mcp index /path/to/repo  # Uses active project from workflow-mcp
+codebase-mcp search "query"       # Searches in active project's context
+```
+
+**How It Works:**
+
+1. Codebase MCP queries workflow-mcp for the active project
+2. If an active project exists, it's used as the `project_id`
+3. If no active project or workflow-mcp is unavailable, falls back to default project
+4. You can still override with `--project-id` flag
+
+**Configuration:**
+
+```bash
+# In .env file
+WORKFLOW_MCP_URL=http://localhost:8001  # Optional, enables integration
+```
+
+**See Also:** [workflow-mcp repository](https://github.com/cliffclarke/workflow-mcp) for details on project workspace management.
+
+## Documentation
+
+Comprehensive documentation is available for different use cases:
+
+- **[Migration Guide](docs/migration/v1-to-v2-migration.md)** - Upgrading from v1.x to v2.x with multi-project support
+- **[Configuration Guide](docs/configuration/production-config.md)** - Production deployment and tuning
+- **[Architecture Documentation](docs/architecture/multi-project-design.md)** - System design and multi-project isolation
+- **[API Reference](docs/api/tool-reference.md)** - Complete MCP tool documentation
+- **[Glossary](docs/glossary.md)** - Canonical terminology definitions
+
+For quick setup, refer to the Installation section above.
+
+## Contributing
+
+We welcome contributions to the Codebase MCP Server. This project follows a specification-driven development workflow.
+
+### Getting Started
+
+1. **Read the Architecture**: Start with [docs/architecture/multi-project-design.md](docs/architecture/multi-project-design.md) to understand the system design
+2. **Review the Constitution**: See [.specify/memory/constitution.md](.specify/memory/constitution.md) for project principles
+3. **Follow the Workflow**: Use the Specify workflow documented in [CLAUDE.md](CLAUDE.md)
+
+### Development Process
+
+1. **Create a feature specification** using `/specify` command
+2. **Plan the implementation** with `/plan`
+3. **Generate tasks** using `/tasks`
+4. **Implement incrementally** with atomic commits
+
+### Code Standards
+
+- **Type Safety**: Full mypy --strict compliance
+- **Testing**: 95%+ test coverage, contract tests for MCP protocol
+- **Performance**: Meet benchmarks (60s indexing, 500ms search p95)
+- **Documentation**: Update docs with all changes
+
+### Code of Conduct
+
+This project adheres to a code of conduct that promotes a welcoming, inclusive environment. We expect:
+
+- Respectful communication in issues and PRs
+- Constructive feedback focused on code and ideas
+- Recognition that contributors volunteer their time
+- Patience with maintainers and fellow contributors
+
+By participating, you agree to uphold these standards.
 
 ## Acknowledgments
 
