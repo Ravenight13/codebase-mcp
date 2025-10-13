@@ -119,13 +119,13 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Manual Validation for User Story 1
 
-- [ ] T020 [US1] Validate Migration Guide: Test backup procedures with v1.x environment (quickstart.md Step 2)
-- [ ] T021 [US1] Validate Migration Guide: Test upgrade procedure end-to-end with v1.x to v2.0 (quickstart.md Step 3)
-- [ ] T022 [US1] Validate Migration Guide: Test post-migration validation commands (quickstart.md Step 4)
-- [ ] T023 [US1] Validate Migration Guide: Test rollback procedure with v1.x restoration (quickstart.md Step 5)
-- [ ] T024 [US1] Validate Migration Guide: Test diagnostic commands for partial migration detection (quickstart.md Step 7)
-- [ ] T025 [US1] Validate Migration Guide: Verify all 14 removed tools listed by name - SC-002
-- [ ] T026 [US1] Validate Migration Guide: Verify breaking changes documented upfront before procedures - FR-009
+- [X] T020 [US1] Validate Migration Guide: Test backup procedures with v1.x environment (quickstart.md Step 2)
+- [X] T021 [US1] Validate Migration Guide: Test upgrade procedure end-to-end with v1.x to v2.0 (quickstart.md Step 3)
+- [X] T022 [US1] Validate Migration Guide: Test post-migration validation commands (quickstart.md Step 4)
+- [X] T023 [US1] Validate Migration Guide: Test rollback procedure with v1.x restoration (quickstart.md Step 5)
+- [X] T024 [US1] Validate Migration Guide: Test diagnostic commands for partial migration detection (quickstart.md Step 7)
+- [X] T025 [US1] Validate Migration Guide: Verify all 14 removed tools listed by name - SC-002
+- [X] T026 [US1] Validate Migration Guide: Verify breaking changes documented upfront before procedures - FR-009
 
 **Checkpoint**: User Story 1 (Migration Guide) complete and validated - MVP ready for existing users upgrading from v1.x
 
