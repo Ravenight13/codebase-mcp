@@ -91,28 +91,28 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
   - Database Backup subsection with pg_dump command
   - Configuration Backup subsection with cp command
   - Verification steps for backups
-- [ ] T014 [US1] Write Migration Guide: Upgrade Procedure section with 6 step-by-step instructions - FR-014, FR-018
+- [X] T014 [US1] Write Migration Guide: Upgrade Procedure section with 6 step-by-step instructions - FR-014, FR-018
   - Step 1: Stop v1.x Server (command, validation)
   - Step 2: Update Dependencies (command, validation)
   - Step 3: Run Migration Script (command, expected output) - FR-018
   - Step 4: Update Configuration (new env vars, changed defaults)
   - Step 5: Restart Server (command, validation)
   - Step 6: Verify Migration Success (validation commands), optional: document checkpoint resume if migration script supports it (FR-037 SHOULD requirement)
-- [ ] T015 [US1] Write Migration Guide: Post-Migration Validation section - FR-017
+- [X] T015 [US1] Write Migration Guide: Post-Migration Validation section - FR-017
   - Verify v2.0 Functionality subsection (test index_repository, test search_code)
   - Verify Existing Repositories Searchable subsection
-- [ ] T016 [US1] Write Migration Guide: Diagnostic Commands section with SQL queries - FR-036
+- [X] T016 [US1] Write Migration Guide: Diagnostic Commands section with SQL queries - FR-036
   - Check v2.0 schema present query
   - Verify v1.x tables dropped query
   - Detect partial migration state queries
-- [ ] T017 [US1] Write Migration Guide: Rollback Procedure section with complete restoration - FR-016
+- [X] T017 [US1] Write Migration Guide: Rollback Procedure section with complete restoration - FR-016
   - When to Roll Back guidance
   - Rollback Steps (6 steps mirroring upgrade procedure)
   - Rollback Validation subsection - FR-017
-- [ ] T018 [US1] Write Migration Guide: Troubleshooting section
+- [X] T018 [US1] Write Migration Guide: Troubleshooting section
   - Common Issues: Migration script fails midway, Missing env vars, PostgreSQL connection errors, Data validation failures
   - Support Resources: GitHub Issues, Discussion forum links
-- [ ] T019 [US1] Write Migration Guide: FAQ section
+- [X] T019 [US1] Write Migration Guide: FAQ section
   - What data is lost during migration?
   - Can I migrate incrementally?
   - How long does migration take? (See FR-020 in spec.md - timing guidance deferred to Phase 06 performance testing)
