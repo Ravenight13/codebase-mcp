@@ -49,51 +49,81 @@ LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 
 
 def get_pool_logger(name: str) -> logging.Logger:
-    """
-    Get a configured logger for connection pool modules.
+    """Get configured logger for connection pool modules with JSON structured output.
 
-    This logger uses the existing mcp_logging infrastructure, ensuring:
-    - JSON structured logging
-    - File-only output to /tmp/codebase-mcp.log
+    Creates a logger instance using the existing mcp_logging infrastructure,
+    ensuring constitutional compliance with MCP protocol requirements and
+    production-quality logging standards.
+
+    **Logger Configuration**:
+    - JSON structured logging with automatic field serialization
+    - File-only output to /tmp/codebase-mcp.log (no stdout/stderr)
     - Automatic log rotation (100MB per file, 5 backup files)
-    - No stdout/stderr pollution (MCP protocol compliance)
+    - Thread-safe for concurrent logging from multiple pool operations
+    - Log level: INFO (configurable via environment variables)
+
+    **Constitutional Compliance**:
+    - Principle III (Protocol Compliance): No stdout/stderr pollution
+    - Principle V (Production Quality): Structured, rotatable logging
+    - Principle VIII (Type Safety): Complete type annotations
 
     Args:
-        name: Logger name (typically __name__ from calling module)
+        name: Logger name, typically __name__ from calling module.
+            Used for hierarchical log filtering (e.g., "connection_pool.manager").
 
     Returns:
-        Configured logger instance with JSON structured output
+        logging.Logger: Configured logger instance with JSON structured output
+            to /tmp/codebase-mcp.log. Use standard logging methods: debug(),
+            info(), warning(), error(), critical().
 
     Example:
-        >>> from src.connection_pool.logging import get_pool_logger
+        >>> from src.connection_pool.pool_logging import get_pool_logger
         >>> logger = get_pool_logger(__name__)
         >>> logger.info(
         ...     "Pool initialized",
         ...     extra={"context": {"min_size": 2, "max_size": 10}}
         ... )
+        >>> # Logs to /tmp/codebase-mcp.log:
+        >>> # {"timestamp":"2025-10-13T14:30:00Z","level":"INFO",
+        >>> #  "message":"Pool initialized","context":{"min_size":2,"max_size":10}}
     """
     return get_logger(name)
 
 
 def get_pool_structured_logger(name: str) -> StructuredLogger:
-    """
-    Get a structured logger with convenience methods for connection pool modules.
+    """Get structured logger with type-safe convenience methods for pool modules.
 
-    Provides type-safe logging methods with context support:
-    - debug(message, context, exc_info)
-    - info(message, context, exc_info)
-    - warning(message, context, exc_info)
-    - error(message, context, exc_info)
-    - critical(message, context, exc_info)
+    Creates a StructuredLogger instance with type-safe logging methods that
+    automatically handle context serialization and exception tracking. Preferred
+    over get_pool_logger() for new code due to better type safety.
+
+    **Convenience Methods**:
+    - debug(message, context, exc_info): Debug-level logging with optional context
+    - info(message, context, exc_info): Info-level logging with optional context
+    - warning(message, context, exc_info): Warning-level logging with optional context
+    - error(message, context, exc_info): Error-level logging with optional context
+    - critical(message, context, exc_info): Critical-level logging with optional context
+
+    **Context Serialization**:
+    - Automatically serializes dict[str, Any] to JSON
+    - Handles datetime objects with ISO 8601 format
+    - Safely handles exceptions and stack traces
+
+    **Constitutional Compliance**:
+    - Principle VIII (Type Safety): Complete type annotations with mypy --strict
+    - Principle III (Protocol Compliance): JSON structured output, no stdout/stderr
+    - Principle V (Production Quality): Comprehensive error context capture
 
     Args:
-        name: Logger name (typically __name__ from calling module)
+        name: Logger name, typically __name__ from calling module.
+            Used for hierarchical log filtering (e.g., "connection_pool.manager").
 
     Returns:
-        StructuredLogger instance with convenience methods
+        StructuredLogger: Logger instance with type-safe convenience methods.
+            All methods accept optional context dict and exc_info bool.
 
     Example:
-        >>> from src.connection_pool.logging import get_pool_structured_logger
+        >>> from src.connection_pool.pool_logging import get_pool_structured_logger
         >>> logger = get_pool_structured_logger(__name__)
         >>> logger.info(
         ...     "Connection acquired",
@@ -103,6 +133,15 @@ def get_pool_structured_logger(name: str) -> StructuredLogger:
         ...         "acquisition_time_ms": 2.3
         ...     }
         ... )
+        >>> # Error logging with exception context
+        >>> try:
+        ...     await pool.acquire()
+        ... except Exception as e:
+        ...     logger.error(
+        ...         "Connection acquisition failed",
+        ...         context={"timeout": 30.0},
+        ...         exc_info=True
+        ...     )
     """
     return get_structured_logger(name)
 
@@ -119,21 +158,48 @@ def log_pool_event(
     context: dict[str, Any] | None = None,
     exc_info: bool = False,
 ) -> None:
-    """
-    Log a connection pool event with structured context.
+    """Log connection pool event with structured context and consistent formatting.
 
-    Convenience function for logging common pool events with consistent
-    formatting and context structure.
+    Convenience function for logging common pool events with standardized
+    structure, automatic context enrichment, and event name injection. Used
+    throughout connection pool modules for consistent log formatting.
+
+    **Event Structure**:
+    All logged events include:
+    - event: Event name for filtering and aggregation
+    - timestamp: Automatic UTC timestamp from logger
+    - level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    - context: User-provided structured data (optional)
+    - exc_info: Exception traceback if exc_info=True
+
+    **Performance**: <1ms overhead per log call (negligible)
+
+    **Constitutional Compliance**:
+    - Principle III (Protocol Compliance): Structured JSON output only
+    - Principle VIII (Type Safety): Complete type annotations
+    - Principle V (Production Quality): Comprehensive context capture
 
     Args:
-        logger: Logger instance (from get_pool_logger)
-        level: Log level (debug/info/warning/error/critical)
-        event: Event name/description (e.g., "pool_initialized", "connection_acquired")
-        context: Structured context data (pool metrics, connection details, etc.)
-        exc_info: Whether to include exception information
+        logger: Logger instance from get_pool_logger(__name__).
+            Must be configured for JSON structured output.
+        level: Log level as string literal. Valid values:
+            "debug", "info", "warning", "error", "critical".
+        event: Event name/description for log aggregation and filtering.
+            Examples: "pool_initialized", "connection_acquired",
+            "reconnection_attempt", "leak_detected".
+        context: Structured context data as dict[str, Any]. Automatically
+            serialized to JSON. Common fields: pool_size, active_connections,
+            error_type, duration_ms. Optional, defaults to None.
+        exc_info: Whether to include exception traceback in log. Set True
+            when logging from exception handler. Defaults to False.
+
+    Raises:
+        KeyError: If level is not a valid LogLevel literal (should not occur
+            with type checking enabled).
 
     Example:
         >>> logger = get_pool_logger(__name__)
+        >>> # Info-level event logging
         >>> log_pool_event(
         ...     logger=logger,
         ...     level="info",
@@ -144,7 +210,10 @@ def log_pool_event(
         ...         "initialization_time_ms": 125.5
         ...     }
         ... )
+        >>> # Logs: {"timestamp":"...","level":"INFO","event":"pool_initialized",
+        >>> #        "context":{"event":"pool_initialized","min_size":2,...}}
 
+        >>> # Error-level event with exception
         >>> log_pool_event(
         ...     logger=logger,
         ...     level="error",
@@ -155,6 +224,7 @@ def log_pool_event(
         ...     },
         ...     exc_info=True
         ... )
+        >>> # Logs: {"timestamp":"...","level":"ERROR",...,"traceback":"..."}
     """
     log_level = {
         "debug": logging.DEBUG,
@@ -183,19 +253,34 @@ def log_pool_initialization(
     success: bool = True,
     error_message: str | None = None,
 ) -> None:
-    """
-    Log pool initialization event with standardized context.
+    """Log pool initialization event with standardized context.
+
+    Specialized logging function for pool initialization events, used by
+    ConnectionPoolManager.initialize() to log startup success or failure
+    with comprehensive context.
+
+    **Logged Context**:
+    - min_size: Configured minimum pool size
+    - max_size: Configured maximum pool size
+    - duration_ms: Initialization duration (target: <2000ms)
+    - error_message: Error details if initialization failed
+
+    **Performance Target**: <2000ms initialization time logged in context
 
     Args:
-        logger: Logger instance
-        min_size: Minimum pool size
-        max_size: Maximum pool size
-        duration_ms: Initialization duration in milliseconds
-        success: Whether initialization succeeded
-        error_message: Error message if initialization failed
+        logger: Logger instance from get_pool_logger(__name__).
+        min_size: Minimum pool size from PoolConfig (1-100).
+        max_size: Maximum pool size from PoolConfig (1-100, >= min_size).
+        duration_ms: Initialization duration in milliseconds from
+            time.perf_counter(). Should be <2000ms per performance target.
+        success: Whether initialization succeeded. True logs INFO level,
+            False logs ERROR level with exc_info=True. Defaults to True.
+        error_message: Error message if initialization failed. Included in
+            context when success=False. Optional, defaults to None.
 
     Example:
         >>> logger = get_pool_logger(__name__)
+        >>> # Successful initialization
         >>> log_pool_initialization(
         ...     logger=logger,
         ...     min_size=2,
@@ -203,6 +288,20 @@ def log_pool_initialization(
         ...     duration_ms=125.5,
         ...     success=True
         ... )
+        >>> # Logs: {"level":"INFO","event":"Pool initialized successfully",
+        >>> #        "context":{"min_size":2,"max_size":10,"duration_ms":125.5}}
+
+        >>> # Failed initialization
+        >>> log_pool_initialization(
+        ...     logger=logger,
+        ...     min_size=2,
+        ...     max_size=10,
+        ...     duration_ms=1850.3,
+        ...     success=False,
+        ...     error_message="Connection refused on localhost:5432"
+        ... )
+        >>> # Logs: {"level":"ERROR","event":"Pool initialization failed",
+        >>> #        "context":{...,"error_message":"Connection refused..."}}
     """
     context: dict[str, Any] = {
         "min_size": min_size,
@@ -236,15 +335,30 @@ def log_connection_acquisition(
     active_connections: int,
     idle_connections: int,
 ) -> None:
-    """
-    Log connection acquisition with pool state context.
+    """Log connection acquisition with current pool state context.
+
+    Specialized logging function for connection acquisition events, used by
+    ConnectionPoolManager.acquire() to log successful connection checkout
+    with performance metrics and pool capacity snapshot.
+
+    **Logged Context**:
+    - acquisition_time_ms: Time to acquire connection (target: <5ms)
+    - pool_size: Total connections in pool at acquisition time
+    - active_connections: Connections in use after this acquisition
+    - idle_connections: Connections remaining available
+
+    **Performance Target**: acquisition_time_ms <5ms typical, <30ms worst-case
 
     Args:
-        logger: Logger instance
-        acquisition_time_ms: Time taken to acquire connection
-        pool_size: Total pool size
-        active_connections: Active connections count
-        idle_connections: Idle connections count
+        logger: Logger instance from get_pool_logger(__name__).
+        acquisition_time_ms: Time taken to acquire connection in milliseconds,
+            measured via time.perf_counter(). Typical: <5ms, target: <30ms.
+        pool_size: Total connections in pool at acquisition time (min_size
+            to max_size). Used for capacity tracking.
+        active_connections: Connections currently in use after this acquisition.
+            Includes this newly acquired connection. Used for utilization metrics.
+        idle_connections: Connections remaining available for checkout.
+            Should be >0 for healthy pool (0 indicates exhaustion).
 
     Example:
         >>> logger = get_pool_logger(__name__)
@@ -255,6 +369,9 @@ def log_connection_acquisition(
         ...     active_connections=5,
         ...     idle_connections=5
         ... )
+        >>> # Logs: {"level":"DEBUG","event":"Connection acquired",
+        >>> #        "context":{"acquisition_time_ms":2.3,"pool_size":10,
+        >>> #                  "active_connections":5,"idle_connections":5}}
     """
     log_pool_event(
         logger=logger,
@@ -275,23 +392,53 @@ def log_reconnection_attempt(
     delay_seconds: float,
     success: bool = False,
 ) -> None:
-    """
-    Log database reconnection attempt with exponential backoff context.
+    """Log database reconnection attempt with exponential backoff context.
+
+    Specialized logging function for reconnection events, used by the
+    _reconnection_loop() background task to log database recovery attempts
+    with exponential backoff timing.
+
+    **Logged Context**:
+    - attempt: Reconnection attempt number (1-indexed)
+    - delay_seconds: Exponential backoff delay before this attempt
+    - success: Whether reconnection succeeded
+
+    **Backoff Schedule**: 1s, 2s, 4s, 8s, 16s (capped at 16s)
+
+    **Log Levels**:
+    - success=True: INFO level ("Reconnection succeeded")
+    - success=False: WARNING level ("Reconnection attempt")
 
     Args:
-        logger: Logger instance
-        attempt: Reconnection attempt number
-        delay_seconds: Delay before this attempt (backoff duration)
-        success: Whether reconnection succeeded
+        logger: Logger instance from get_pool_logger(__name__).
+        attempt: Reconnection attempt number (1-indexed, 1 = first attempt).
+            Used to calculate exponential backoff delay.
+        delay_seconds: Delay before this attempt in seconds, calculated via
+            exponential_backoff_retry(). Values: 1, 2, 4, 8, 16 (capped).
+        success: Whether reconnection succeeded. True logs INFO level,
+            False logs WARNING level. Defaults to False.
 
     Example:
         >>> logger = get_pool_logger(__name__)
+        >>> # Failed reconnection attempt (WARNING level)
         >>> log_reconnection_attempt(
         ...     logger=logger,
         ...     attempt=3,
         ...     delay_seconds=4.0,
         ...     success=False
         ... )
+        >>> # Logs: {"level":"WARNING","event":"Reconnection attempt",
+        >>> #        "context":{"attempt":3,"delay_seconds":4.0}}
+
+        >>> # Successful reconnection (INFO level)
+        >>> log_reconnection_attempt(
+        ...     logger=logger,
+        ...     attempt=4,
+        ...     delay_seconds=8.0,
+        ...     success=True
+        ... )
+        >>> # Logs: {"level":"INFO","event":"Reconnection succeeded",
+        >>> #        "context":{"attempt":4,"delay_seconds":8.0}}
     """
     level: LogLevel = "info" if success else "warning"
     event = "Reconnection succeeded" if success else "Reconnection attempt"
@@ -317,18 +464,39 @@ def log_pool_statistics(
     total_releases: int,
     avg_acquisition_time_ms: float,
 ) -> None:
-    """
-    Log pool statistics snapshot for observability.
+    """Log pool statistics snapshot for observability and monitoring.
+
+    Specialized logging function for periodic pool statistics dumps, used by
+    monitoring and observability systems to track pool health trends over time.
+    Logs comprehensive metrics including connection counts, lifetime statistics,
+    and performance metrics.
+
+    **Logged Context** (all fields):
+    - total_connections: Total pool size at snapshot time
+    - idle_connections: Available connections (capacity)
+    - active_connections: Connections in use (load)
+    - waiting_requests: Queued acquire() calls (contention)
+    - total_acquisitions: Lifetime acquisition count (usage)
+    - total_releases: Lifetime release count (balance)
+    - avg_acquisition_time_ms: Rolling average latency (performance)
+
+    **Invariant**: total_connections = idle_connections + active_connections
+
+    **Log Level**: INFO (periodic observability logging)
 
     Args:
-        logger: Logger instance
-        total_connections: Total connections in pool
-        idle_connections: Idle connections available
-        active_connections: Active connections in use
-        waiting_requests: Requests waiting for connections
-        total_acquisitions: Lifetime connection acquisitions
-        total_releases: Lifetime connection releases
-        avg_acquisition_time_ms: Average acquisition time
+        logger: Logger instance from get_pool_logger(__name__).
+        total_connections: Total connections in pool (min_size to max_size).
+        idle_connections: Connections available for immediate use (>= 0).
+        active_connections: Connections currently executing queries (>= 0).
+        waiting_requests: Requests waiting for available connection (>= 0).
+            Non-zero indicates pool exhaustion.
+        total_acquisitions: Lifetime connection acquisition count (>= 0).
+            Monotonically increasing, never resets.
+        total_releases: Lifetime connection release count (>= 0).
+            Should approximately equal total_acquisitions.
+        avg_acquisition_time_ms: Rolling average acquisition time (>= 0.0).
+            Target: <5ms typical, <30ms worst-case.
 
     Example:
         >>> logger = get_pool_logger(__name__)
@@ -342,6 +510,11 @@ def log_pool_statistics(
         ...     total_releases=147,
         ...     avg_acquisition_time_ms=2.5
         ... )
+        >>> # Logs: {"level":"INFO","event":"Pool statistics",
+        >>> #        "context":{"total_connections":10,"idle_connections":7,
+        >>> #                  "active_connections":3,"waiting_requests":0,
+        >>> #                  "total_acquisitions":150,"total_releases":147,
+        >>> #                  "avg_acquisition_time_ms":2.5}}
     """
     log_pool_event(
         logger=logger,

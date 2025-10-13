@@ -20,18 +20,41 @@ from .statistics import PoolStatistics
 
 
 class PoolHealthStatus(str, Enum):
-    """
-    Connection pool health status enumeration.
+    """Connection pool health status enumeration for monitoring and alerting.
 
-    Status Determination Logic:
-    - HEALTHY: total_connections > 0, idle >= 80% capacity, no errors in last 60s
-    - DEGRADED: total_connections > 0, idle 50-79% capacity, some recent errors
-    - UNHEALTHY: total_connections == 0 OR idle < 50% capacity OR initialization failed
+    Defines three health states with specific determination criteria used by
+    calculate_health_status() for pool health classification. Status directly
+    impacts monitoring dashboards and alerting thresholds.
+
+    **Status Determination Logic**:
+
+    - **HEALTHY**: total_connections > 0, idle >= 80% capacity, no errors in last 60s,
+      peak wait time <= 100ms. Pool is operating optimally with sufficient headroom.
+
+    - **DEGRADED**: total_connections > 0, idle 50-79% capacity, recent errors within
+      60s window, or peak wait time > 100ms. Pool is functional but under stress.
+
+    - **UNHEALTHY**: total_connections == 0 OR idle < 50% capacity OR initialization
+      failed. Pool is critically compromised or unavailable.
+
+    **Constitutional Compliance**:
+    - Principle III (Protocol Compliance): JSON-serializable for MCP health responses
+    - Principle VIII (Type Safety): Enum-based with no invalid states possible
 
     Attributes:
-        HEALTHY: Pool is operating optimally with sufficient capacity
-        DEGRADED: Pool is functional but under stress or experiencing issues
-        UNHEALTHY: Pool is unavailable or critically compromised
+        HEALTHY: Pool operating optimally with sufficient capacity (>=80% idle).
+            No action required, continue normal operation.
+        DEGRADED: Pool functional but stressed (50-79% idle) or recent errors.
+            Warning state - investigate query patterns and consider scaling.
+        UNHEALTHY: Pool critically compromised (0 connections or <50% idle).
+            Alert state - immediate action required, may impact availability.
+
+    Example:
+        >>> status = PoolHealthStatus.HEALTHY
+        >>> status.value
+        'healthy'
+        >>> PoolHealthStatus(status.value)  # Round-trip serialization
+        <PoolHealthStatus.HEALTHY: 'healthy'>
     """
 
     HEALTHY = "healthy"
@@ -40,22 +63,34 @@ class PoolHealthStatus(str, Enum):
 
 
 class DatabaseStatus(BaseModel):
-    """
-    Database connectivity status with pool statistics.
+    """Database connectivity status with detailed pool metrics.
 
-    Provides detailed information about the database connection state,
-    including pool metrics, query latency, error tracking, and leak detection.
+    Provides comprehensive information about database connection state for
+    health check responses and monitoring dashboards. Includes pool statistics,
+    performance metrics, error tracking, and leak detection.
+
+    **Constitutional Compliance**:
+    - Principle III (Protocol Compliance): JSON-serializable for MCP transport
+    - Principle VIII (Type Safety): Pydantic model with complete Field() validation
+    - Principle V (Production Quality): Comprehensive metrics for observability
 
     Attributes:
-        status: Connection status indicator (connected/disconnected/connecting)
-        pool: Pool statistics dictionary containing:
-            - total: Total number of connections in pool
-            - idle: Number of idle connections available
-            - active: Number of connections currently in use
-            - waiting: Number of clients waiting for connections
-        latency_ms: Last query latency in milliseconds (None if no recent queries)
-        last_error: Last error message encountered (None if no recent errors)
-        leak_count: Number of potential connection leaks detected in last 60 seconds
+        status: Connection status indicator. Valid values:
+            - "connected": Database is reachable and pool is operational
+            - "disconnected": Database is unreachable, pool unavailable
+            - "connecting": Initial connection attempt in progress
+            - "degraded": Connected but experiencing issues (errors, low capacity)
+        pool: Pool statistics dictionary with required keys:
+            - total: Total connections in pool (min_size to max_size)
+            - idle: Idle connections available for immediate use
+            - active: Connections currently executing queries
+            - waiting: Requests waiting for available connection
+        latency_ms: Average query latency in milliseconds from recent acquisitions.
+            None if no queries executed yet. Target: <5ms for local PostgreSQL.
+        last_error: Last error message encountered during pool operations.
+            None if no errors in current session. Used for health degradation.
+        leak_count: Number of potential connection leaks detected in last 60 seconds.
+            Non-zero triggers health degradation to DEGRADED state.
 
     Example:
         >>> db_status = DatabaseStatus(
@@ -65,74 +100,107 @@ class DatabaseStatus(BaseModel):
         ...     last_error=None,
         ...     leak_count=0
         ... )
+        >>> db_status.pool["idle"]
+        3
+        >>> db_status.model_dump_json()  # JSON serialization
+        '{"status":"connected","pool":{"total":5,...},...}'
     """
 
     status: str = Field(
-        description="Connection status (connected/disconnected/connecting)"
+        description="Connection status: connected/disconnected/connecting/degraded. "
+        "Reflects current database reachability and pool operational state."
     )
 
     pool: dict[str, int] = Field(
-        description="Pool statistics (total, idle, active, waiting)"
+        description="Pool statistics with keys: total, idle, active, waiting. "
+        "All values are non-negative integers representing connection counts."
     )
 
     latency_ms: float | None = Field(
         default=None,
-        description="Last query latency in milliseconds"
+        description="Average query latency in milliseconds from recent acquisitions. "
+        "None if no queries executed yet. Target: <5ms for local PostgreSQL."
     )
 
     last_error: str | None = Field(
         default=None,
-        description="Last error message"
+        description="Last error message from pool operations (connection failures, "
+        "validation errors, timeouts). None if no errors in current session."
     )
 
     leak_count: int = Field(
         default=0,
-        description="Number of potential connection leaks detected in last 60 seconds"
+        ge=0,
+        description="Number of potential connection leaks detected in last 60 seconds. "
+        "Non-zero value triggers health status degradation to DEGRADED."
     )
 
 
 class HealthStatus(BaseModel):
-    """
-    Complete health check response for connection pool monitoring.
+    """Complete health check response for MCP monitoring and observability.
 
     Aggregates pool health status, database connectivity, and operational
-    metrics into a comprehensive health report suitable for monitoring
-    systems and observability dashboards.
+    metrics into a comprehensive health report suitable for MCP health_check
+    tool responses, monitoring systems, and observability dashboards.
+
+    **Performance Target**: <10ms p99 latency for health_check() call.
+
+    **Constitutional Compliance**:
+    - Principle III (Protocol Compliance): JSON-serializable for MCP transport
+    - Principle IV (Performance): <10ms health check latency maintained
+    - Principle VIII (Type Safety): Pydantic model with complete validation
+    - Principle V (Production Quality): Comprehensive metrics for monitoring
 
     Attributes:
-        status: Overall health status (HEALTHY/DEGRADED/UNHEALTHY)
-        timestamp: Health check execution timestamp (UTC)
-        database: Detailed database connectivity and pool state
-        uptime_seconds: Server uptime in seconds (non-negative)
+        status: Overall health status (HEALTHY/DEGRADED/UNHEALTHY) calculated
+            from pool statistics using calculate_health_status() algorithm.
+            Determines alerting thresholds in monitoring systems.
+        timestamp: Health check execution timestamp (UTC) using datetime.now(timezone.utc).
+            ISO 8601 format in JSON serialization for timezone-aware parsing.
+        database: Detailed database connectivity and pool state including connection
+            counts, latency metrics, error tracking, and leak detection.
+        uptime_seconds: Pool uptime in seconds since initialization. Non-negative
+            float calculated from (now - pool_created_at). Used for uptime SLO tracking.
 
     Example:
+        >>> from datetime import datetime, timezone
         >>> health = HealthStatus(
         ...     status=PoolHealthStatus.HEALTHY,
-        ...     timestamp=datetime.utcnow(),
+        ...     timestamp=datetime.now(timezone.utc),
         ...     database=DatabaseStatus(
         ...         status="connected",
         ...         pool={"total": 5, "idle": 3, "active": 2, "waiting": 0},
-        ...         latency_ms=2.3
+        ...         latency_ms=2.3,
+        ...         last_error=None,
+        ...         leak_count=0
         ...     ),
         ...     uptime_seconds=3600.5
         ... )
+        >>> health.status
+        <PoolHealthStatus.HEALTHY: 'healthy'>
+        >>> health.model_dump_json()  # MCP transport format
+        '{"status":"healthy","timestamp":"2025-10-13T14:30:00.000Z",...}'
     """
 
     status: PoolHealthStatus = Field(
-        description="Overall health status"
+        description="Overall health status (HEALTHY/DEGRADED/UNHEALTHY) calculated "
+        "from pool statistics. Determines monitoring alert thresholds."
     )
 
     timestamp: datetime = Field(
-        description="Health check execution time"
+        description="Health check execution timestamp (UTC) in ISO 8601 format. "
+        "Used for health check freshness validation and time-series metrics."
     )
 
     database: DatabaseStatus = Field(
-        description="Database connectivity and pool state"
+        description="Detailed database connectivity and pool state including "
+        "connection counts, latency, errors, and leak detection."
     )
 
     uptime_seconds: float = Field(
         ge=0.0,
-        description="Server uptime in seconds"
+        description="Pool uptime in seconds since initialization. Non-negative "
+        "float used for uptime SLO tracking and stability metrics."
     )
 
     model_config = {
@@ -149,7 +217,8 @@ class HealthStatus(BaseModel):
                         "waiting": 0
                     },
                     "latency_ms": 2.3,
-                    "last_error": None
+                    "last_error": None,
+                    "leak_count": 0
                 },
                 "uptime_seconds": 3600.5
             }

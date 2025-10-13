@@ -9,6 +9,8 @@ Run this file to see example log output in /tmp/codebase-mcp.log
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from src.connection_pool.pool_logging import (
     get_pool_logger,
     get_pool_structured_logger,
@@ -37,23 +39,23 @@ def example_structured_pool_logging() -> None:
     # Log with rich context
     logger.info(
         "Pool initialized successfully",
-        context={
+        context=cast(Any, {
             "min_size": 2,
             "max_size": 10,
             "database_url": "postgresql+asyncpg://localhost:5432/codebase_mcp",
             "initialization_time_ms": 125.5,
-        },
+        }),
     )
 
     # Log connection acquisition
     logger.debug(
         "Connection acquired from pool",
-        context={
+        context=cast(Any, {
             "pool_size": 10,
             "active_connections": 5,
             "idle_connections": 5,
             "acquisition_time_ms": 2.3,
-        },
+        }),
     )
 
 
@@ -111,12 +113,12 @@ def example_error_logging() -> None:
     except ConnectionError:
         logger.error(
             "Connection validation failed",
-            context={
+            context=cast(Any, {
                 "connection_id": "conn-12345",
                 "pool_size": 10,
                 "active_connections": 8,
                 "error_type": "ConnectionError",
-            },
+            }),
         )
 
 
@@ -157,42 +159,42 @@ def example_lifecycle_logging() -> None:
     # Initialization phase
     logger.info(
         "Pool initialization started",
-        context={
+        context=cast(Any, {
             "min_size": 2,
             "max_size": 10,
             "state": "INITIALIZING",
-        },
+        }),
     )
 
     # Healthy state
     logger.info(
         "Pool health check passed",
-        context={
+        context=cast(Any, {
             "state": "HEALTHY",
             "total_connections": 5,
             "idle_connections": 4,
             "active_connections": 1,
-        },
+        }),
     )
 
     # Recovery phase
     logger.warning(
         "Pool entering recovery mode",
-        context={
+        context=cast(Any, {
             "state": "RECOVERING",
             "reason": "database_connectivity_lost",
             "reconnection_attempts": 0,
-        },
+        }),
     )
 
     # Shutdown phase
     logger.info(
         "Pool shutdown initiated",
-        context={
+        context=cast(Any, {
             "state": "SHUTTING_DOWN",
             "active_connections": 2,
             "grace_period_seconds": 30.0,
-        },
+        }),
     )
 
 
