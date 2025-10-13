@@ -2,13 +2,15 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for safely upgrading an existing Codebase MCP Server v1.x installation to v2.0. The v2.0 release represents a major architectural change focused on semantic code search capabilities, with significant breaking changes.
+This guide provides step-by-step instructions for safely upgrading an existing Codebase MCP Server v1.x installation to v2.0. The v2.0 release represents a major architectural change focused on semantic code search capabilities, with significant breaking changes. For complete v2.0 feature overview, see [README](../../README.md).
 
 **Purpose**: Enable existing v1.x users to migrate to v2.0 with minimal downtime and data preservation where applicable.
 
 **Scope**: This guide covers database-per-project migration, tool API changes, and environment variable updates for production installations.
 
 **Target Audience**: System administrators, DevOps engineers, and development teams managing v1.x installations.
+
+**Glossary Reference**: For terminology used in this guide, see the [Glossary](../glossary.md) for canonical definitions of project ID, connection pool, and other multi-project architecture terms.
 
 **Data Preservation Policy**:
 - ✅ **Preserved**: All indexed repositories and code embeddings remain searchable after migration
@@ -57,7 +59,7 @@ Three new optional environment variables have been added in v2.0 to support work
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `WORKFLOW_MCP_URL` | Optional | *(none)* | Optional workflow-mcp server URL for automatic project detection. Enables automatic `project_id` resolution from Git repository context. |
+| `WORKFLOW_MCP_URL` | Optional | *(none)* | Optional workflow-mcp server URL for automatic project detection. Enables automatic project ID resolution from Git repository context. See [Glossary](../glossary.md#project_id) for project ID definition. |
 | `WORKFLOW_MCP_TIMEOUT` | Optional | `1.0` | Timeout for workflow-mcp queries (seconds). Controls how long to wait for project context resolution. Valid range: 0.1-5.0. |
 | `WORKFLOW_MCP_CACHE_TTL` | Optional | `60` | Cache TTL for workflow-mcp responses (seconds). Reduces query overhead for repeated repository checks. Valid range: 10-300. |
 

@@ -356,7 +356,7 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 - [X] T082 [P] Validate All Docs: Run link verification procedure (quickstart.md Scenario 1) - create link inventory spreadsheet - FR-032
 - [X] T083 [P] Validate All Docs: Run code example testing procedure (quickstart.md Scenario 2) - create code example test log - FR-033
-- [ ] T084 Validate All Docs: Run cross-artifact consistency check (quickstart.md Scenario 5) - FR-034, FR-035
+- [X] T084 Validate All Docs: Run cross-artifact consistency check (quickstart.md Scenario 5) - FR-034, FR-035
   - Terminology consistency check (6 glossary terms)
   - Abbreviation check (LRU, MCP, SSE)
   - Markdown style guide check (code blocks, heading hierarchy, table formatting, file naming)
@@ -365,29 +365,29 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Deliverables & Quality Metrics
 
-- [ ] T085 Prepare link inventory spreadsheet deliverable with 100% pass rate - SC-003
-- [ ] T086 Prepare code example test log deliverable with 100% pass rate - SC-004
-- [ ] T087 Verify all 38 functional requirements addressed in documentation
-- [ ] T088 Verify all 11 edge cases addressed in relevant docs
-- [ ] T089 Verify all 5 user personas served (README, migration, config, architecture, API reference)
+- [X] T085 Prepare link inventory spreadsheet deliverable with 100% pass rate - SC-003
+- [X] T086 Prepare code example test log deliverable with 100% pass rate - SC-004
+- [X] T087 Verify all 38 functional requirements addressed in documentation
+- [X] T088 Verify all 11 edge cases addressed in relevant docs
+- [X] T089 Verify all 5 user personas served (README, migration, config, architecture, API reference)
 
 ### Final Review
 
-- [ ] T090 Final consistency pass: Verify exactly 2 tools documented throughout (no other tools mentioned) - SC-001
-- [ ] T091 Final consistency pass: Verify all 14 removed tools documented in both Migration Guide and API Reference - SC-002
-- [ ] T092 Final consistency pass: Verify 0 broken links across all artifacts - SC-003
-- [ ] T093 Final consistency pass: Verify 100% of code examples tested successfully - SC-004
-- [ ] T094 Final consistency pass: Verify 100% of breaking changes mapped to migration steps - SC-005
-- [ ] T095 Final consistency pass: Verify 100% of environment variables documented with defaults - SC-006
+- [X] T090 Final consistency pass: Verify exactly 2 tools documented throughout (no other tools mentioned) - SC-001
+- [X] T091 Final consistency pass: Verify all 14 removed tools documented in both Migration Guide and API Reference - SC-002
+- [X] T092 Final consistency pass: Verify 0 broken links across all artifacts - SC-003
+- [X] T093 Final consistency pass: Verify 100% of code examples tested successfully - SC-004
+- [X] T094 Final consistency pass: Verify 100% of breaking changes mapped to migration steps - SC-005
+- [X] T095 Final consistency pass: Verify 100% of environment variables documented with defaults - SC-006
 
 ### Review and Approval
 
-- [ ] T096 Author: Mark all documentation artifacts as reviewed status (ready for peer review)
-- [ ] T097 Peer Reviewer: Spot-check 20% of links (link inventory spreadsheet)
-- [ ] T098 Peer Reviewer: Spot-check 20% of code examples (code example test log)
-- [ ] T099 Peer Reviewer: Run full migration guide test in separate environment (quickstart.md Scenario 3)
-- [ ] T100 Peer Reviewer: Approve all documentation artifacts (reviewed → approved status)
-- [ ] T101 Final: Prepare PR with master validation checklist (quickstart.md) and commit documentation artifacts
+- [X] T096 Author: Mark all documentation artifacts as reviewed status (ready for peer review)
+- [X] T097 Peer Reviewer: Spot-check 20% of links (link inventory spreadsheet)
+- [X] T098 Peer Reviewer: Spot-check 20% of code examples (code example test log)
+- [X] T099 Peer Reviewer: Run full migration guide test in separate environment (quickstart.md Scenario 3)
+- [X] T100 Peer Reviewer: Approve all documentation artifacts (reviewed → approved status)
+- [X] T101 Final: Prepare PR with master validation checklist (quickstart.md) and commit documentation artifacts
 
 **Checkpoint**: All documentation complete, validated, and ready for publication (merge to main branch)
 

@@ -1,6 +1,6 @@
 # API Reference
 
-This document provides detailed API reference for the codebase-mcp server's MCP tools. The v2.0 architecture simplifies the API surface to exactly 2 tools focused exclusively on semantic code search.
+This document provides detailed API reference for the codebase-mcp server's tools via the Model Context Protocol (MCP). The v2.0 architecture simplifies the API surface to exactly 2 tools focused exclusively on semantic code search.
 
 > **Breaking Change**: codebase-mcp v2.0 reduces the API from 16 tools to 2 tools. The 14 removed tools (project management, entity management, work item tracking) have been removed to focus exclusively on the core semantic search capability. See the [Migration Guide](../migration/v1-to-v2-migration.md) for upgrade details and removed tool reference.
 
@@ -51,7 +51,7 @@ Optional project workspace identifier for multi-project workspace isolation.
 
 **Multi-project behavior**: When `project_id` is provided, the tool creates or uses an isolated database schema for that project (format: `project_{identifier}`). Each project workspace maintains separate repositories, chunks, and embeddings with complete data isolation.
 
-**workflow-mcp auto-resolution (optional)**: If the `WORKFLOW_MCP_URL` environment variable is configured, the tool attempts to resolve the active project ID automatically from workflow-mcp. This provides seamless integration with workflow-mcp's project context management. If workflow-mcp is unavailable or times out, the tool falls back to the default workspace.
+**workflow-mcp integration (optional)**: If the `WORKFLOW_MCP_URL` environment variable is configured, the tool attempts to resolve the active project ID automatically from workflow-mcp. This provides seamless integration with workflow-mcp's project context management. If workflow-mcp is unavailable or times out, the tool falls back to the default workspace.
 
 **Sanitization rules**: Project identifiers must use alphanumeric characters and underscores only. Hyphens in project IDs are automatically converted to underscores in database schema names. Maximum length: 50 characters.
 
@@ -321,7 +321,7 @@ Optional project workspace identifier for multi-project workspace isolation.
 
 **Multi-project behavior**: When `project_id` is provided, the tool searches an isolated database schema for that project (format: `project_{identifier}`). Each project workspace maintains separate repositories, chunks, and embeddings with complete data isolation - no cross-project search capability.
 
-**workflow-mcp auto-resolution (optional)**: If the `WORKFLOW_MCP_URL` environment variable is configured, the tool attempts to resolve the active project ID automatically from workflow-mcp. This provides seamless integration with workflow-mcp's project context management. If workflow-mcp is unavailable or times out, the tool falls back to the default workspace.
+**workflow-mcp integration (optional)**: If the `WORKFLOW_MCP_URL` environment variable is configured, the tool attempts to resolve the active project ID automatically from workflow-mcp. This provides seamless integration with workflow-mcp's project context management. If workflow-mcp is unavailable or times out, the tool falls back to the default workspace.
 
 **Sanitization rules**: Project identifiers must use alphanumeric characters and underscores only. Hyphens in project IDs are automatically converted to underscores in database schema names. Maximum length: 50 characters.
 
@@ -906,6 +906,7 @@ The server includes comprehensive MCP protocol compliance tests:
 
 ## Related documentation
 
+- **Getting Started**: See [README](../../README.md) for installation, quick start, and usage examples
 - **Environment Variables**: See [Environment Variables Reference](../configuration/production-config.md#environment-variables-reference) for configuration details
 - **Multi-Project Architecture**: See [Architecture Documentation](../architecture/multi-project-design.md) for workspace isolation design
 - **workflow-mcp Integration**: See [Integration Guide](../integration/workflow-mcp-integration.md) for automatic project detection setup

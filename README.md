@@ -153,7 +153,7 @@ uv run python tests/test_embeddings.py
 ✅ Task Management: 7/7 tests passed
 ✅ Repository Indexing: 2 files indexed, 6 chunks created
 ✅ Embeddings: 100% coverage (768-dim vectors)
-✅ Database: Connection pooling, async operations working
+✅ Database: Connection pool, async operations working
 ```
 
 ## Tool Usage Examples
@@ -247,6 +247,8 @@ See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for 
 ## Documentation
 
 - **[Multi-Project Architecture](docs/architecture/multi-project-design.md)** - System architecture and data flow
+- **[Configuration Guide](docs/configuration/production-config.md)** - Production deployment and tuning
+- **[API Reference](docs/api/tool-reference.md)** - Complete MCP tool documentation
 - **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
 
 ## Database Schema
@@ -987,6 +989,7 @@ Comprehensive documentation is available for different use cases:
 - **[Configuration Guide](docs/configuration/production-config.md)** - Production deployment and tuning
 - **[Architecture Documentation](docs/architecture/multi-project-design.md)** - System design and multi-project isolation
 - **[API Reference](docs/api/tool-reference.md)** - Complete MCP tool documentation
+- **[Glossary](docs/glossary.md)** - Canonical terminology definitions
 
 For quick setup, refer to the Installation section above.
 
