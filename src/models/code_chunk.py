@@ -70,6 +70,9 @@ class CodeChunk(Base):
         UUID(as_uuid=True), ForeignKey("code_files.id"), nullable=False
     )
 
+    # Project isolation field
+    project_id: Mapped[str] = mapped_column(String(50), nullable=False)
+
     # Content fields
     content: Mapped[str] = mapped_column(Text, nullable=False)
     start_line: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -111,9 +114,11 @@ class CodeChunkCreate(BaseModel):
         - start_line: Must be >= 1
         - end_line: Must be >= 1 and >= start_line
         - chunk_type: Must be 'function', 'class', or 'block'
+        - project_id: Must match pattern ^[a-z0-9-]{1,50}$
     """
 
     code_file_id: uuid.UUID
+    project_id: str = Field(..., pattern="^[a-z0-9-]{1,50}$", description="Project workspace ID")
     content: str
     start_line: int = Field(..., ge=1, description="Starting line number (1-indexed)")
     end_line: int = Field(..., ge=1, description="Ending line number (1-indexed)")
@@ -151,6 +156,7 @@ class CodeChunkResponse(BaseModel):
 
     id: uuid.UUID
     code_file_id: uuid.UUID
+    project_id: str
     content: str
     start_line: int
     end_line: int
