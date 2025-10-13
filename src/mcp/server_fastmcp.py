@@ -26,12 +26,12 @@ import logging.handlers
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from fastmcp import FastMCP
 
 if TYPE_CHECKING:
-    pass
+    from src.connection_pool.manager import ConnectionPoolManager
 
 # ==============================================================================
 # Configure File Logging (separate from MCP protocol)
@@ -73,7 +73,42 @@ logger.info(f"Log file: {LOG_FILE}")
 logger.info("=" * 80)
 
 # ==============================================================================
-# FastMCP Lifespan (Database Initialization)
+# Module-Level Pool Manager (for tool access)
+# ==============================================================================
+
+# Global pool manager instance (initialized by lifespan)
+_pool_manager: ConnectionPoolManager | None = None
+
+
+def get_pool_manager() -> ConnectionPoolManager:
+    """Get the initialized connection pool manager.
+
+    This function provides access to the global pool manager instance for
+    MCP tools to acquire database connections.
+
+    Returns:
+        ConnectionPoolManager: Initialized pool manager instance
+
+    Raises:
+        RuntimeError: If pool manager not initialized (call initialize() during startup)
+
+    Example:
+        >>> # In MCP tool:
+        >>> from src.mcp.server_fastmcp import get_pool_manager
+        >>> pool_manager = get_pool_manager()
+        >>> async with pool_manager.acquire() as conn:
+        ...     result = await conn.fetchval("SELECT 1")
+    """
+    if _pool_manager is None:
+        raise RuntimeError(
+            "Connection pool manager not initialized. "
+            "This is a server lifecycle issue - the pool should be initialized in lifespan."
+        )
+    return _pool_manager
+
+
+# ==============================================================================
+# FastMCP Lifespan (Connection Pool Initialization)
 # ==============================================================================
 
 
@@ -82,17 +117,18 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     """Lifespan context manager for FastMCP server.
 
     Manages server startup and shutdown lifecycle:
-    - Startup: Initialize database (blocking to ensure ready before serving)
-    - Shutdown: Close database connections gracefully
+    - Startup: Initialize connection pool (blocking to ensure ready before serving)
+    - Shutdown: Close connection pool gracefully with 30s timeout
 
     Blocking Pattern:
-    - Wait for DB to be ready before accepting connections from Claude Desktop
+    - Wait for pool to be ready before accepting connections from Claude Desktop
     - Ensures tools can access DB immediately when called
     - Prevents race conditions with early tool invocations
 
     Constitutional Compliance:
     - Principle V: Production Quality (proper initialization order, error handling)
     - Principle VIII: Type Safety (full type hints, mypy --strict)
+    - Principle IV: Performance (<2s initialization, <10ms health checks)
 
     Args:
         app: FastMCP server instance
@@ -101,37 +137,66 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
         None (context manager pattern)
 
     Raises:
-        RuntimeError: If database initialization fails
+        RuntimeError: If connection pool initialization fails
     """
-    # Import database connection management
-    from src.database import close_db_connection, init_db_connection
+    global _pool_manager
 
-    # Startup: Initialize database (blocking to ensure ready before serving)
-    # Wait for DB to be ready before accepting connections from Claude Desktop
+    # Import connection pool management
+    from src.config.settings import get_settings
+    from src.connection_pool.config import PoolConfig
+    from src.connection_pool.manager import ConnectionPoolManager
+
+    # Create connection pool manager instance
+    pool_manager = ConnectionPoolManager()
+
+    # Startup: Initialize connection pool (blocking to ensure ready before serving)
+    # Wait for pool to be ready before accepting connections from Claude Desktop
     try:
-        logger.info("Initializing database connection pool...")
-        sys.stderr.write("INFO: Initializing database...\n")
-        await init_db_connection()  # BLOCKING - wait for completion
-        logger.info("✓ Database initialized successfully")
-        sys.stderr.write("INFO: Database initialized successfully\n")
+        logger.info("Initializing connection pool...")
+        sys.stderr.write("INFO: Initializing connection pool...\n")
+
+        # Load settings and create pool configuration
+        settings = get_settings()
+        pool_config = PoolConfig(
+            min_size=settings.db_pool_size,
+            max_size=settings.db_pool_size + settings.db_max_overflow,
+            timeout=30.0,
+            command_timeout=60.0,
+            max_queries=50000,
+            max_idle_time=300.0,  # 5 minutes
+            max_connection_lifetime=3600.0,  # 1 hour
+            leak_detection_timeout=30.0,
+            enable_leak_detection=True,
+            database_url=str(settings.database_url),
+        )
+
+        # Initialize pool (BLOCKING - wait for completion)
+        await pool_manager.initialize(pool_config)
+
+        # Store pool_manager in module-level variable for tool access
+        _pool_manager = pool_manager
+
+        logger.info("✓ Connection pool initialized successfully")
+        sys.stderr.write("INFO: Connection pool initialized successfully\n")
+
     except Exception as e:
         logger.critical(
-            f"Failed to initialize database: {e}",
+            f"Failed to initialize connection pool: {e}",
             exc_info=True,
         )
-        sys.stderr.write(f"FATAL: Database initialization failed: {e}\n")
+        sys.stderr.write(f"FATAL: Connection pool initialization failed: {e}\n")
         sys.stderr.write("FIX: Check PostgreSQL is running and DATABASE_URL is correct\n")
-        raise RuntimeError(f"Database initialization failed: {e}") from e
+        raise RuntimeError(f"Connection pool initialization failed: {e}") from e
 
     # Yield control to FastMCP server (tools are visible NOW)
     yield
 
-    # Shutdown: Close database connection pool gracefully
+    # Shutdown: Close connection pool gracefully with 30s timeout
     try:
         logger.info("Shutting down server...")
-        logger.info("Closing database connection pool...")
-        await close_db_connection()
-        logger.info("Database closed successfully")
+        logger.info("Closing connection pool gracefully...")
+        await pool_manager.shutdown(timeout=30.0)
+        logger.info("Connection pool closed successfully")
     except Exception as e:
         logger.error(
             f"Error during shutdown: {e}",
@@ -146,7 +211,7 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
 mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
 
 # Export for tool access
-__all__ = ["mcp"]
+__all__ = ["mcp", "get_pool_manager"]
 
 # ==============================================================================
 # Main Entry Point
@@ -183,6 +248,10 @@ def main() -> None:
         import src.mcp.tools.indexing  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
         logger.info("✓ Tool modules imported successfully")
+
+        logger.info("Importing resource modules...")
+        import src.mcp.health  # noqa: F401
+        logger.info("✓ Resource modules imported successfully")
     except ImportError as e:
         logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
         sys.stderr.write(f"FATAL: Failed to import tool modules: {e}\n")
@@ -195,20 +264,27 @@ def main() -> None:
         logger.info("FastMCP Server Startup")
         logger.info("=" * 80)
 
-        # List expected tools for diagnostics
+        # List expected tools and resources for diagnostics
         expected_tools = [
             "index_repository",
             "search_code",
         ]
+        expected_resources = [
+            "health://connection-pool",
+        ]
 
         logger.info(f"✓ Tool modules imported successfully")
         logger.info(f"  Expected tools: {', '.join(expected_tools)}")
+        logger.info(f"  Expected resources: {', '.join(expected_resources)}")
         logger.info("Starting FastMCP server with stdio transport...")
 
         sys.stderr.write("INFO: Starting FastMCP server...\n")
         sys.stderr.write(f"INFO: {len(expected_tools)} tools registered:\n")
         for name in expected_tools:
             sys.stderr.write(f"  - {name}\n")
+        sys.stderr.write(f"INFO: {len(expected_resources)} resources registered:\n")
+        for uri in expected_resources:
+            sys.stderr.write(f"  - {uri}\n")
         sys.stderr.write("INFO: Server ready for connections\n")
 
         # Start server - FastMCP handles protocol internally
