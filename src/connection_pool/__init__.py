@@ -55,19 +55,19 @@ from src.connection_pool.pool_logging import (
     LogLevel,
 )
 
-# Export models (when implemented)
-# from src.connection_pool.config import PoolConfig
-# from src.connection_pool.manager import ConnectionPoolManager, PoolState
-# from src.connection_pool.health import PoolHealthStatus, HealthStatus
-# from src.connection_pool.statistics import PoolStatistics
-# from src.connection_pool.exceptions import (
-#     ConnectionPoolError,
-#     PoolConfigurationError,
-#     PoolInitializationError,
-#     PoolTimeoutError,
-#     ConnectionValidationError,
-#     PoolClosedError,
-# )
+# Export models
+from src.connection_pool.config import PoolConfig
+from src.connection_pool.manager import ConnectionPoolManager, PoolState
+from src.connection_pool.health import PoolHealthStatus, HealthStatus
+from src.connection_pool.statistics import PoolStatistics
+from src.connection_pool.exceptions import (
+    ConnectionPoolError,
+    PoolConfigurationError,
+    PoolInitializationError,
+    PoolTimeoutError,
+    ConnectionValidationError,
+    PoolClosedError,
+)
 
 __all__ = [
     # Logging utilities
@@ -79,17 +79,17 @@ __all__ = [
     "log_reconnection_attempt",
     "log_pool_statistics",
     "LogLevel",
-    # Models (uncomment when implemented)
-    # "ConnectionPoolManager",
-    # "PoolConfig",
-    # "PoolState",
-    # "PoolHealthStatus",
-    # "HealthStatus",
-    # "PoolStatistics",
-    # "ConnectionPoolError",
-    # "PoolConfigurationError",
-    # "PoolInitializationError",
-    # "PoolTimeoutError",
-    # "ConnectionValidationError",
-    # "PoolClosedError",
+    # Models
+    "ConnectionPoolManager",
+    "PoolConfig",
+    "PoolState",
+    "PoolHealthStatus",
+    "HealthStatus",
+    "PoolStatistics",
+    "ConnectionPoolError",
+    "PoolConfigurationError",
+    "PoolInitializationError",
+    "PoolTimeoutError",
+    "ConnectionValidationError",
+    "PoolClosedError",
 ]
