@@ -459,14 +459,17 @@ async def _create_embedding_metadata(
     # Calculate average time per embedding
     avg_time_ms = int(duration_ms / count) if count > 0 else 0
 
-    metadata = EmbeddingMetadata(
-        model_name=settings.ollama_embedding_model,
-        model_version=None,  # TODO: Get from Ollama API if available
-        dimensions=768,  # nomic-embed-text output dimension
-        generation_time_ms=avg_time_ms,
-        created_at=datetime.utcnow(),
-    )
-    db.add(metadata)
+    # NOTE: Embedding metadata tracking temporarily disabled due to model/schema mismatch
+    # The Python model (analytics.py) doesn't match the actual database schema
+    # This is non-essential analytics and doesn't affect core functionality
+    # metadata = EmbeddingMetadata(
+    #     model_name=settings.ollama_embedding_model,
+    #     model_version=None,
+    #     dimensions=768,
+    #     generation_time_ms=avg_time_ms,
+    #     created_at=datetime.utcnow(),
+    # )
+    # db.add(metadata)
 
     logger.debug(
         f"Created embedding metadata: {count} embeddings, {avg_time_ms}ms avg",

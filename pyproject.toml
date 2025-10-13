@@ -257,6 +257,7 @@ markers = [
     "contract: Contract/API tests (MCP protocol compliance)",
     "slow: Slow-running tests (performance benchmarks)",
     "performance: Performance baseline tests",
+    "security: Security tests (SQL injection, validation)",
 ]
 
 # Timeout for tests (prevent hanging)

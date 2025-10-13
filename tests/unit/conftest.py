@@ -36,9 +36,12 @@ def database_url() -> str:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def engine(database_url: str) -> AsyncGenerator[AsyncEngine, None]:
     """Create async database engine for tests.
+
+    **IMPORTANT**: Function-scoped to avoid event loop conflicts.
+    Each test gets its own engine with fresh event loop.
 
     Args:
         database_url: PostgreSQL connection string
@@ -47,7 +50,7 @@ async def engine(database_url: str) -> AsyncGenerator[AsyncEngine, None]:
         Configured AsyncEngine instance
 
     Cleanup:
-        Disposes engine connection pool
+        Disposes engine connection pool and drops all tables
     """
     test_engine = create_async_engine(
         database_url,

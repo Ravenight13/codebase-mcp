@@ -27,6 +27,7 @@ from .database import Base
 
 if TYPE_CHECKING:
     from .code_file import CodeFile
+    from .analytics import ChangeEvent
 
 
 class Repository(Base):
@@ -36,6 +37,7 @@ class Repository(Base):
 
     Relationships:
         - code_files: One-to-many with CodeFile (cascade delete)
+        - change_events: One-to-many with ChangeEvent (analytics)
 
     Constraints:
         - path: Unique index for fast lookups
@@ -73,6 +75,9 @@ class Repository(Base):
     # Relationships
     code_files: Mapped[list[CodeFile]] = relationship(
         back_populates="repository", cascade="all, delete-orphan"
+    )
+    change_events: Mapped[list["ChangeEvent"]] = relationship(
+        back_populates="repository"
     )
 
 

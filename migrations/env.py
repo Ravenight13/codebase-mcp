@@ -31,14 +31,9 @@ from src.models import Base
 from src.models.code_chunk import CodeChunk
 from src.models.code_file import CodeFile
 from src.models.repository import Repository
-from src.models.task import Task
-from src.models.task_relations import (
-    TaskBranchLink,
-    TaskCommitLink,
-    TaskPlanningReference,
-    TaskStatusHistory,
-)
-from src.models.tracking import ChangeEvent, EmbeddingMetadata, SearchQuery
+from src.models.analytics import ChangeEvent, EmbeddingMetadata
+from src.models.project_identifier import ProjectIdentifier
+from src.models.workflow_context import WorkflowIntegrationContext
 
 # Alembic Config object
 config = context.config

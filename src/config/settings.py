@@ -196,6 +196,49 @@ class Settings(BaseSettings):
     ]
 
     # ============================================================================
+    # Multi-project Workspace Integration (Optional)
+    # ============================================================================
+
+    workflow_mcp_url: Annotated[
+        HttpUrl | None,
+        Field(
+            default=None,
+            description=(
+                "Optional workflow-mcp server URL for automatic project detection. "
+                "If not set, multi-project workspace features are disabled."
+            ),
+        ),
+    ] = None
+
+    workflow_mcp_timeout: Annotated[
+        float,
+        Field(
+            default=1.0,
+            ge=0.1,
+            le=5.0,
+            description=(
+                "Timeout for workflow-mcp queries (seconds). "
+                "Should be low to avoid blocking indexing operations. "
+                "Range: 0.1-5.0"
+            ),
+        ),
+    ] = 1.0
+
+    workflow_mcp_cache_ttl: Annotated[
+        int,
+        Field(
+            default=60,
+            ge=10,
+            le=300,
+            description=(
+                "Cache TTL for workflow-mcp responses (seconds). "
+                "Reduces query overhead for repeated repository checks. "
+                "Range: 10-300"
+            ),
+        ),
+    ] = 60
+
+    # ============================================================================
     # Validators
     # ============================================================================
 

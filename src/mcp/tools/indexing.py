@@ -17,10 +17,13 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import Context
+from pydantic import ValidationError
 
 from src.database import get_session_factory
+from src.database.session import get_session, resolve_project_id
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import mcp
+from src.models.project_identifier import ProjectIdentifier
 from src.services.indexer import IndexResult
 from src.services.indexer import index_repository as index_repository_service
 
@@ -38,6 +41,7 @@ logger = get_logger(__name__)
 @mcp.tool()
 async def index_repository(
     repo_path: str,
+    project_id: str | None = None,
     force_reindex: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
@@ -48,6 +52,8 @@ async def index_repository(
 
     Args:
         repo_path: Absolute path to repository directory (required)
+        project_id: Optional project identifier for workspace isolation.
+                   If None, resolves from workflow-mcp or uses default workspace.
         force_reindex: Force full re-index even if already indexed (default: False)
         ctx: FastMCP context for progress reporting (optional)
 
@@ -58,12 +64,14 @@ async def index_repository(
             "files_indexed": 1234,
             "chunks_created": 5678,
             "duration_seconds": 45.2,
+            "project_id": "client-a" or None,
+            "schema_name": "project_client_a" or "project_default",
             "status": "success",  # or "partial", "failed"
             "errors": []  # List of error messages if any
         }
 
     Raises:
-        ValueError: If input validation fails
+        ValueError: If input validation fails (including invalid project_id format)
         RuntimeError: If indexing operation fails critically
 
     Performance:
@@ -73,6 +81,50 @@ async def index_repository(
     # Context logging (to MCP client)
     if ctx:
         await ctx.info(f"Indexing repository: {repo_path}")
+
+    # 1. Resolve project_id (with workflow-mcp fallback)
+    resolved_id = await resolve_project_id(project_id)
+
+    # 2. Validate project_id format if provided
+    schema_name: str
+    if resolved_id is not None:
+        try:
+            identifier = ProjectIdentifier(value=resolved_id)
+            schema_name = identifier.to_schema_name()
+            logger.debug(
+                "Using project workspace",
+                extra={
+                    "context": {
+                        "operation": "index_repository",
+                        "project_id": resolved_id,
+                        "schema_name": schema_name,
+                    }
+                },
+            )
+        except ValidationError as e:
+            error_msg = f"Invalid project_id format: {e}"
+            logger.error(
+                "Project identifier validation failed",
+                extra={
+                    "context": {
+                        "operation": "index_repository",
+                        "project_id": resolved_id,
+                        "error": str(e),
+                    }
+                },
+            )
+            raise ValueError(error_msg) from e
+    else:
+        schema_name = "project_default"
+        logger.debug(
+            "Using default workspace",
+            extra={
+                "context": {
+                    "operation": "index_repository",
+                    "schema_name": schema_name,
+                }
+            },
+        )
 
     # Derive name from directory name
     path_obj = Path(repo_path)
@@ -86,6 +138,8 @@ async def index_repository(
                 "repo_path": repo_path,
                 "name": name,
                 "force_reindex": force_reindex,
+                "project_id": resolved_id,
+                "schema_name": schema_name,
             }
         },
     )
@@ -111,7 +165,9 @@ async def index_repository(
 
     # Perform indexing
     try:
-        async with get_session_factory()() as db:
+        # Use get_session with project_id for workspace isolation
+        # This will auto-provision workspace if needed
+        async with get_session(project_id=resolved_id) as db:
             # Progress callback for real-time updates via Context
             async def progress_callback(message: str) -> None:
                 if ctx:
@@ -123,7 +179,7 @@ async def index_repository(
                 db=db,
                 force_reindex=force_reindex,
             )
-            await db.commit()
+            # Note: get_session auto-commits on success, no manual commit needed
 
             # Send completion notification
             if ctx:
@@ -155,6 +211,8 @@ async def index_repository(
         "files_indexed": result.files_indexed,
         "chunks_created": result.chunks_created,
         "duration_seconds": result.duration_seconds,
+        "project_id": resolved_id,
+        "schema_name": schema_name,
         "status": result.status,
     }
 
@@ -170,6 +228,8 @@ async def index_repository(
                 "files_indexed": result.files_indexed,
                 "chunks_created": result.chunks_created,
                 "duration_seconds": result.duration_seconds,
+                "project_id": resolved_id,
+                "schema_name": schema_name,
                 "status": result.status,
                 "error_count": len(result.errors),
             }
