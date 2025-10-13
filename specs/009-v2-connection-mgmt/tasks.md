@@ -14,7 +14,7 @@
 
 **Last Updated**: 2025-10-13
 
-**Completion Status**: 29/46 tasks complete (63%)
+**Completion Status**: 36/46 tasks complete (78%)
 
 **Phase Status**:
 - ✅ Phase 1: Setup - 4/4 tasks complete (100%)
@@ -22,26 +22,27 @@
 - ✅ Phase 3: User Story 1 (MVP) - 7/7 tasks complete (100%)
 - ✅ Phase 4: User Story 2 - 7/7 tasks complete (100%)
 - ✅ Phase 5: User Story 3 - 5/5 tasks complete (100%)
-- ⏳ Phase 6: User Story 4 - 0/7 tasks complete (0%)
+- ✅ Phase 6: User Story 4 - 7/7 tasks complete (100%)
 - ⏳ Phase 7: Integration - 0/4 tasks complete (0%)
 - ⏳ Phase 8: Polish - 0/6 tasks complete (0%)
 
 **MVP Status**: ✅ **COMPLETE** - All P1 priority user stories implemented (US1 ✅, US2 ✅)
 **P2 Features**: ✅ **COMPLETE** - Pool statistics and observability (US3 ✅)
+**P3 Features**: ✅ **COMPLETE** - Connection leak detection and prevention (US4 ✅)
 
 **Files Created/Modified**:
 - `src/connection_pool/` - Complete module structure
-- `src/connection_pool/config.py` - PoolConfig model with validation (182 lines)
+- `src/connection_pool/config.py` - PoolConfig with leak detection config (182 lines)
 - `src/connection_pool/exceptions.py` - Complete exception hierarchy (206 lines)
 - `src/connection_pool/statistics.py` - PoolStatistics model (118 lines)
-- `src/connection_pool/health.py` - Health models + calculation (343 lines)
-- `src/connection_pool/manager.py` - ConnectionPoolManager with full lifecycle (1,961 lines)
+- `src/connection_pool/health.py` - Health models + leak detection (350 lines)
+- `src/connection_pool/manager.py` - ConnectionPoolManager with leak detection (2,180 lines)
 - `src/connection_pool/pool_logging.py` - Structured logging utilities (375 lines)
 - `src/connection_pool/__init__.py` - Module exports (95 lines)
 
 **Type Safety**: ✅ All files pass `mypy --strict`
 
-**Next Up**: Phase 6 (T030-T036) - Connection leak detection and prevention
+**Next Up**: Phase 7 (T037-T040) - FastMCP integration and health endpoints
 
 ---
 
@@ -146,15 +147,15 @@
 
 ### Implementation for User Story 4
 
-- [ ] T030 [US4] Create ConnectionMetadata dataclass in src/connection_pool/manager.py: fields for connection_id (str), acquired_at (datetime), acquisition_stack_trace (str), query_count (int), created_at (datetime), last_used_at (datetime)
-- [ ] T031 [US4] Implement leak detection tracking in acquire() method: capture stack trace via "".join(traceback.format_stack()), create ConnectionMetadata with connection_id, acquired_at=datetime.utcnow(), acquisition_stack_trace, query_count=0, created_at, store in _active_connections dict keyed by connection object id
-- [ ] T032 [US4] Implement leak detection cleanup in release: remove connection from _active_connections dict on successful release, update last_used_at timestamp, increment query_count for recycling checks
-- [ ] T033 [US4] Implement _leak_detection_loop() background task in ConnectionPoolManager: run every 10 seconds if config.enable_leak_detection is True, iterate through _active_connections dict, calculate held_duration = (now - metadata.acquired_at).total_seconds(), if held_duration > config.leak_detection_timeout, log WARNING with message "Potential connection leak detected: {connection_id}", include held_duration_seconds, stack_trace from metadata, do NOT terminate connection (non-disruptive warning only), store leak warnings for health status degradation
-- [ ] T034 [US4] Start _leak_detection_loop background task in initialize(): asyncio.create_task(self._leak_detection_loop()) if config.enable_leak_detection, store task reference for shutdown cleanup
-- [ ] T035 [US4] Update health status calculation to include leak detection: if recent leak warnings (within last 60s), mark health as DEGRADED, include leak count in health status metadata, log "Connection pool health degraded: {leak_count} potential leaks detected in last 60s"
-- [ ] T036 [US4] Add leak detection configuration options to PoolConfig: leak_detection_timeout (default 30.0s, minimum 0.0 where 0 disables), enable_leak_detection (default True), add to environment variables (POOL_LEAK_DETECTION_TIMEOUT, POOL_ENABLE_LEAK_DETECTION)
+- [x] T030 [US4] Create ConnectionMetadata dataclass in src/connection_pool/manager.py: fields for connection_id (str), acquired_at (datetime), acquisition_stack_trace (str), query_count (int), created_at (datetime), last_used_at (datetime)
+- [x] T031 [US4] Implement leak detection tracking in acquire() method: capture stack trace via "".join(traceback.format_stack()), create ConnectionMetadata with connection_id, acquired_at=datetime.utcnow(), acquisition_stack_trace, query_count=0, created_at, store in _active_connections dict keyed by connection object id
+- [x] T032 [US4] Implement leak detection cleanup in release: remove connection from _active_connections dict on successful release, update last_used_at timestamp, increment query_count for recycling checks
+- [x] T033 [US4] Implement _leak_detection_loop() background task in ConnectionPoolManager: run every 10 seconds if config.enable_leak_detection is True, iterate through _active_connections dict, calculate held_duration = (now - metadata.acquired_at).total_seconds(), if held_duration > config.leak_detection_timeout, log WARNING with message "Potential connection leak detected: {connection_id}", include held_duration_seconds, stack_trace from metadata, do NOT terminate connection (non-disruptive warning only), store leak warnings for health status degradation
+- [x] T034 [US4] Start _leak_detection_loop background task in initialize(): asyncio.create_task(self._leak_detection_loop()) if config.enable_leak_detection, store task reference for shutdown cleanup
+- [x] T035 [US4] Update health status calculation to include leak detection: if recent leak warnings (within last 60s), mark health as DEGRADED, include leak count in health status metadata, log "Connection pool health degraded: {leak_count} potential leaks detected in last 60s"
+- [x] T036 [US4] Add leak detection configuration options to PoolConfig: leak_detection_timeout (default 30.0s, minimum 0.0 where 0 disables), enable_leak_detection (default True), add to environment variables (POOL_LEAK_DETECTION_TIMEOUT, POOL_ENABLE_LEAK_DETECTION)
 
-**Checkpoint**: All user stories should now be independently functional - leak detection logs warnings with stack traces, health status reflects leak state
+**Checkpoint**: ✅ User Story 4 COMPLETE - Leak detection logs warnings with stack traces (non-disruptive), health status reflects leak state, configurable via environment variables
 
 ---
 

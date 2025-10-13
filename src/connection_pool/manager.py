@@ -444,6 +444,7 @@ class ConnectionPoolManager:
         self._shutdown_lock: asyncio.Lock = asyncio.Lock()
         self._reconnection_loop_task: asyncio.Task[None] | None = None
         self._pool_maintenance_task: asyncio.Task[None] | None = None
+        self._leak_detection_task: asyncio.Task[None] | None = None
 
         # Error tracking for health checks
         self._last_error: str | None = None
@@ -452,6 +453,9 @@ class ConnectionPoolManager:
         # Connection metadata tracking for recycling and leak detection (T028, T030)
         self._connection_metadata: dict[int, ConnectionMetadata] = {}
         self._connection_creation_times: dict[int, datetime] = {}
+
+        # Leak detection tracking (T033)
+        self._recent_leak_warnings: deque[datetime] = deque(maxlen=100)
 
         # Structured logging (JSON format, file-only)
         self._logger = get_pool_structured_logger(__name__)
@@ -646,6 +650,13 @@ class ConnectionPoolManager:
             self._pool_maintenance_task = asyncio.create_task(self._pool_maintenance())
             self._logger.debug(
                 "Started pool maintenance background task",
+                context=cast(Any, {"state": self._state.value})
+            )
+
+            # Start background leak detection task to warn about long-held connections
+            self._leak_detection_task = asyncio.create_task(self._leak_detection_loop())
+            self._logger.debug(
+                "Started leak detection background task",
                 context=cast(Any, {"state": self._state.value})
             )
 
@@ -1235,6 +1246,27 @@ class ConnectionPoolManager:
                 # Partial recovery - some connections available but not fully recovered
                 health_status = PoolHealthStatus.DEGRADED
 
+        # T035: Check for recent leak warnings and degrade health if detected
+        now = datetime.now(timezone.utc)
+        leak_count = 0
+        for leak_time in self._recent_leak_warnings:
+            # Count leaks within last 60 seconds
+            time_since_leak = (now - leak_time).total_seconds()
+            if time_since_leak < 60.0:
+                leak_count += 1
+
+        # If leaks detected, degrade health status and log warning
+        if leak_count > 0:
+            health_status = PoolHealthStatus.DEGRADED
+            self._logger.warning(
+                f"Connection pool health degraded: {leak_count} potential leaks detected in last 60s",
+                context=cast(Any, {
+                    "leak_count": leak_count,
+                    "health_status": health_status.value,
+                    "time_window_seconds": 60,
+                })
+            )
+
         # Build database status dict
         database_status = DatabaseStatus(
             status="connected" if self._state == PoolState.HEALTHY else "degraded",
@@ -1246,6 +1278,7 @@ class ConnectionPoolManager:
             },
             latency_ms=stats.avg_acquisition_time_ms if stats.avg_acquisition_time_ms > 0 else None,
             last_error=stats.last_error,  # Includes last_error from reconnection attempts
+            leak_count=leak_count,  # Include leak count in health status metadata
         )
 
         # Calculate uptime
@@ -1661,6 +1694,170 @@ class ConnectionPoolManager:
             )
             # Don't re-raise - let the loop exit gracefully
 
+    async def _leak_detection_loop(self) -> None:
+        """Background task that detects and warns about potential connection leaks.
+
+        This task runs continuously in the background, monitoring active connections
+        to detect potential leaks where connections are held for longer than the
+        configured leak detection timeout. When a leak is detected, a WARNING is logged
+        with diagnostic information including the stack trace captured at acquisition time.
+
+        **Detection Strategy**:
+        - Runs every 10 seconds to check active connections
+        - Only enabled when config.enable_leak_detection is True
+        - Calculates held_duration = (now - metadata.acquired_at).total_seconds()
+        - If held_duration > config.leak_detection_timeout, logs WARNING
+        - Does NOT terminate connections (non-disruptive warning only)
+        - Stores leak warnings in deque for health status degradation tracking
+
+        **Logging Events** (structured to /tmp/codebase-mcp.log):
+        - "Potential connection leak detected: {connection_id}" (WARNING)
+        - Includes held_duration_seconds and stack_trace from metadata
+        - Logs leak count periodically for monitoring
+
+        **Error Handling**:
+        - All exceptions are caught, logged with context, and do not crash the loop
+        - Loop exits gracefully when pool enters SHUTTING_DOWN or TERMINATED state
+        - Metadata access errors are logged and loop continues
+
+        **Performance Characteristics**:
+        - Check interval: 10 seconds (minimal overhead)
+        - Metadata iteration: O(n) where n = active connections
+        - Memory: O(1) + deque(maxlen=100) for recent leak warnings
+
+        **Constitutional Compliance**:
+        - Principle V (Production Quality): Comprehensive error handling with diagnostics
+        - Principle VIII (Type Safety): Complete type annotations with mypy --strict
+        - Principle III (Protocol Compliance): Structured logging, no stdout pollution
+
+        **State Transitions**:
+        - Any state -> exit: Pool enters SHUTTING_DOWN or TERMINATED
+
+        Returns:
+            None: This method runs until pool shutdown is initiated.
+
+        Raises:
+            No exceptions are raised to caller (all exceptions are caught and logged).
+            The loop continues indefinitely until the pool is shut down.
+
+        Example Usage (internal):
+            >>> # Started automatically by initialize() method
+            >>> self._leak_detection_task = asyncio.create_task(self._leak_detection_loop())
+            >>> # Cancelled automatically by shutdown() method
+            >>> if self._leak_detection_task is not None:
+            ...     self._leak_detection_task.cancel()
+
+        Notes:
+            - This method should only be called once per pool instance
+            - The task reference is stored in self._leak_detection_task
+            - The shutdown() method handles task cancellation automatically
+            - Leak detection is non-disruptive (warnings only, no connection termination)
+        """
+        check_interval = 10.0  # Check for leaks every 10 seconds
+
+        self._logger.info(
+            "Leak detection task started",
+            context=cast(Any, {
+                "check_interval_seconds": check_interval,
+                "pool_state": self._state.value,
+            })
+        )
+
+        try:
+            while True:
+                # Exit loop if pool is shutting down or terminated
+                if self._state in (PoolState.SHUTTING_DOWN, PoolState.TERMINATED):
+                    self._logger.info(
+                        "Leak detection task exiting: pool is shutting down",
+                        context=cast(Any, {"pool_state": self._state.value})
+                    )
+                    break
+
+                # Sleep for check interval before checking
+                await asyncio.sleep(check_interval)
+
+                # Skip leak detection if not enabled or pool not initialized
+                if self._pool is None or self._config is None:
+                    continue
+
+                if not self._config.enable_leak_detection:
+                    # Leak detection disabled, skip check
+                    continue
+
+                try:
+                    # Get current timestamp for held duration calculation
+                    now = datetime.now(timezone.utc)
+
+                    # Iterate through active connections (tracked in _connection_metadata)
+                    leak_count = 0
+                    for conn_id, metadata in self._connection_metadata.items():
+                        # Calculate how long this connection has been held
+                        held_duration = (now - metadata.acquired_at).total_seconds()
+
+                        # Check if connection exceeds leak detection timeout
+                        if held_duration > self._config.leak_detection_timeout:
+                            # Log WARNING about potential leak
+                            self._logger.warning(
+                                f"Potential connection leak detected: {metadata.connection_id}",
+                                context=cast(Any, {
+                                    "connection_id": metadata.connection_id,
+                                    "held_duration_seconds": held_duration,
+                                    "leak_detection_timeout": self._config.leak_detection_timeout,
+                                    "acquired_at": metadata.acquired_at.isoformat(),
+                                    "stack_trace": metadata.acquisition_stack_trace,
+                                    "query_count": metadata.query_count,
+                                    "created_at": metadata.created_at.isoformat(),
+                                })
+                            )
+
+                            # Store leak warning timestamp for health status degradation
+                            self._recent_leak_warnings.append(now)
+                            leak_count += 1
+
+                    # Log periodic summary if leaks detected
+                    if leak_count > 0:
+                        self._logger.info(
+                            f"Leak detection check complete: {leak_count} potential leaks detected",
+                            context=cast(Any, {
+                                "leak_count": leak_count,
+                                "active_connections": len(self._connection_metadata),
+                                "recent_leak_warnings": len(self._recent_leak_warnings),
+                                "leak_detection_timeout": self._config.leak_detection_timeout,
+                            })
+                        )
+
+                except Exception as check_error:
+                    # Log leak detection error but continue loop
+                    self._logger.warning(
+                        "Failed to check for connection leaks",
+                        context=cast(Any, {
+                            "error_type": type(check_error).__name__,
+                            "error_message": str(check_error),
+                        }),
+                        exc_info=True
+                    )
+
+        except asyncio.CancelledError:
+            # Task was cancelled (shutdown initiated)
+            self._logger.info(
+                "Leak detection task cancelled during shutdown",
+                context=cast(Any, {"pool_state": self._state.value})
+            )
+            raise  # Re-raise to propagate cancellation
+
+        except Exception as loop_error:
+            # Unexpected error in leak detection loop (should not occur)
+            self._logger.error(
+                "Unexpected error in leak detection loop",
+                context=cast(Any, {
+                    "error_type": type(loop_error).__name__,
+                    "error_message": str(loop_error),
+                    "traceback": traceback.format_exc(),
+                    "pool_state": self._state.value,
+                }),
+                exc_info=True
+            )
+            # Don't re-raise - let the loop exit gracefully
 
     async def shutdown(self, timeout: float = 30.0) -> None:
         """Gracefully shutdown connection pool with connection draining.
@@ -1902,6 +2099,28 @@ class ConnectionPoolManager:
 
                 self._logger.info(
                     "Phase 5 complete: pool maintenance cancelled",
+                    context=cast(Any, {})
+                )
+
+            # PHASE 5 (continued): Cancel leak detection background task
+            if self._leak_detection_task is not None:
+                self._logger.info(
+                    "Cancelling leak detection background task",
+                    context=cast(Any, {"task_done": self._leak_detection_task.done()})
+                )
+
+                if not self._leak_detection_task.done():
+                    self._leak_detection_task.cancel()
+                    try:
+                        await self._leak_detection_task
+                    except asyncio.CancelledError:
+                        self._logger.debug(
+                            "Leak detection task cancelled successfully",
+                            context=cast(Any, {})
+                        )
+
+                self._logger.info(
+                    "Phase 5 complete: leak detection cancelled",
                     context=cast(Any, {})
                 )
 

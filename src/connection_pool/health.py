@@ -44,7 +44,7 @@ class DatabaseStatus(BaseModel):
     Database connectivity status with pool statistics.
 
     Provides detailed information about the database connection state,
-    including pool metrics, query latency, and error tracking.
+    including pool metrics, query latency, error tracking, and leak detection.
 
     Attributes:
         status: Connection status indicator (connected/disconnected/connecting)
@@ -55,13 +55,15 @@ class DatabaseStatus(BaseModel):
             - waiting: Number of clients waiting for connections
         latency_ms: Last query latency in milliseconds (None if no recent queries)
         last_error: Last error message encountered (None if no recent errors)
+        leak_count: Number of potential connection leaks detected in last 60 seconds
 
     Example:
         >>> db_status = DatabaseStatus(
         ...     status="connected",
         ...     pool={"total": 5, "idle": 3, "active": 2, "waiting": 0},
         ...     latency_ms=2.3,
-        ...     last_error=None
+        ...     last_error=None,
+        ...     leak_count=0
         ... )
     """
 
@@ -81,6 +83,11 @@ class DatabaseStatus(BaseModel):
     last_error: str | None = Field(
         default=None,
         description="Last error message"
+    )
+
+    leak_count: int = Field(
+        default=0,
+        description="Number of potential connection leaks detected in last 60 seconds"
     )
 
 
