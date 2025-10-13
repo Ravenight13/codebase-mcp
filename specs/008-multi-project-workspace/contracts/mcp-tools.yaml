@@ -1,0 +1,290 @@
+# MCP Tool Contracts: Multi-Project Workspace Support
+#
+# This contract defines the MCP tool parameter additions for multi-project support.
+# All tools receive an optional project_id parameter for workspace isolation.
+#
+# Constitutional Compliance:
+# - Principle III: Protocol Compliance (MCP via SSE, backward-compatible parameters)
+# - Principle XI: FastMCP Foundation (uses FastMCP @mcp.tool() decorators)
+
+openapi: 3.1.0
+info:
+  title: Codebase MCP Server - Multi-Project Tools
+  version: 1.0.0
+  description: |
+    MCP tool contracts with optional project_id parameter for workspace isolation.
+
+    **Backward Compatibility**: All existing tool calls work unchanged (project_id=None → default workspace).
+
+    **New Capability**: Users can specify project_id for isolated workspaces.
+
+components:
+  parameters:
+    ProjectId:
+      name: project_id
+      in: query
+      required: false
+      schema:
+        type: string
+        pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        minLength: 1
+        maxLength: 50
+        nullable: true
+        examples:
+          - "client-a"
+          - "frontend"
+          - "my-project-123"
+      description: |
+        Optional project identifier for workspace isolation.
+
+        **Format**: Lowercase alphanumeric with hyphens only.
+        **Constraints**:
+        - Cannot start or end with hyphen
+        - No consecutive hyphens
+        - Max 50 characters
+
+        **Null/Omitted**: Uses default workspace (backward compatibility)
+        **Specified**: Uses isolated project workspace
+
+  schemas:
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Project identifier must be lowercase alphanumeric with hyphens"
+        details:
+          type: object
+          properties:
+            field:
+              type: string
+              example: "project_id"
+            value:
+              type: string
+              example: "My_Project"
+            constraint:
+              type: string
+              example: "Must match pattern: ^[a-z0-9]+(-[a-z0-9]+)*$"
+
+    PermissionError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "PERMISSION_DENIED"
+        message:
+          type: string
+          example: "Cannot create project workspace - insufficient permissions"
+        details:
+          type: object
+          properties:
+            project_id:
+              type: string
+            schema_name:
+              type: string
+            suggested_action:
+              type: string
+              example: "Contact administrator to grant CREATE SCHEMA permission"
+
+paths:
+  /tools/index_repository:
+    post:
+      operationId: index_repository
+      summary: Index a code repository with optional project isolation
+      description: |
+        Scans, chunks, and embeds a codebase for semantic search.
+
+        **Project Isolation**: When project_id is specified, indexes into isolated workspace.
+        **Auto-Provisioning**: Creates project schema on first use.
+        **Backward Compatible**: Omitting project_id uses default workspace.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - repo_path
+              properties:
+                repo_path:
+                  type: string
+                  description: Absolute path to repository directory
+                  example: "/Users/username/projects/my-app"
+
+                project_id:
+                  type: string
+                  nullable: true
+                  pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+                  minLength: 1
+                  maxLength: 50
+                  description: Optional project identifier (null = default workspace)
+                  examples:
+                    - "client-a"
+                    - "frontend"
+                    - null
+
+      responses:
+        '200':
+          description: Indexing completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  repository_id:
+                    type: integer
+                    example: 42
+                  project_id:
+                    type: string
+                    nullable: true
+                    example: "client-a"
+                  schema_name:
+                    type: string
+                    example: "project_client_a"
+                  files_indexed:
+                    type: integer
+                    example: 1234
+                  chunks_created:
+                    type: integer
+                    example: 5678
+                  duration_seconds:
+                    type: number
+                    example: 45.2
+
+        '400':
+          description: Validation error (invalid project_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+        '403':
+          description: Permission denied (cannot create schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionError'
+
+  /tools/search_code:
+    post:
+      operationId: search_code
+      summary: Search code with optional project isolation
+      description: |
+        Performs semantic search across indexed codebase.
+
+        **Project Isolation**: Returns results only from specified project workspace.
+        **Workflow Integration**: If project_id omitted and workflow-mcp available, auto-detects active project.
+        **Fallback**: If no project_id and no workflow-mcp, uses default workspace.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Natural language search query
+                  example: "authentication middleware"
+
+                project_id:
+                  type: string
+                  nullable: true
+                  pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+                  minLength: 1
+                  maxLength: 50
+                  description: |
+                    Optional project identifier.
+                    - Specified: Search in this project only
+                    - Null + workflow-mcp available: Auto-detect from workflow-mcp
+                    - Null + workflow-mcp unavailable: Use default workspace
+                  examples:
+                    - "client-a"
+                    - null
+
+                limit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                  description: Maximum number of results
+
+      responses:
+        '200':
+          description: Search completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        chunk_id:
+                          type: integer
+                        file_path:
+                          type: string
+                        content:
+                          type: string
+                        start_line:
+                          type: integer
+                        end_line:
+                          type: integer
+                        similarity_score:
+                          type: number
+                          format: float
+
+                  project_id:
+                    type: string
+                    nullable: true
+                    description: Project that was searched (null = default)
+                    example: "client-a"
+
+                  schema_name:
+                    type: string
+                    description: PostgreSQL schema that was queried
+                    example: "project_client_a"
+
+                  total_count:
+                    type: integer
+                    description: Total results found (before limit)
+
+                  latency_ms:
+                    type: number
+                    description: Query execution time
+
+        '400':
+          description: Validation error (invalid project_id or query)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+# Constitutional Validation Notes:
+#
+# Principle III (Protocol Compliance):
+# - All tools use FastMCP @mcp.tool() decorators
+# - Optional parameters maintain backward compatibility
+# - No stdout/stderr pollution (errors via MCP error responses)
+#
+# Principle V (Production Quality):
+# - Comprehensive error responses with actionable messages
+# - Field-level validation errors (Pydantic)
+# - Permission errors with suggested actions
+#
+# Principle VIII (Pydantic Type Safety):
+# - project_id validated via ProjectIdentifier Pydantic model
+# - All request/response bodies have Pydantic schema definitions
+# - mypy --strict enforced on all tool implementations
