@@ -1,0 +1,8 @@
+# Ignore raw pytest-benchmark output (keep only the processed baseline)
+connection_pool_benchmark_raw.json
+connection_pool_benchmark_temp.json
+*_temp.json
+*_raw.json
+
+# Keep the processed baseline files
+!connection_pool_baseline.json

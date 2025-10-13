@@ -20,10 +20,16 @@ from uuid import UUID
 from fastmcp import Context
 from pydantic import Field, ValidationError as PydanticValidationError
 
+from src.connection_pool.exceptions import (
+    ConnectionValidationError,
+    PoolClosedError,
+    PoolTimeoutError,
+)
 from src.database import get_session_factory
 from src.database.session import get_session, resolve_project_id
+from src.mcp.errors import MCPError
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server_fastmcp import mcp
+from src.mcp.server_fastmcp import get_pool_manager, mcp
 from src.models.project_identifier import ProjectIdentifier
 from src.services import SearchFilter, SearchResult
 from src.services.searcher import search_code as search_code_service
@@ -182,9 +188,130 @@ async def search_code(
         raise ValueError(f"Input validation failed: {e}") from e
 
     # Perform semantic search with project isolation
+    pool_info: dict[str, Any]  # Declare once for all exception handlers
     try:
         async with get_session(project_id=resolved_project_id) as db:
             results: list[SearchResult] = await search_code_service(query, db, filters)
+
+    except PoolTimeoutError as e:
+        # Connection pool timeout - provide actionable error with pool statistics
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+                "active_connections": stats.active_connections,
+                "waiting_requests": stats.waiting_requests,
+                "peak_active": stats.peak_active_connections,
+            }
+        except Exception:
+            pool_info = {"error": "Unable to retrieve pool statistics"}
+
+        logger.error(
+            "Connection pool timeout during search",
+            extra={
+                "context": {
+                    "query": query[:100],
+                    "project_id": resolved_project_id,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection pool exhausted. "
+                f"Try: Increase POOL_MAX_SIZE or wait for connections to become available."
+            )
+        raise MCPError(
+            message=f"Connection pool timeout during search: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "PoolTimeoutError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Increase POOL_MAX_SIZE environment variable or reduce concurrent operations",
+            },
+        ) from e
+
+    except ConnectionValidationError as e:
+        # Connection validation failed - database connection issue
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+                "active_connections": stats.active_connections,
+                "last_error": stats.last_error,
+            }
+        except Exception:
+            pool_info = {"error": "Unable to retrieve pool statistics"}
+
+        logger.error(
+            "Connection validation failed during search",
+            extra={
+                "context": {
+                    "query": query[:100],
+                    "project_id": resolved_project_id,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection validation failed. "
+                f"Try: Check database connectivity and restart server."
+            )
+        raise MCPError(
+            message=f"Database connection validation failed during search: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "ConnectionValidationError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Check PostgreSQL is running and network connectivity is available",
+            },
+        ) from e
+
+    except PoolClosedError as e:
+        # Pool is closed - server shutdown or lifecycle issue
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+            }
+        except Exception:
+            pool_info = {"error": "Pool closed or unavailable"}
+
+        logger.error(
+            "Connection pool closed during search",
+            extra={
+                "context": {
+                    "query": query[:100],
+                    "project_id": resolved_project_id,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection pool is closed. "
+                f"Try: Restart the server or check server lifecycle."
+            )
+        raise MCPError(
+            message=f"Connection pool closed during search: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "PoolClosedError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Restart the MCP server to reinitialize the connection pool",
+            },
+        ) from e
+
     except Exception as e:
         logger.error(
             "Search operation failed",

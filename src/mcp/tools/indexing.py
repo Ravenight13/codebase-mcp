@@ -19,10 +19,16 @@ from typing import Any
 from fastmcp import Context
 from pydantic import ValidationError
 
+from src.connection_pool.exceptions import (
+    ConnectionValidationError,
+    PoolClosedError,
+    PoolTimeoutError,
+)
 from src.database import get_session_factory
 from src.database.session import get_session, resolve_project_id
+from src.mcp.errors import MCPError
 from src.mcp.mcp_logging import get_logger
-from src.mcp.server_fastmcp import mcp
+from src.mcp.server_fastmcp import get_pool_manager, mcp
 from src.models.project_identifier import ProjectIdentifier
 from src.services.indexer import IndexResult
 from src.services.indexer import index_repository as index_repository_service
@@ -164,6 +170,7 @@ async def index_repository(
         raise ValueError(f"Repository path must be a directory: {repo_path}")
 
     # Perform indexing
+    pool_info: dict[str, Any]  # Declare once for all exception handlers
     try:
         # Use get_session with project_id for workspace isolation
         # This will auto-provision workspace if needed
@@ -188,6 +195,125 @@ async def index_repository(
                     f"created {result.chunks_created} chunks in "
                     f"{result.duration_seconds:.1f}s"
                 )
+
+    except PoolTimeoutError as e:
+        # Connection pool timeout - provide actionable error with pool statistics
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+                "active_connections": stats.active_connections,
+                "waiting_requests": stats.waiting_requests,
+                "peak_active": stats.peak_active_connections,
+            }
+        except Exception:
+            pool_info = {"error": "Unable to retrieve pool statistics"}
+
+        logger.error(
+            "Connection pool timeout during indexing",
+            extra={
+                "context": {
+                    "repo_path": repo_path,
+                    "name": name,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection pool exhausted. "
+                f"Try: Increase POOL_MAX_SIZE or wait for connections to become available."
+            )
+        raise MCPError(
+            message=f"Connection pool timeout during indexing: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "PoolTimeoutError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Increase POOL_MAX_SIZE environment variable or reduce concurrent operations",
+            },
+        ) from e
+
+    except ConnectionValidationError as e:
+        # Connection validation failed - database connection issue
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+                "active_connections": stats.active_connections,
+                "last_error": stats.last_error,
+            }
+        except Exception:
+            pool_info = {"error": "Unable to retrieve pool statistics"}
+
+        logger.error(
+            "Connection validation failed during indexing",
+            extra={
+                "context": {
+                    "repo_path": repo_path,
+                    "name": name,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection validation failed. "
+                f"Try: Check database connectivity and restart server."
+            )
+        raise MCPError(
+            message=f"Database connection validation failed during indexing: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "ConnectionValidationError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Check PostgreSQL is running and network connectivity is available",
+            },
+        ) from e
+
+    except PoolClosedError as e:
+        # Pool is closed - server shutdown or lifecycle issue
+        try:
+            pool_manager = get_pool_manager()
+            stats = pool_manager.get_statistics()
+            pool_info = {
+                "total_connections": stats.total_connections,
+                "idle_connections": stats.idle_connections,
+            }
+        except Exception:
+            pool_info = {"error": "Pool closed or unavailable"}
+
+        logger.error(
+            "Connection pool closed during indexing",
+            extra={
+                "context": {
+                    "repo_path": repo_path,
+                    "name": name,
+                    "error": str(e),
+                    "pool_statistics": pool_info,
+                }
+            },
+        )
+        if ctx:
+            await ctx.error(
+                f"Database connection pool is closed. "
+                f"Try: Restart the server or check server lifecycle."
+            )
+        raise MCPError(
+            message=f"Connection pool closed during indexing: {str(e)}",
+            code="DATABASE_ERROR",
+            details={
+                "error_type": "PoolClosedError",
+                "pool_statistics": pool_info,
+                "suggestion": "Try: Restart the MCP server to reinitialize the connection pool",
+            },
+        ) from e
 
     except Exception as e:
         logger.error(
