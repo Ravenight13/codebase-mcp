@@ -192,19 +192,19 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Validation for User Story 3 (Perform BEFORE authoring)
 
-- [ ] T042 [US3] Review quickstart.md Test Scenario 4 (Configuration Guide Validation) - understand staging environment validation requirements
+- [X] T042 [US3] Review quickstart.md Test Scenario 4 (Configuration Guide Validation) - understand staging environment validation requirements
 
 ### Implementation for User Story 3
 
 **File**: `docs/configuration/production-config.md`
 
-- [ ] T043 [US3] Write Configuration Guide: Title and Overview section (purpose, quick links to major sections)
-- [ ] T044 [US3] Write Configuration Guide: Environment Variables Reference section with tables - FR-021
+- [X] T043 [US3] Write Configuration Guide: Title and Overview section (purpose, quick links to major sections)
+- [X] T044 [US3] Write Configuration Guide: Environment Variables Reference section with tables - FR-021
   - Core Configuration subsection (DATABASE_URL, OLLAMA_BASE_URL, EMBEDDING_MODEL) with table format
   - Multi-Project Configuration subsection (MAX_PROJECTS, MAX_CONNECTIONS_PER_POOL, PROJECT_POOL_TIMEOUT) with table format
   - workflow-mcp Integration subsection (WORKFLOW_MCP_URL, WORKFLOW_MCP_TIMEOUT) with table format - FR-026
   - Table columns: Variable, Required, Default, Description, Example
-- [ ] T045 [US3] Write Configuration Guide: Connection Pool Tuning section - FR-022, FR-023
+- [X] T045 [US3] Write Configuration Guide: Connection Pool Tuning section - FR-022, FR-023
   - Understanding the Calculation subsection with formula - FR-024
   - Example Scenarios table (Small/Medium/Large Deployment)
   - PostgreSQL max_connections Requirement subsection with formula and buffer explanation - FR-024
@@ -212,30 +212,30 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
   - Tuning MAX_PROJECTS subsection with tradeoffs (✅ higher/lower, ❌ higher/lower) - FR-022
   - Tuning MAX_CONNECTIONS_PER_POOL subsection with tradeoffs - FR-023
   - Recommendations for different deployment sizes
-- [ ] T046 [US3] Write Configuration Guide: PostgreSQL Configuration section - FR-025
+- [X] T046 [US3] Write Configuration Guide: PostgreSQL Configuration section - FR-025
   - Production Tuning Parameters subsection with postgresql.conf settings (max_connections, shared_buffers, effective_cache_size, work_mem, etc.)
   - Rationale for Settings subsection explaining why each setting matters for codebase-mcp workload
-- [ ] T047 [US3] Write Configuration Guide: Monitoring & Health Checks section - FR-038
+- [X] T047 [US3] Write Configuration Guide: Monitoring & Health Checks section - FR-038
   - Key Indicators subsection (active pool count, connections per pool, pool eviction frequency, query latency)
   - Monitoring Queries subsection with SQL queries (active databases, connection count per database, total connections)
   - Health Check Endpoints subsection (document any health check endpoints if they exist)
-- [ ] T048 [US3] Write Configuration Guide: Configuration Validation Checklist section with commands - FR-027 (DATABASE_URL connects, OLLAMA_BASE_URL responds, embedding model available, PostgreSQL max_connections sufficient, MAX_PROJECTS × MAX_CONNECTIONS_PER_POOL calculation valid, workflow-mcp URL reachable if configured, connection pool creation successful, indexing test completes)
-- [ ] T049 [US3] Write Configuration Guide: Troubleshooting section
+- [X] T048 [US3] Write Configuration Guide: Configuration Validation Checklist section with commands - FR-027 (DATABASE_URL connects, OLLAMA_BASE_URL responds, embedding model available, PostgreSQL max_connections sufficient, MAX_PROJECTS × MAX_CONNECTIONS_PER_POOL calculation valid, workflow-mcp URL reachable if configured, connection pool creation successful, indexing test completes)
+- [X] T049 [US3] Write Configuration Guide: Troubleshooting section
   - "Too many connections" error (symptom, cause, solution)
   - Slow query performance (symptom, cause, solution)
   - Frequent pool evictions (symptom, cause, solution)
 
 ### Manual Validation for User Story 3
 
-- [ ] T050 [US3] Validate Configuration Guide: Test environment variable examples in staging (quickstart.md Step 1)
-- [ ] T051 [US3] Validate Configuration Guide: Test connection calculation examples (quickstart.md Step 2)
-- [ ] T052 [US3] Validate Configuration Guide: Test PostgreSQL tuning examples in staging (quickstart.md Step 3)
-- [ ] T053 [US3] Validate Configuration Guide: Test validation checklist commands (quickstart.md Step 4)
-- [ ] T054 [US3] Validate Configuration Guide: Test monitoring queries (quickstart.md Step 5)
-- [ ] T055 [US3] Validate Configuration Guide: Verify all environment variables documented with defaults - SC-006, FR-021
-- [ ] T056 [US3] Validate Configuration Guide: Verify MAX_PROJECTS tradeoffs documented - FR-022
-- [ ] T057 [US3] Validate Configuration Guide: Verify MAX_CONNECTIONS_PER_POOL tradeoffs documented - FR-023
-- [ ] T058 [US3] Validate Configuration Guide: Test monitoring queries from quickstart.md Scenario 4 Step 5 - FR-038
+- [X] T050 [US3] Validate Configuration Guide: Test environment variable examples in staging (quickstart.md Step 1)
+- [X] T051 [US3] Validate Configuration Guide: Test connection calculation examples (quickstart.md Step 2)
+- [X] T052 [US3] Validate Configuration Guide: Test PostgreSQL tuning examples in staging (quickstart.md Step 3)
+- [X] T053 [US3] Validate Configuration Guide: Test validation checklist commands (quickstart.md Step 4)
+- [X] T054 [US3] Validate Configuration Guide: Test monitoring queries (quickstart.md Step 5)
+- [X] T055 [US3] Validate Configuration Guide: Verify all environment variables documented with defaults - SC-006, FR-021
+- [X] T056 [US3] Validate Configuration Guide: Verify MAX_PROJECTS tradeoffs documented - FR-022
+- [X] T057 [US3] Validate Configuration Guide: Verify MAX_CONNECTIONS_PER_POOL tradeoffs documented - FR-023
+- [X] T058 [US3] Validate Configuration Guide: Test monitoring queries from quickstart.md Scenario 4 Step 5 - FR-038
 
 **Checkpoint**: User Story 3 (Configuration Guide) complete and validated - administrators can deploy to production with correct configuration
 
