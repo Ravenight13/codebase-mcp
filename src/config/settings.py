@@ -20,8 +20,12 @@ from pydantic import (
     HttpUrl,
     PostgresDsn,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Import PoolConfig for connection pool management
+from src.connection_pool.config import PoolConfig
 
 # ============================================================================
 # Constants
@@ -48,16 +52,63 @@ class Settings(BaseSettings):
     All settings are loaded from environment variables with .env file support.
     Required fields must be set or server startup will fail.
 
+    Connection Pool Integration:
+        The Settings class automatically initializes a PoolConfig instance from
+        DATABASE_URL and POOL_* environment variables. This ensures fail-fast
+        behavior: invalid configuration will halt server startup with clear
+        error messages.
+
+        The pool_config field is automatically populated during validation and
+        provides access to advanced connection pool settings. If no POOL_*
+        environment variables are set, default values from PoolConfig are used.
+
     Example .env:
+        # Required: Database connection
         DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp
+
+        # Ollama Configuration
         OLLAMA_BASE_URL=http://localhost:11434
         OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+        # Performance Tuning
         EMBEDDING_BATCH_SIZE=50
         MAX_CONCURRENT_REQUESTS=10
+
+        # Legacy Pool Configuration (Deprecated - use POOL_* variables instead)
         DB_POOL_SIZE=20
         DB_MAX_OVERFLOW=10
+
+        # Logging
         LOG_LEVEL=INFO
         LOG_FILE=/tmp/codebase-mcp.log
+
+        # Advanced Connection Pool Configuration (Optional - uses defaults if not set)
+        # All POOL_* variables are optional. Defaults are production-ready.
+        POOL_MIN_SIZE=2              # Min connections (default: 2)
+        POOL_MAX_SIZE=10             # Max connections (default: 10)
+        POOL_TIMEOUT=30.0            # Connection acquisition timeout (default: 30.0s)
+        POOL_COMMAND_TIMEOUT=60.0    # Query execution timeout (default: 60.0s)
+        POOL_MAX_IDLE_TIME=60.0      # Idle connection timeout (default: 60.0s)
+        POOL_MAX_QUERIES=50000       # Queries before connection recycling (default: 50000)
+        POOL_MAX_CONNECTION_LIFETIME=3600.0  # Max connection age (default: 3600.0s)
+        POOL_LEAK_DETECTION_TIMEOUT=30.0     # Leak warning threshold (default: 30.0s)
+        POOL_ENABLE_LEAK_DETECTION=true      # Enable leak detection (default: true)
+
+    Validation Rules:
+        - DATABASE_URL must use postgresql+asyncpg:// scheme
+        - POOL_MAX_SIZE must be >= POOL_MIN_SIZE
+        - All timeout values must be positive
+        - Configuration errors fail fast at startup with actionable messages
+
+    Usage Example:
+        >>> from src.config.settings import get_settings
+        >>> settings = get_settings()
+        >>> # Access database URL
+        >>> db_url = settings.database_url
+        >>> # Access pool configuration
+        >>> pool_config = settings.pool_config
+        >>> print(f"Pool size: {pool_config.min_size}-{pool_config.max_size}")
+        Pool size: 2-10
     """
 
     model_config = SettingsConfigDict(
@@ -239,6 +290,23 @@ class Settings(BaseSettings):
     ] = 60
 
     # ============================================================================
+    # Connection Pool Configuration
+    # ============================================================================
+
+    pool_config: Annotated[
+        PoolConfig | None,
+        Field(
+            default=None,
+            description=(
+                "Advanced connection pool configuration. "
+                "This field is automatically populated from DATABASE_URL and POOL_* environment variables. "
+                "If not explicitly set, a PoolConfig instance will be created with DATABASE_URL "
+                "and default pool settings during validation."
+            ),
+        ),
+    ] = None
+
+    # ============================================================================
     # Validators
     # ============================================================================
 
@@ -330,6 +398,62 @@ class Settings(BaseSettings):
             )
         return v
 
+    @model_validator(mode="after")
+    def initialize_pool_config(self) -> "Settings":
+        """
+        Initialize pool_config from DATABASE_URL and environment variables.
+
+        This validator automatically creates a PoolConfig instance if one wasn't
+        explicitly provided. It uses the DATABASE_URL from Settings and reads
+        POOL_* environment variables for pool-specific configuration.
+
+        This ensures fail-fast behavior: if DATABASE_URL is invalid or missing,
+        server startup will fail with a clear error message.
+
+        Returns:
+            Settings instance with initialized pool_config
+
+        Raises:
+            ValueError: If PoolConfig creation fails due to invalid configuration
+
+        Example:
+            >>> # With only DATABASE_URL set
+            >>> settings = Settings(database_url="postgresql+asyncpg://localhost/db")
+            >>> settings.pool_config.min_size  # Uses default: 2
+            2
+            >>> settings.pool_config.database_url
+            'postgresql+asyncpg://localhost/db'
+
+            >>> # With POOL_* environment variables
+            >>> # POOL_MIN_SIZE=5, POOL_MAX_SIZE=20
+            >>> settings = Settings(database_url="postgresql+asyncpg://localhost/db")
+            >>> settings.pool_config.min_size
+            5
+        """
+        if self.pool_config is None:
+            # Convert PostgresDsn to string for PoolConfig
+            database_url_str = str(self.database_url)
+
+            try:
+                # Create PoolConfig with DATABASE_URL
+                # PoolConfig will automatically read POOL_* environment variables
+                self.pool_config = PoolConfig(database_url=database_url_str)
+            except Exception as e:
+                # Re-raise with context about where the error occurred
+                error_msg = (
+                    "Failed to initialize connection pool configuration.\n"
+                    f"Error: {e}\n\n"
+                    "This typically indicates:\n"
+                    "  1. Invalid POOL_* environment variable values\n"
+                    "  2. Conflicting pool size configuration (max_size < min_size)\n"
+                    "  3. Out-of-range timeout values\n\n"
+                    "Check your .env file and ensure POOL_* variables follow PoolConfig validation rules.\n"
+                    "See PoolConfig documentation for valid ranges and constraints."
+                )
+                raise ValueError(error_msg) from e
+
+        return self
+
 
 # ============================================================================
 # Singleton Instance
@@ -381,6 +505,7 @@ except Exception:
 
 __all__ = [
     "LogLevel",
+    "PoolConfig",
     "Settings",
     "get_settings",
     "settings",
