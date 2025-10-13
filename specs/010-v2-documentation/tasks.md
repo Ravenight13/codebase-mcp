@@ -251,42 +251,42 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Validation for User Story 4 (Perform BEFORE authoring)
 
-- [ ] T059 [US4] Review quickstart.md Test Scenario 2 (Code Example Testing) for integration examples
+- [X] T059 [US4] Review quickstart.md Test Scenario 2 (Code Example Testing) for integration examples
 
 ### Implementation for User Story 4
 
 **File**: `docs/api/tool-reference.md`
 
-- [ ] T060 [P] [US4] Write API Reference: Title and Overview section - list exactly 2 tools with breaking changes callout
-- [ ] T061 [P] [US4] Write API Reference: index_repository section - FR-005
+- [X] T060 [P] [US4] Write API Reference: Title and Overview section - list exactly 2 tools with breaking changes callout
+- [X] T061 [P] [US4] Write API Reference: index_repository section - FR-005
   - Parameters table (repo_path, project_id, force_reindex)
   - Parameter Details subsections with project_id default behavior and workflow-mcp auto-resolution
   - Return Value subsection (JSON schema + table)
   - Examples subsections (basic, multi-project, force re-index)
   - Error Handling table
-- [ ] T062 [P] [US4] Write API Reference: search_code section - FR-006
+- [X] T062 [P] [US4] Write API Reference: search_code section - FR-006
   - Parameters table (query, project_id, repository_id, file_type, directory, limit)
   - Parameter Details subsections with project_id default behavior and workflow-mcp auto-resolution
   - Return Value subsection (JSON schema + table with Result Object details)
   - Examples subsections (basic, multi-project, filtered)
   - Error Handling table
-- [ ] T063 [US4] Write API Reference: Removed Tools section - FR-007, FR-008
+- [X] T063 [US4] Write API Reference: Removed Tools section - FR-007, FR-008
   - List all 14 tools by name with ❌ "Removed in v2.0" notation
   - Removed Project Management Tools subsection (4 tools)
   - Removed Entity Management Tools subsection (6 tools)
   - Removed Work Item Management Tools subsection (4 tools)
   - Link to workflow-mcp as alternative
   - Link to migration guide for upgrade instructions
-- [ ] T064 [P] [US4] Write API Reference: Tool Discovery section (MCP tool discovery via SSE, JSON schema validation)
+- [X] T064 [P] [US4] Write API Reference: Tool Discovery section (MCP tool discovery via SSE, JSON schema validation)
 
 ### Manual Validation for User Story 4
 
-- [ ] T065 [US4] Validate API Reference: Test index_repository JSON examples - quickstart.md Step 5
-- [ ] T066 [US4] Validate API Reference: Test search_code JSON examples - quickstart.md Step 5
-- [ ] T067 [US4] Validate API Reference: Test tool invocation with MCP client (if available)
-- [ ] T068 [US4] Validate API Reference: Verify exactly 2 tools documented - SC-001
-- [ ] T069 [US4] Validate API Reference: Verify all 14 removed tools listed by name - SC-002, FR-007, FR-008
-- [ ] T070 [US4] Validate API Reference: Verify project_id parameter default behavior documented - FR-005, FR-006
+- [X] T065 [US4] Validate API Reference: Test index_repository JSON examples - quickstart.md Step 5
+- [X] T066 [US4] Validate API Reference: Test search_code JSON examples - quickstart.md Step 5
+- [X] T067 [US4] Validate API Reference: Test tool invocation with MCP client (if available)
+- [X] T068 [US4] Validate API Reference: Verify exactly 2 tools documented - SC-001
+- [X] T069 [US4] Validate API Reference: Verify all 14 removed tools listed by name - SC-002, FR-007, FR-008
+- [X] T070 [US4] Validate API Reference: Verify project_id parameter default behavior documented - FR-005, FR-006
 
 **Checkpoint**: User Story 4 (API Reference) complete and validated - developers can integrate workflow-mcp using API documentation
 
