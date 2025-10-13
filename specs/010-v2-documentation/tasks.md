@@ -49,9 +49,9 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 **⚠️ CRITICAL**: These sections are referenced by multiple user stories and must be complete before artifact-specific work
 
-- [ ] T004 [P] Document all 14 removed tools with names and categories in shared reference (for Migration Guide and API Reference) - FR-010, FR-008
-- [ ] T005 [P] Document new environment variables table (8-10 variables with defaults) for Configuration Guide - FR-013, FR-021
-- [ ] T006 [P] Create connection pool calculation formula with 3-5 example scenarios - FR-024
+- [X] T004 [P] Document all 14 removed tools with names and categories in shared reference (for Migration Guide and API Reference) - FR-010, FR-008
+- [X] T005 [P] Document new environment variables table (8-10 variables with defaults) for Configuration Guide - FR-013, FR-021
+- [X] T006 [P] Create connection pool calculation formula with 3-5 example scenarios - FR-024
 
 **Checkpoint**: Common sections ready for inclusion in multiple artifacts
 
