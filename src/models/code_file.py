@@ -92,9 +92,11 @@ class CodeFile(Base):
     chunks: Mapped[list[CodeChunk]] = relationship(
         back_populates="code_file", cascade="all, delete-orphan"
     )
-    change_events: Mapped[list[ChangeEvent]] = relationship(
-        back_populates="code_file", cascade="all, delete-orphan"
-    )
+    # NOTE: change_events relationship temporarily commented out due to model mismatch
+    # The ChangeEvent model needs code_file_id foreign key and back_populates relationship
+    # change_events: Mapped[list[ChangeEvent]] = relationship(
+    #     back_populates="code_file", cascade="all, delete-orphan"
+    # )
 
     # Table-level constraints
     __table_args__ = (
