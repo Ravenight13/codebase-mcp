@@ -69,25 +69,25 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 **NOTE: Review validation procedures in quickstart.md BEFORE writing content to understand success criteria**
 
-- [ ] T007 [US1] Review quickstart.md Test Scenario 3 (Migration Guide Validation) - understand validation requirements before authoring
+- [X] T007 [US1] Review quickstart.md Test Scenario 3 (Migration Guide Validation) - understand validation requirements before authoring
 
 ### Implementation for User Story 1
 
 **File**: `docs/migration/v1-to-v2-migration.md`
 
-- [ ] T008 [US1] Write Migration Guide: Title and Overview section (purpose, scope, target audience, data preservation policy) - FR-019
-- [ ] T009 [US1] Write Migration Guide: Breaking Changes Summary section (upfront before procedures) - FR-009
+- [X] T008 [US1] Write Migration Guide: Title and Overview section (purpose, scope, target audience, data preservation policy) - FR-019
+- [X] T009 [US1] Write Migration Guide: Breaking Changes Summary section (upfront before procedures) - FR-009
   - Tool API Changes subsection (14 tools removed, 2 tools modified) - FR-010, FR-012
   - Database Schema Changes subsection (9 tables dropped, project_id added) - FR-011
   - Environment Variable Changes subsection (new required variables) - FR-013
   - Data Preservation Policy callout (repositories preserved, v1.x data discarded) - FR-019
-- [ ] T010 [US1] Write Migration Guide: Removed Tools List section with all 14 tools by name - FR-010
+- [X] T010 [US1] Write Migration Guide: Removed Tools List section with all 14 tools by name - FR-010
   - Removed Project Management Tools (4 tools): create_project, switch_project, get_active_project, list_projects
   - Removed Entity Management Tools (6 tools): register_entity_type, create_entity, query_entities, update_entity, delete_entity, update_entity_type_schema
   - Removed Work Item Management Tools (4 tools): create_work_item, update_work_item, query_work_items, get_work_item_hierarchy
-- [ ] T011 [US1] Write Migration Guide: Prerequisites section (v1.x running, PostgreSQL access, disk space, downtime window)
-- [ ] T012 [US1] Write Migration Guide: Pre-Migration Checklist section (review breaking changes, verify versions, test rollback in non-prod)
-- [ ] T013 [US1] Write Migration Guide: Backup Procedures section with exact commands - FR-015
+- [X] T011 [US1] Write Migration Guide: Prerequisites section (v1.x running, PostgreSQL access, disk space, downtime window)
+- [X] T012 [US1] Write Migration Guide: Pre-Migration Checklist section (review breaking changes, verify versions, test rollback in non-prod)
+- [X] T013 [US1] Write Migration Guide: Backup Procedures section with exact commands - FR-015
   - Database Backup subsection with pg_dump command
   - Configuration Backup subsection with cp command
   - Verification steps for backups
