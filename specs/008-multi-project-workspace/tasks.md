@@ -374,28 +374,33 @@ Performance tests validate Constitutional Principle IV guarantees. Independent t
 
 Security tests validate SQL injection prevention and identifier validation. Independent test files.
 
-- [ ] **T026 [P]** Security test: SQL injection prevention in `tests/security/test_sql_injection.py`
+- [X] **T026 [P]** Security test: SQL injection prevention in `tests/security/test_sql_injection.py`
   - **Description**: Validate SQL injection attempts blocked by validation (Quickstart Scenario 9)
-  - **Test Cases**: Parameterized test for various injection patterns
+  - **Completed**: Commit 32af4f5a
+  - **Test Cases**: Parameterized test for 17 injection patterns
     - `"project'; DROP TABLE code_chunks--"`
     - `"project/**/OR/**/1=1--"`
     - `"project\"; DELETE FROM repositories--"`
     - `"project' UNION SELECT * FROM pg_shadow--"`
-  - **Assertion**: ValidationError raised, database integrity preserved
+    - Comment-based, encoded, and batch injections
+  - **Result**: ALL 18 tests PASSED (17 injection patterns + multiple attempts test)
+  - **Assertion**: ValidationError raised before SQL execution
   - **Dependencies**: None (independent security test)
-  - **Traces to**: FR-016, Acceptance Scenario (Security)
-  - **File**: `tests/security/test_sql_injection.py` (NEW)
+  - **Traces to**: FR-016, Acceptance Scenario 9 (Security)
+  - **File**: `tests/security/test_sql_injection.py` (NEW, 220 lines)
 
-- [ ] **T027 [P]** Security test: Identifier validation in `tests/security/test_identifier_validation.py`
+- [X] **T027 [P]** Security test: Identifier validation in `tests/security/test_identifier_validation.py`
   - **Description**: Validate comprehensive identifier format checks
+  - **Completed**: Commit 32af4f5a
   - **Test Cases**:
-    - Valid: "client-a", "frontend", "my-project-123"
-    - Invalid: uppercase, underscores, spaces, special chars
-    - Edge: 50-char max, leading/trailing hyphens, consecutive hyphens
+    - Valid: 16 valid formats (single char, digits, hyphens, max length)
+    - Invalid: 60+ invalid patterns (uppercase, underscores, spaces, special chars)
+    - Edge: min/max length, hyphen placement, error message clarity
+  - **Result**: ALL 73 tests PASSED (16 valid + 60 invalid + 7 edge case tests)
   - **Assertion**: Only valid formats pass, clear error messages for invalid
   - **Dependencies**: None (independent security test)
   - **Traces to**: FR-005, FR-006, FR-007, FR-008
-  - **File**: `tests/security/test_identifier_validation.py` (NEW)
+  - **File**: `tests/security/test_identifier_validation.py` (NEW, 360 lines)
 
 ## Phase 3.9: Unit Tests (Parallel)
 
