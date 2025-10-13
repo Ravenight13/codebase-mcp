@@ -304,32 +304,32 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 **File**: `docs/architecture/multi-project-design.md`
 
-- [ ] T071 [P] [US5] Write Architecture Docs: Title and Overview section (high-level description of system components and design philosophy)
-- [ ] T072 [P] [US5] Write Architecture Docs: Multi-Project Architecture Diagram section - FR-028
+- [X] T071 [P] [US5] Write Architecture Docs: Title and Overview section (high-level description of system components and design philosophy)
+- [X] T072 [P] [US5] Write Architecture Docs: Multi-Project Architecture Diagram section - FR-028
   - Mermaid graph TB diagram showing: MCP Client, codebase-mcp Server, Connection Pool Manager, workflow-mcp Server (optional), PostgreSQL databases
   - Component Responsibilities subsection explaining each component's role
-- [ ] T073 [US5] Write Architecture Docs: Database-Per-Project Strategy section - FR-029
+- [X] T073 [US5] Write Architecture Docs: Database-Per-Project Strategy section - FR-029
   - Design Decision subsection with naming convention: codebase_{sanitized_project_id}
   - Examples table with 5-10 examples (default, my-app, frontend.ui, client_a, etc.) showing sanitization rules
   - Sanitization Rules subsection (non-alphanumeric → underscore, lowercase, max length 54 chars)
   - Rationale subsection (schema independence, query performance, data locality, backup granularity, multi-tenancy, resource limits)
   - Tradeoffs subsection (pros and cons)
   - Schema Structure subsection with simplified SQL schema
-- [ ] T074 [US5] Write Architecture Docs: Connection Pool Design section - FR-030
+- [X] T074 [US5] Write Architecture Docs: Connection Pool Design section - FR-030
   - Pool Lifecycle subsection with Mermaid stateDiagram-v2 (Uninitialized → Creating → Active → Idle → Evicted)
   - State Descriptions subsection
   - LRU Eviction Policy subsection with example timeline
   - Performance Implications subsection (pool creation time, eviction time, frequent eviction indicators)
   - Connection Pool Configuration subsection (min connections, max connections, timeout, idle timeout)
   - Concurrency Example subsection
-- [ ] T075 [US5] Write Architecture Docs: workflow-mcp Integration Architecture section - FR-031
+- [X] T075 [US5] Write Architecture Docs: workflow-mcp Integration Architecture section - FR-031
   - Mermaid sequenceDiagram showing integration points and fallback behavior
   - Integration Behavior subsection (5 steps: project_id provided, workflow-mcp call, response, timeout, fallback)
   - Fallback Rationale subsection (local-first architecture, no external dependencies, graceful degradation)
-- [ ] T076 [US5] Write Architecture Docs: Component Interactions section
+- [X] T076 [US5] Write Architecture Docs: Component Interactions section
   - Indexing Flow subsection (ASCII flow diagram)
   - Search Flow subsection (ASCII flow diagram)
-- [ ] T077 [US5] Write Architecture Docs: Design Rationale Summary section
+- [X] T077 [US5] Write Architecture Docs: Design Rationale Summary section
   - Why Multi-Project Architecture?
   - Why Database-Per-Project?
   - Why Connection Pool Manager?
@@ -337,10 +337,10 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Manual Validation for User Story 5
 
-- [ ] T078 [US5] Validate Architecture Docs: Verify Mermaid diagrams render correctly in GitHub
-- [ ] T079 [US5] Validate Architecture Docs: Verify database naming examples accurate - FR-029
-- [ ] T080 [US5] Validate Architecture Docs: Verify LRU eviction explanation with timeline example - FR-030
-- [ ] T081 [US5] Validate Architecture Docs: Test workflow-mcp integration sequence with live workflow-mcp instance (optional if workflow-mcp unavailable) - FR-031
+- [X] T078 [US5] Validate Architecture Docs: Verify Mermaid diagrams render correctly in GitHub
+- [X] T079 [US5] Validate Architecture Docs: Verify database naming examples accurate - FR-029
+- [X] T080 [US5] Validate Architecture Docs: Verify LRU eviction explanation with timeline example - FR-030
+- [X] T081 [US5] Validate Architecture Docs: Test workflow-mcp integration sequence with live workflow-mcp instance (optional if workflow-mcp unavailable) - FR-031
 
 **Checkpoint**: User Story 5 (Architecture Docs) complete and validated - maintainers can understand architecture and contribute confidently
 
