@@ -117,6 +117,7 @@ A new contributor wants to understand the codebase architecture, set up a develo
 - **What happens when user searches PostgreSQL for "codebase_mcp" database after indexing project "my-app"?** - Architecture documentation explains database-per-project naming convention: codebase_my-app
 - **What happens when workflow-mcp integration is configured but workflow-mcp is unavailable?** - README documents fallback to default project with clear error message and timeout behavior
 - **What happens when user executes rollback but is unsure if it succeeded?** - Migration guide provides validation commands to verify v1.x restoration and troubleshooting section for partial rollback
+- **What happens when user cannot determine whether migration completed successfully?** - Migration guide provides diagnostic commands checking which tables exist, verifying v2.0 schema presence, and data integrity to confirm migration state
 
 ## Requirements *(mandatory)*
 
@@ -125,52 +126,93 @@ A new contributor wants to understand the codebase architecture, set up a develo
 #### Documentation Accuracy Requirements
 
 - **FR-001**: README MUST reflect accurate tool count (2 tools: index_repository, search_code)
+  - Traces to: User Story 2 (New User First-Time Installation), Scenario 1
 - **FR-002**: README MUST explain multi-project support capability with use case examples
+  - Traces to: User Story 2, Scenario 1; User Story 4 (Developer Integrates workflow-mcp), Scenario 1
 - **FR-003**: README MUST document workflow-mcp integration as optional feature with standalone usage documented first
+  - Traces to: User Story 2, Scenario 4; User Story 4, Scenario 1
 - **FR-004**: README MUST provide updated installation instructions matching v2.0 requirements
+  - Traces to: User Story 2, Scenario 3
 - **FR-005**: API documentation MUST document index_repository with project_id parameter showing default behavior
+  - Traces to: User Story 2, Scenario 4; User Story 4, Scenario 4
 - **FR-006**: API documentation MUST document search_code with project_id parameter showing default behavior
+  - Traces to: User Story 2, Scenario 5; User Story 4, Scenario 4
 - **FR-007**: API documentation MUST remove all references to 14 deleted tools or mark as "Removed in v2.0"
+  - Traces to: User Story 1 (Existing User Upgrades from v1.x), Scenario 3
 - **FR-008**: Documentation MUST provide list of removed tools with v2.0 removal notation
+  - Traces to: User Story 1, Scenario 3
 
 #### Migration Guide Requirements
 
 - **FR-009**: Migration guide MUST explain breaking changes upfront before procedures
-- **FR-010**: Migration guide MUST list all 14 removed tools explicitly by name
+  - Traces to: User Story 1 (Existing User Upgrades from v1.x), Scenario 2
+- **FR-010**: Migration guide MUST list all 14 removed tools explicitly by name (create_project, switch_project, get_active_project, list_projects, register_entity_type, create_entity, query_entities, update_entity, delete_entity, update_entity_type_schema, create_work_item, update_work_item, query_work_items, get_work_item_hierarchy)
+  - Traces to: User Story 1, Scenario 3
 - **FR-011**: Migration guide MUST explain database schema changes (9 tables dropped, project_id added)
+  - Traces to: User Story 1, Scenario 2
 - **FR-012**: Migration guide MUST document API changes (project_id parameter added to both tools)
+  - Traces to: User Story 1, Scenario 2
 - **FR-013**: Migration guide MUST list new environment variables required for v2.0
+  - Traces to: User Story 1, Scenario 2; User Story 3 (Administrator Configures Production), Scenario 1
 - **FR-014**: Migration guide MUST provide step-by-step upgrade procedure from backup through validation
+  - Traces to: User Story 1, Scenario 5
 - **FR-015**: Migration guide MUST include backup procedures with exact commands before upgrade
+  - Traces to: User Story 1, Scenario 4
 - **FR-016**: Migration guide MUST provide complete rollback procedure restoring v1.x functionality and data
+  - Traces to: User Story 1, Scenario 7
 - **FR-017**: Migration guide MUST include validation steps to confirm successful upgrade
+  - Traces to: User Story 1, Scenario 6, Scenario 8
 - **FR-018**: Migration guide MUST document migration script execution procedure
+  - Traces to: User Story 1, Scenario 5
 - **FR-019**: Migration guide MUST explain data preservation guarantees (v2.0 preserves only indexed code repositories; all v1.x project management data including work items, entities, deployments, and entity types is discarded during migration)
+  - Traces to: User Story 1, Scenario 2
 - **FR-020**: Migration duration estimates are deferred to Phase 06 performance testing; Phase 05 migration guide omits specific timing guidance
+  - Traces to: User Story 1, Scenario 5
+- **FR-036**: Migration guide MUST provide diagnostic commands to detect partial migration state (e.g., checking which tables exist, verifying v2.0 schema presence)
+  - Traces to: User Story 1, Scenario 5, Scenario 7
+- **FR-037**: Migration guide SHOULD document checkpoint resume procedures if migration script supports incremental progress
+  - Traces to: User Story 1, Scenario 5
 
 #### Configuration Guide Requirements
 
 - **FR-021**: Configuration guide MUST document all environment variables with defaults in table format
+  - Traces to: User Story 3 (Administrator Configures Production), Scenario 1
 - **FR-022**: Configuration guide MUST explain MAX_PROJECTS limit and connection pool implications
+  - Traces to: User Story 3, Scenario 3
 - **FR-023**: Configuration guide MUST document MAX_CONNECTIONS_PER_POOL tuning guidance with tradeoffs
+  - Traces to: User Story 3, Scenario 4
 - **FR-024**: Configuration guide MUST provide PostgreSQL max_connections calculation formula
+  - Traces to: User Story 3, Scenario 2
 - **FR-025**: Configuration guide MUST recommend PostgreSQL tuning parameters for production
+  - Traces to: User Story 3, Scenario 2
 - **FR-026**: Configuration guide MUST document workflow-mcp integration environment variables
+  - Traces to: User Story 3, Scenario 1; User Story 4 (Developer Integrates workflow-mcp), Scenario 3
 - **FR-027**: Configuration guide SHOULD provide configuration validation checklist with commands
+  - Traces to: User Story 3, Scenario 6
+- **FR-038**: Configuration guide MUST document connection pool monitoring metrics and health indicators for production deployments
+  - Traces to: User Story 3 (Administrator Configures Production), Scenario 5
 
 #### Architecture Documentation Requirements
 
 - **FR-028**: Architecture docs MUST include multi-project architecture diagram showing components
+  - Traces to: User Story 5 (Maintainer Contributes to Project), Scenario 1
 - **FR-029**: Architecture docs MUST explain database-per-project naming strategy with examples
+  - Traces to: User Story 5, Scenario 2
 - **FR-030**: Architecture docs MUST document connection pool design and LRU eviction behavior
+  - Traces to: User Story 5, Scenario 3
 - **FR-031**: Architecture docs SHOULD explain workflow-mcp integration architecture with diagrams
+  - Traces to: User Story 4 (Developer Integrates workflow-mcp), Scenario 2; User Story 5, Scenario 1
 
 #### Documentation Quality Requirements
 
-- **FR-032**: All documentation links MUST resolve without 404 errors (manual verification during authoring; automated link checking deferred to Phase 07)
+- **FR-032**: All documentation links MUST resolve without 404 errors (manual verification during authoring verified by author and confirmed by reviewer during PR approval process; automated link checking deferred to Phase 07)
+  - Traces to: All User Stories (cross-cutting quality requirement)
 - **FR-033**: All code examples MUST be tested and functional before publication (manual testing during authoring; automated example testing deferred to Phase 07)
-- **FR-034**: Documentation MUST use consistent terminology throughout (glossary or style guide)
+  - Traces to: User Story 2 (New User First-Time Installation), Scenarios 4-6; User Story 1 (Existing User Upgrades), Scenario 5
+- **FR-034**: Documentation MUST use consistent terminology throughout using project-specific glossary file (docs/glossary.md) defining key terms with structure: term name, definition, usage examples, cross-references to related terms. Terms: project_id, connection pool, LRU eviction, database-per-project, workflow-mcp integration, default project
+  - Traces to: User Story 2 (new user clarity), Scenarios 1, 5; User Story 5 (Maintainer Contributes), Scenario 1
 - **FR-035**: Documentation MUST follow project markdown style guide for formatting consistency
+  - Traces to: All User Stories (cross-cutting quality requirement)
 
 ### Key Entities *(include if feature involves data)*
 
@@ -189,24 +231,27 @@ A new contributor wants to understand the codebase architecture, set up a develo
 - **SC-005**: 100% of breaking changes are documented with corresponding migration steps
 - **SC-006**: 100% of environment variables are documented with default values and descriptions
 - **SC-007**: Migration guide provides complete rollback procedure covering all upgrade steps
-- **SC-008**: Existing users successfully upgrade from v1.x to v2.0 following guide without requiring support
+- **SC-008**: 95% of v1.x users complete upgrade successfully with zero critical support tickets filed during upgrade process (measured via GitHub issues tagged "migration" with severity "critical" over 30-day period post-release; issue triage performed by maintainers using severity guidelines in CONTRIBUTING.md)
 - **SC-009**: New users complete first indexing and search within 15 minutes of installation
-- **SC-010**: System administrators deploy v2.0 to production with correct configuration on first attempt
+- **SC-010**: System administrators deploy v2.0 to production with correct configuration on first attempt (measured as: deployment passes all validation commands from FR-027 checklist without requiring configuration changes)
 - **SC-011**: Developers successfully integrate workflow-mcp using provided integration examples
-- **SC-012**: New contributors understand architecture and contribute improvements after reading documentation
+- **SC-012**: New contributors make first documentation contribution within 2 weeks of reading architecture docs, with 90% of contributions requiring no architecture-related revision feedback in PR review (measured via PR review comments)
 
 ## Assumptions
 
 - Phase 01-04 implementations are complete and stable (v2.0 refactoring finished)
 - Existing v1.x documentation is available for reference and comparison
-- PostgreSQL is confirmed as non-negotiable database (per constitution)
+- PostgreSQL 14+ is confirmed as non-negotiable database (per constitution)
+- Python 3.11+ is confirmed as runtime requirement (per constitution)
 - Migration path from v1.x to v2.0 is technically feasible (schema migration tested)
 - Rollback procedure is technically possible (data can be restored to v1.x format)
 - Default project behavior is well-defined (single "default" project for users not specifying project_id)
 - workflow-mcp integration is optional and system functions without it (local-first architecture)
 - Documentation will be version-controlled alongside code (same repository)
 - Markdown is the documentation format (industry standard for developer tools)
+- Project markdown style guide exists or will be created during documentation authoring
 - Users have command-line access for running validation and backup commands
+- Database naming follows sanitization rules defined in ProjectIdentifier model (src/models/project_identifier.py): format is project_{identifier} where hyphens are replaced with underscores; validation enforced via FR-004 through FR-008 from specs/008-multi-project-workspace/spec.md (lowercase alphanumeric + hyphen, max 50 chars, no leading/trailing/consecutive hyphens); example: project_id="client-a" → schema_name="project_client_a"; security: prevents SQL injection via strict character whitelist; architecture docs (FR-029) will document these existing rules with examples
 
 ## Dependencies
 
@@ -256,12 +301,12 @@ A new contributor wants to understand the codebase architecture, set up a develo
 - [X] Terminology consistent throughout
 
 **Requirement Completeness**:
-- [X] Maximum 3 [NEEDS CLARIFICATION] markers present (exactly 3: FR-019, FR-020, FR-032)
-- [X] All requirements testable and unambiguous
+- [X] No [NEEDS CLARIFICATION] markers present (all clarifications resolved via /clarify session)
+- [X] All requirements testable and unambiguous with explicit traceability
 - [X] All personas addressed with relevant documentation
-- [X] Edge cases and error scenarios covered (10 specific cases)
-- [X] Success criteria measurable and specific (12 quantitative/qualitative measures)
-- [X] Each requirement traces to user workflow
+- [X] Edge cases and error scenarios covered (11 specific cases)
+- [X] Success criteria measurable and specific (12 quantitative/qualitative measures with measurement methodology)
+- [X] Each requirement traces to user workflow (explicit traceability annotations added)
 - [X] Non-functional requirements captured (accuracy, completeness, quality)
 
 **Scope Clarity**:
