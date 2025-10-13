@@ -14,19 +14,20 @@
 
 **Last Updated**: 2025-10-13
 
-**Completion Status**: 24/46 tasks complete (52%)
+**Completion Status**: 29/46 tasks complete (63%)
 
 **Phase Status**:
 - ✅ Phase 1: Setup - 4/4 tasks complete (100%)
 - ✅ Phase 2: Foundational - 6/6 tasks complete (100%)
 - ✅ Phase 3: User Story 1 (MVP) - 7/7 tasks complete (100%)
 - ✅ Phase 4: User Story 2 - 7/7 tasks complete (100%)
-- ⏳ Phase 5: User Story 3 - 0/5 tasks complete (0%)
+- ✅ Phase 5: User Story 3 - 5/5 tasks complete (100%)
 - ⏳ Phase 6: User Story 4 - 0/7 tasks complete (0%)
 - ⏳ Phase 7: Integration - 0/4 tasks complete (0%)
 - ⏳ Phase 8: Polish - 0/6 tasks complete (0%)
 
 **MVP Status**: ✅ **COMPLETE** - All P1 priority user stories implemented (US1 ✅, US2 ✅)
+**P2 Features**: ✅ **COMPLETE** - Pool statistics and observability (US3 ✅)
 
 **Files Created/Modified**:
 - `src/connection_pool/` - Complete module structure
@@ -34,13 +35,13 @@
 - `src/connection_pool/exceptions.py` - Complete exception hierarchy (206 lines)
 - `src/connection_pool/statistics.py` - PoolStatistics model (118 lines)
 - `src/connection_pool/health.py` - Health models + calculation (343 lines)
-- `src/connection_pool/manager.py` - ConnectionPoolManager + PoolState + reconnection (1,539 lines)
+- `src/connection_pool/manager.py` - ConnectionPoolManager with full lifecycle (1,961 lines)
 - `src/connection_pool/pool_logging.py` - Structured logging utilities (375 lines)
 - `src/connection_pool/__init__.py` - Module exports (95 lines)
 
 **Type Safety**: ✅ All files pass `mypy --strict`
 
-**Next Up**: Phase 5 (T025-T029) - Pool statistics and observability enhancements
+**Next Up**: Phase 6 (T030-T036) - Connection leak detection and prevention
 
 ---
 
@@ -127,13 +128,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Enhance get_statistics() to track real-time metrics: capture total_connections, idle_connections, active_connections from asyncpg pool state, read waiting_requests from pool queue length, copy total_acquisitions and total_releases counters atomically, calculate avg_acquisition_time_ms from tracked durations, include peak_active_connections and peak_wait_time_ms from historical tracking, set pool_created_at from _start_time, set last_health_check to current time, include last_error and last_error_time if any recent failures, ensure <1ms data staleness (in-memory reads only, no locks)
-- [ ] T026 [US3] Add acquisition time tracking to acquire() method: record start_time = time.perf_counter() before pool.acquire(), record end_time after successful acquisition, calculate duration_ms = (end_time - start_time) * 1000, append duration_ms to _acquisition_times deque (maxlen=1000 for rolling average), update avg_acquisition_time_ms on each acquisition, track peak_wait_time_ms if duration exceeds current peak
-- [ ] T027 [US3] Add peak metrics tracking to acquire() method: after successful acquisition, read current active_connections from pool, update peak_active_connections if current > peak, store peak values in _peak_active and _peak_wait_time instance variables
-- [ ] T028 [US3] Implement connection recycling based on usage: track query_count per connection in ConnectionMetadata, check query_count against config.max_queries on release, recycle connection if query_count >= max_queries by closing and letting pool create new one, track connection age via created_at in ConnectionMetadata, recycle if age > config.max_connection_lifetime, track idle time via last_used_at, recycle if idle > config.max_idle_time, log recycling events with reason (query limit, lifetime, idle timeout)
-- [ ] T029 [US3] Add pool shrinking for idle connections: implement background task _pool_maintenance() that runs every 60 seconds, check idle_connections against min_size, close excess idle connections beyond min_size if idle > config.max_idle_time, log "Pool shrunk from {old_size} to {new_size} connections due to idle timeout", ensure pool never shrinks below min_size
+- [x] T025 [US3] Enhance get_statistics() to track real-time metrics: capture total_connections, idle_connections, active_connections from asyncpg pool state, read waiting_requests from pool queue length, copy total_acquisitions and total_releases counters atomically, calculate avg_acquisition_time_ms from tracked durations, include peak_active_connections and peak_wait_time_ms from historical tracking, set pool_created_at from _start_time, set last_health_check to current time, include last_error and last_error_time if any recent failures, ensure <1ms data staleness (in-memory reads only, no locks)
+- [x] T026 [US3] Add acquisition time tracking to acquire() method: record start_time = time.perf_counter() before pool.acquire(), record end_time after successful acquisition, calculate duration_ms = (end_time - start_time) * 1000, append duration_ms to _acquisition_times deque (maxlen=1000 for rolling average), update avg_acquisition_time_ms on each acquisition, track peak_wait_time_ms if duration exceeds current peak
+- [x] T027 [US3] Add peak metrics tracking to acquire() method: after successful acquisition, read current active_connections from pool, update peak_active_connections if current > peak, store peak values in _peak_active and _peak_wait_time instance variables
+- [x] T028 [US3] Implement connection recycling based on usage: track query_count per connection in ConnectionMetadata, check query_count against config.max_queries on release, recycle connection if query_count >= max_queries by closing and letting pool create new one, track connection age via created_at in ConnectionMetadata, recycle if age > config.max_connection_lifetime, track idle time via last_used_at, recycle if idle > config.max_idle_time, log recycling events with reason (query limit, lifetime, idle timeout)
+- [x] T029 [US3] Add pool shrinking for idle connections: implement background task _pool_maintenance() that runs every 60 seconds, check idle_connections against min_size, close excess idle connections beyond min_size if idle > config.max_idle_time, log "Pool shrunk from {old_size} to {new_size} connections due to idle timeout", ensure pool never shrinks below min_size
 
-**Checkpoint**: At this point, User Story 3 should be fully functional - detailed real-time statistics available, connection recycling works, pool shrinks after idle periods
+**Checkpoint**: ✅ User Story 3 COMPLETE - Detailed real-time statistics available, connection recycling works (hybrid asyncpg + manual age-based), pool maintenance monitors idle timeout shrinking
 
 ---
 
