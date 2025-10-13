@@ -302,7 +302,7 @@ The following parameters configure connection pool behavior for each project dat
 - **POOL_TIMEOUT**: Prevents queries from waiting indefinitely for available connections. Increase if queries frequently timeout.
 - **IDLE_TIMEOUT**: Closes idle connections after timeout to reduce resource usage. Decrease for long-running queries.
 
-See the [Environment Variables Reference](../specs/010-v2-documentation/shared-sections/environment-variables.md) for detailed configuration guidance.
+See the [Environment Variables Reference](../configuration/production-config.md#environment-variables-reference) for detailed configuration guidance.
 
 ### Concurrency Example
 

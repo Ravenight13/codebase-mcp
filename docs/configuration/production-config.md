@@ -21,8 +21,8 @@
   - [Tuning MAX_PROJECTS](#tuning-max_projects)
   - [Tuning MAX_CONNECTIONS_PER_POOL](#tuning-max_connections_per_pool)
   - [Recommendations by Deployment Size](#recommendations-by-deployment-size)
-- [PostgreSQL Performance Tuning](#postgresql-performance-tuning)
-- [Monitoring and Observability](#monitoring-and-observability)
+- [PostgreSQL Configuration](#postgresql-configuration)
+- [Monitoring & Health Checks](#monitoring--health-checks)
 - [Security Configuration](#security-configuration)
 - [Troubleshooting](#troubleshooting)
 

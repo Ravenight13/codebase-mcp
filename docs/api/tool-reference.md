@@ -746,13 +746,13 @@ The following work item management tools were removed in v2.0:
 2. **Install workflow-mcp** (if needed): If you used project management, entity tracking, or work item features, install the [workflow-mcp server](https://github.com/cyanheads/workflow-mcp)
 3. **Update Tool Calls**: Replace removed tool calls with workflow-mcp equivalents (see workflow-mcp documentation for tool mapping)
 4. **Data Migration**: v2.0 preserves only indexed code repositories. All v1.x project-scoped data (work items, entities, deployments, entity types) is discarded during migration. Export critical data before upgrading.
-5. **Test Integration**: Verify workflow-mcp integration works correctly if using automatic project detection (optional feature, see [Configuration Guide](../configuration.md))
+5. **Test Integration**: Verify workflow-mcp integration works correctly if using automatic project detection (optional feature, see [Configuration Guide](../configuration/production-config.md))
 
 **For New Users**:
 
 - If you only need semantic code search, codebase-mcp v2.0 is complete as-is (2 tools)
 - If you need project management or work item tracking, install workflow-mcp alongside codebase-mcp
-- Both servers can run independently or in integrated mode for automatic project context resolution (see [Architecture Documentation](../architecture/multi-project-design.md))
+- Both servers can run independently or in integrated mode for automatic project context resolution (see [Architecture Documentation](../architecture/multi-project-design.md#workflow-mcp-integration-architecture))
 
 ---
 
@@ -906,8 +906,9 @@ The server includes comprehensive MCP protocol compliance tests:
 
 ## Related documentation
 
-- **Environment Variables**: See [Environment Variables Reference](../shared-sections/environment-variables.md) for configuration details
+- **Environment Variables**: See [Environment Variables Reference](../configuration/production-config.md#environment-variables-reference) for configuration details
 - **Multi-Project Architecture**: See [Architecture Documentation](../architecture/multi-project-design.md) for workspace isolation design
 - **workflow-mcp Integration**: See [Integration Guide](../integration/workflow-mcp-integration.md) for automatic project detection setup
+- **Configuration Guide**: See [Production Configuration Guide](../configuration/production-config.md) for deployment and tuning
 - **Migration Guide**: See [v1.x to v2.0 Migration Guide](../migration/v1-to-v2-migration.md) for removed tools reference and upgrade procedures
 - **Glossary**: See [Glossary](../glossary.md) for canonical terminology definitions

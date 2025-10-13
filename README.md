@@ -242,14 +242,11 @@ Claude Desktop ↔ FastMCP Server ↔ Tool Handlers ↔ Services ↔ PostgreSQL
 - Dual logging (file + MCP protocol) without stdout pollution
 - Async/await support throughout
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
+See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for detailed component diagrams.
 
 ## Documentation
 
-- **[docs/status/MCP_SERVER_STATUS.md](docs/status/MCP_SERVER_STATUS.md)** - Current status, test results, configuration
-- **[docs/status/SESSION_HANDOFF.md](docs/status/SESSION_HANDOFF.md)** - Recent problems solved, current working state
-- **[docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md)** - Complete setup instructions with troubleshooting
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and data flow
+- **[Multi-Project Architecture](docs/architecture/multi-project-design.md)** - System architecture and data flow
 - **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
 
 ## Database Schema
@@ -263,7 +260,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component diagrams.
 - `tasks` - Development tasks with git tracking
 - `task_status_history` - Audit trail
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for complete schema documentation.
+See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for complete schema documentation.
 
 ## Technology Stack
 
@@ -433,7 +430,7 @@ alembic current
 
 ### 4. Database Reset & Cleanup
 
-During development, you may need to reset your database. See [DATABASE_RESET.md](DATABASE_RESET.md) for three reset options:
+During development, you may need to reset your database using the following reset options:
 
 - **scripts/clear_data.sh** - Clear all data, keep schema (fastest, no restart needed)
 - **scripts/reset_database.sh** - Drop and recreate all tables (recommended for schema changes)
@@ -773,7 +770,7 @@ EMBEDDING_BATCH_SIZE=25      # For constrained environments
    - Monitor query performance: See logs at LOG_FILE path
    - Adjust batch sizes and connection pool
 
-For detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md) and [docs/guides/SETUP_GUIDE.md](docs/guides/SETUP_GUIDE.md).
+For detailed troubleshooting, see the Configuration Guide troubleshooting section.
 
 ## Contributing
 
@@ -893,7 +890,7 @@ FastMCP maintains performance targets:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License (LICENSE file pending).
 
 ## Support
 

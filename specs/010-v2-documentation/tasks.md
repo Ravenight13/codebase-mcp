@@ -354,8 +354,8 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Cross-Artifact Validation
 
-- [ ] T082 [P] Validate All Docs: Run link verification procedure (quickstart.md Scenario 1) - create link inventory spreadsheet - FR-032
-- [ ] T083 [P] Validate All Docs: Run code example testing procedure (quickstart.md Scenario 2) - create code example test log - FR-033
+- [X] T082 [P] Validate All Docs: Run link verification procedure (quickstart.md Scenario 1) - create link inventory spreadsheet - FR-032
+- [X] T083 [P] Validate All Docs: Run code example testing procedure (quickstart.md Scenario 2) - create code example test log - FR-033
 - [ ] T084 Validate All Docs: Run cross-artifact consistency check (quickstart.md Scenario 5) - FR-034, FR-035
   - Terminology consistency check (6 glossary terms)
   - Abbreviation check (LRU, MCP, SSE)
