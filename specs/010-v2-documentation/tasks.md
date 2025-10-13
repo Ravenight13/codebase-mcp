@@ -141,42 +141,42 @@ description: "Task list for v2.0 documentation overhaul with migration guide"
 
 ### Validation for User Story 2 (Perform BEFORE authoring)
 
-- [ ] T027 [US2] Review quickstart.md Test Scenario 2 (Code Example Testing) - understand example validation requirements
+- [X] T027 [US2] Review quickstart.md Test Scenario 2 (Code Example Testing) - understand example validation requirements
 
 ### Implementation for User Story 2
 
 **File**: `README.md`
 
-- [ ] T028 [US2] Write README: Title and Description (1-2 sentences) - project title with brief description
-- [ ] T029 [US2] Write README: What's New in v2.0 section - breaking changes summary with link to migration guide (docs/migration/v1-to-v2-migration.md)
-- [ ] T030 [US2] Write README: Features section - list exactly 2 tools (index_repository, search_code) with multi-project support explanation - FR-001, FR-002
-- [ ] T031 [US2] Write README: Installation section - FR-004
+- [X] T028 [US2] Write README: Title and Description (1-2 sentences) - project title with brief description
+- [X] T029 [US2] Write README: What's New in v2.0 section - breaking changes summary with link to migration guide (docs/migration/v1-to-v2-migration.md)
+- [X] T030 [US2] Write README: Features section - list exactly 2 tools (index_repository, search_code) with multi-project support explanation - FR-001, FR-002
+- [X] T031 [US2] Write README: Installation section - FR-004
   - Prerequisites subsection (PostgreSQL 14+, Python 3.11+, Ollama)
   - Installation Commands subsection (pip install command)
   - Verification Steps subsection (verify installation successful)
-- [ ] T032 [US2] Write README: Quick Start section with 2 examples - FR-002
+- [X] T032 [US2] Write README: Quick Start section with 2 examples - FR-002
   - Basic Usage (Default Project) subsection with example command
   - Multi-Project Usage subsection with project_id parameter example
-- [ ] T033 [US2] Write README: workflow-mcp Integration (Optional) section - FR-003
+- [X] T033 [US2] Write README: workflow-mcp Integration (Optional) section - FR-003
   - Mark workflow-mcp as optional feature
   - Document standalone usage first
   - Provide integration example with WORKFLOW_MCP_URL
   - Document fallback behavior to default project
-- [ ] T034 [US2] Write README: Documentation section with links to 4 specialized guides
+- [X] T034 [US2] Write README: Documentation section with links to 4 specialized guides
   - Link to Migration Guide (docs/migration/v1-to-v2-migration.md)
   - Link to Configuration Guide (docs/configuration/production-config.md)
   - Link to Architecture Docs (docs/architecture/multi-project-design.md)
   - Link to API Reference (docs/api/tool-reference.md)
-- [ ] T035 [US2] Write README: Contributing section with link to architecture docs for maintainers
+- [X] T035 [US2] Write README: Contributing section with link to architecture docs for maintainers
 
 ### Manual Validation for User Story 2
 
-- [ ] T036 [US2] Validate README: Test installation commands (pip install) - quickstart.md Step 3
-- [ ] T037 [US2] Validate README: Test Quick Start basic usage example - quickstart.md Step 3
-- [ ] T038 [US2] Validate README: Test Quick Start multi-project usage example - quickstart.md Step 3
-- [ ] T039 [US2] Validate README: Verify exactly 2 tools documented (index_repository, search_code) - SC-001, FR-001
-- [ ] T040 [US2] Validate README: Verify multi-project support explanation present - FR-002
-- [ ] T041 [US2] Validate README: Verify workflow-mcp marked optional with standalone usage first - FR-003
+- [X] T036 [US2] Validate README: Test installation commands (pip install) - quickstart.md Step 3
+- [X] T037 [US2] Validate README: Test Quick Start basic usage example - quickstart.md Step 3
+- [X] T038 [US2] Validate README: Test Quick Start multi-project usage example - quickstart.md Step 3
+- [X] T039 [US2] Validate README: Verify exactly 2 tools documented (index_repository, search_code) - SC-001, FR-001
+- [X] T040 [US2] Validate README: Verify multi-project support explanation present - FR-002
+- [X] T041 [US2] Validate README: Verify workflow-mcp marked optional with standalone usage first - FR-003
 
 **Checkpoint**: User Story 2 (README for new users) complete and validated - new users can install and use within 15 minutes
 
