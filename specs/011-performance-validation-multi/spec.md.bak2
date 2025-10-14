@@ -1,0 +1,317 @@
+# Feature Specification: Performance Validation & Multi-Tenant Testing
+
+**Feature Branch**: `011-performance-validation-multi`
+**Created**: 2025-10-13
+**Status**: Draft
+**Input**: User description: "Performance Validation & Multi-Tenant Testing for Split MCP Servers - validates that the split MCP architecture (workflow-mcp on port 8010, codebase-mcp on port 8020) meets all constitutional performance targets after Phases 01-05 implementation"
+
+**Feature Metadata**:
+- **Feature ID**: 011
+- **Feature Name**: Performance Validation & Multi-Tenant Testing
+- **Complexity**: High
+- **Priority**: Critical
+- **Estimated Effort**: 4-6 hours
+- **Phase**: 06 - Performance Validation & Testing
+- **Dependencies**: Phase 05 (Both servers integrated and functional)
+- **Parent Feature**: specs/008-mcp-server-split/
+- **Stakeholders**: Development team, Performance engineers, DevOps engineers, End users (Claude Code, Cursor IDE users)
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Performance Baseline Validation (Priority: P1)
+
+A performance engineer needs to verify that both split servers meet constitutional performance targets and that the split architecture has not introduced performance regressions compared to the pre-split monolithic system.
+
+**Why this priority**: This is the foundational validation that determines production readiness. Without meeting performance targets, the split architecture cannot be deployed. This validates the core promise of the architecture - maintaining performance while gaining operational benefits.
+
+**Independent Test**: Can be fully tested by running the benchmark suite against both servers with a known test dataset (10,000 files) and comparing results against documented baseline metrics. Delivers immediate go/no-go decision for production deployment.
+
+**Acceptance Scenarios**:
+
+1. **Given** codebase-mcp is running with an empty index, **When** engineer indexes a 10,000-file repository, **Then** indexing completes in under 60 seconds (p95) across 5 consecutive runs
+2. **Given** codebase-mcp has indexed a repository, **When** engineer executes 100 search queries with 10 concurrent clients, **Then** 95% of queries return results in under 500 milliseconds
+3. **Given** workflow-mcp has 5 active projects, **When** engineer switches between projects 20 times, **Then** 95% of switches complete in under 50 milliseconds
+4. **Given** workflow-mcp contains 1000 entities across multiple projects, **When** engineer queries entities with JSONB filters, **Then** 95% of queries complete in under 100 milliseconds
+5. **Given** pre-split baseline measurements exist, **When** engineer compares post-split performance, **Then** all metrics are within 10% of baseline values
+
+---
+
+### User Story 2 - Cross-Server Integration Validation (Priority: P1)
+
+An end user (via Claude Code or Cursor IDE) needs to perform workflows that span both servers seamlessly, with the system handling cross-server references and ensuring data consistency.
+
+**Why this priority**: This validates the primary use case for the split architecture - enabling users to work with code search and workflow management simultaneously. This is essential for user experience and demonstrates that the split doesn't break existing functionality.
+
+**Independent Test**: Can be fully tested by executing a complete workflow: search for code in codebase-mcp, receive entity references, create work items in workflow-mcp with those references, and verify the work items correctly reference the code entities. Delivers proof that the split architecture maintains functional integration.
+
+**Acceptance Scenarios**:
+
+1. **Given** both servers are running, **When** user searches for code via codebase-mcp, **Then** search results include entity references that can be used in workflow-mcp
+2. **Given** user has code search results, **When** user creates a work item in workflow-mcp referencing a code entity, **Then** the work item stores the reference and retrieves context on demand
+3. **Given** codebase-mcp is unavailable, **When** user attempts workflow operations in workflow-mcp, **Then** workflow operations continue without interruption and appropriate messaging indicates code search is unavailable
+4. **Given** workflow-mcp is unavailable, **When** user searches code via codebase-mcp, **Then** code search operates normally without workflow integration
+5. **Given** user references a code entity in a work item, **When** the entity is later re-indexed or deleted in codebase-mcp, **Then** workflow-mcp handles the stale reference gracefully with clear user messaging
+
+---
+
+### User Story 3 - Load and Stress Testing (Priority: P2)
+
+A DevOps engineer needs to verify that both servers handle high concurrent load gracefully, with appropriate degradation patterns and no catastrophic failures when resources are constrained.
+
+**Why this priority**: This validates production resilience under peak load conditions. While P1 scenarios prove basic functionality, this ensures the system won't fail when multiple users or automated processes create high load. Essential for production confidence but can be validated after basic performance is confirmed.
+
+**Independent Test**: Can be fully tested by simulating 50 concurrent clients against both servers, measuring latency degradation, connection pool behavior, and error rates. Delivers load capacity documentation and breaking point analysis for capacity planning.
+
+**Acceptance Scenarios**:
+
+1. **Given** both servers are running, **When** 50 concurrent clients send requests simultaneously, **Then** both servers remain operational without crashing or becoming unresponsive; load testing MUST simulate gradual ramp-up from 0 to 50 clients over 5 minutes with realistic user think time (minimum 1 second between requests per client)
+2. **Given** codebase-mcp is under 50-client load, **When** search queries are executed, **Then** p95 latency remains under 2000 milliseconds (graceful degradation accepted under extreme load while maintaining availability)
+3. **Given** workflow-mcp connection pool has max_size=10, **When** 50 concurrent requests arrive, **Then** requests queue appropriately and complete as connections become available, with clear timeout messaging for requests exceeding 30 seconds
+4. **Given** servers are under sustained load, **When** load test runs for 1 hour continuously, **Then** servers maintain 99.9% uptime with no memory leaks or resource exhaustion
+5. **Given** load test completes, **When** engineer reviews metrics, **Then** system provides detailed breakdown of latency percentiles, error rates, and resource utilization patterns
+
+---
+
+### User Story 4 - Error Recovery and Resilience (Priority: P2)
+
+A DevOps engineer needs to verify that both servers recover gracefully from transient failures (database disconnects, network partitions, resource exhaustion) without data loss or cascading failures.
+
+**Why this priority**: This validates production resilience for real-world failure scenarios. While less critical than proving basic functionality works, this ensures that inevitable production issues don't cause data loss or extended outages. Can be validated after basic performance and integration are confirmed.
+
+**Independent Test**: Can be fully tested by simulating various failure scenarios (DB disconnect, port conflicts, connection pool exhaustion) and verifying that servers detect failures, log appropriately, retry operations, and recover automatically. Delivers runbook documentation for production incident response.
+
+**Acceptance Scenarios**:
+
+1. **Given** codebase-mcp is indexing a repository, **When** PostgreSQL connection is terminated mid-operation, **Then** server detects failure within 5 seconds, logs error with context, and resumes indexing when connection is restored
+2. **Given** workflow-mcp loses database connection, **When** connection is restored, **Then** server automatically reconnects and resumes operations without manual intervention
+3. **Given** codebase-mcp database fails, **When** workflow-mcp attempts operations, **Then** workflow-mcp continues operating normally without cascading failure
+4. **Given** a server attempts to start, **When** its configured port is already in use, **Then** server logs clear error message with resolution steps (required fields: port number, process ID if detectable, suggested actions: 'kill process or change PORT environment variable') and exits gracefully with non-zero exit code
+5. **Given** a server is operating normally, **When** connection pool is exhausted under load, **Then** server queues requests, logs warning when pool utilization exceeds 80%, and returns 503 Service Unavailable for requests timing out after 30 seconds
+6. **Given** a server attempts to start, **When** database schema version is outdated (migration not applied), **Then** server detects schema mismatch, logs clear error message with migration instructions, and exits gracefully with non-zero exit code
+
+**Note on Authentication Failures**: Authentication failures are out of scope for Phase 06 validation. Both servers rely on local PostgreSQL instances in development/test environments with pre-configured trust authentication (no password required). Production authentication testing (password-based, connection string credential validation, SSL/TLS certificate verification) is deferred to Phase 07 security validation once deployment environments are established. This phase focuses on operational resilience for transient failures (connection loss, resource exhaustion) rather than security credential validation.
+
+---
+
+### User Story 5 - Observability and Monitoring (Priority: P3)
+
+An operator needs visibility into server health, performance metrics, and system behavior to debug issues, monitor production health, and make informed decisions about capacity and tuning.
+
+**Why this priority**: This enables operational excellence and reduces time-to-resolution for production incidents. While important, this can be validated after confirming the system works correctly under normal and stress conditions. The system can operate without perfect observability, but observability improves operational efficiency.
+
+**Independent Test**: Can be fully tested by querying health check and metrics endpoints, verifying log output contains structured data with appropriate context, and confirming that performance warnings are logged when thresholds are exceeded. Delivers monitoring integration guide for production deployment.
+
+**Acceptance Scenarios**:
+
+1. **Given** both servers are running, **When** operator queries health check endpoints, **Then** endpoints return detailed status including database connectivity, connection pool statistics, and uptime within 50 milliseconds
+2. **Given** servers are handling requests, **When** operator queries metrics endpoints, **Then** endpoints expose request counts, latency histograms, error rates, and resource utilization in Prometheus-compatible format
+3. **Given** servers are processing operations, **When** operations complete, **Then** structured logs (JSON format) include request IDs, operation names, latency, outcome, and timestamp
+4. **Given** a query takes longer than 1 second, **When** query completes, **Then** server logs performance warning with query details and execution time
+5. **Given** connection pool utilization exceeds 80%, **When** new requests arrive, **Then** server logs warning with current pool statistics and queued request count
+
+---
+
+### Edge Cases
+
+- What happens when a server attempts to start but its database schema version is outdated (migration not run)?
+- How does the system handle a repository with 50,000 files (exceeding the 10,000-file performance target)?
+- What happens when workflow-mcp references an entity ID from codebase-mcp that was deleted during re-indexing?
+- How do servers behave when both restart simultaneously during a Docker Compose restart?
+- What happens when connection pool is exhausted and all connections are held by long-running operations?
+- How does the system handle rapid project switching (10 switches within 1 second) in workflow-mcp?
+- What happens when codebase-mcp attempts to index a repository with binary files that cannot be parsed?
+- How do clients (Claude Code, Cursor IDE) handle server reconnection after transient network failure?
+- What happens when metrics endpoint is queried under high load - does it impact main operations?
+- How does the system handle concurrent indexing of the same repository from multiple clients?
+
+### Edge Case Disposition
+
+| # | Edge Case | Disposition | Rationale |
+|---|-----------|-------------|-----------|
+| 1 | Schema version outdated | Handle Gracefully | Server should detect, log, exit with clear message (add to User Story 4) |
+| 2 | Repository with 50,000 files | Out of Scope | Edge case testing; document expected degradation in quickstart.md |
+| 3 | Entity deleted during work item reference | Handled | Already in User Story 2 (FR-019) |
+| 4 | Both servers restart simultaneously | Defer to Phase 07 | Docker orchestration concern; document as known limitation |
+| 5 | Concurrent indexing of same repository | Out of Scope | Unlikely in validation phase; document as future work |
+| 6 | Rapid project switching (10/sec) | Out of Scope | Stress test beyond realistic usage; 50ms target assumes normal usage |
+| 7 | Binary files during indexing | Handle Gracefully | Add to FR-001 - skip unparseable files, log warning |
+| 8 | Client reconnection after network failure | Defer to Phase 07 | Client-side concern; servers remain available |
+| 9 | Metrics query under high load | Handled | Addressed in research.md §4 - in-memory metrics, <50ms target |
+| 10 | Connection pool exhausted | Handled | Already in FR-016 (queuing, 503 responses, timeouts) |
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: System MUST validate that codebase-mcp indexing completes in under 60 seconds (p95) for a 10,000-file repository (±5% tolerance acceptable: 9,500-10,500 files) across 5 consecutive benchmark runs (minimum 5 samples with 1 warm-up iteration for statistical validity)
+- **FR-002**: System MUST validate that codebase-mcp search queries return results in under 500 milliseconds (p95) with 10 concurrent clients
+- **FR-003**: System MUST validate that workflow-mcp project switching completes in under 50 milliseconds (p95) across 20 consecutive switches
+- **FR-004**: System MUST validate that workflow-mcp entity queries complete in under 100 milliseconds (p95) with 1000 entities in the database (distributed across 5 projects with 10-20 work items per project)
+- **FR-005**: System MUST validate performance variance is within 10% of pre-split baseline measurements for all core operations
+- **FR-006**: System MUST provide integration test suite covering cross-server workflows (code search → work item creation with entity references)
+- **FR-007**: System MUST handle 50 concurrent clients on both servers without crashing or becoming unresponsive; load testing MUST simulate gradual ramp-up from 0 to 50 clients over 5 minutes with realistic user think time (minimum 1 second between requests per client)
+- **FR-008**: System MUST detect database connection failures within 5 seconds and automatically retry with exponential backoff (maximum 3 retries)
+- **FR-009**: System MUST recover from database disconnections without data loss, resuming operations from checkpoints when connection is restored; verification methodology includes (1) record count comparison before disconnect vs after recovery, (2) transaction log verification showing no lost writes, and (3) state snapshot comparison confirming all in-flight operations completed successfully
+- **FR-010**: System MUST operate independently - failure in one server MUST NOT cause cascading failure in the other server
+- **FR-011**: System MUST provide health check endpoints returning detailed status (database connectivity, connection pool stats, uptime) within 50 milliseconds
+- **FR-012**: System MUST provide metrics endpoints exposing request counts, latency histograms, error rates in Prometheus-compatible format within 100 milliseconds (p95)
+- **FR-013**: System MUST log all operations in structured JSON format with request IDs, operation names, latency, and outcome
+
+**Structured Logging Schema**: All JSON logs MUST include: (1) timestamp (ISO 8601), (2) level (DEBUG/INFO/WARN/ERROR), (3) request_id (UUID), (4) operation_name (string), (5) latency_ms (number), (6) outcome (success/failure), (7) server_id (workflow-mcp/codebase-mcp), (8) error_details (object, optional), and (9) context (object, optional for operation-specific data)
+
+- **FR-014**: System MUST log performance warnings when operations exceed thresholds (queries >1s, connection pool >80% utilized)
+- **FR-015**: System MUST configure connection pools to prevent resource exhaustion (workflow-mcp: min=2/max=10, codebase-mcp: min=5/max=20)
+- **FR-016**: System MUST queue requests when connection pool is exhausted and return 503 Service Unavailable for requests exceeding 30-second timeout
+- **FR-017**: System MUST maintain 99.9% uptime during 1-hour continuous load testing period
+- **FR-018**: System MUST flag performance regression if metrics exceed BOTH 10% degradation from baseline AND constitutional targets (hybrid approach: accept minor degradation within targets, reject significant regression)
+- **FR-019**: System MUST validate that stale cross-server references (entity deleted/re-indexed) are handled gracefully with clear user messaging
+- **FR-020**: System MUST generate performance reports comparing pre-split vs post-split metrics with latency histograms and percentiles (p50/p95/p99)
+- **FR-021**: System MUST define validation failure handling: BLOCK deployment if any SC-001 through SC-014 violates constitutional targets; REQUIRE manual review with documented justification if metrics exceed baseline by >10% but remain within constitutional targets; generate comprehensive failure report with metrics, root cause analysis, and recommendations
+- **FR-022**: System MUST report p50, p95, and p99 latencies for all performance benchmarks (mandatory); mean, min, and max are recommended but optional for additional context
+- **FR-023**: System MUST collect resource utilization metrics including CPU percentage, memory usage (MB), and connection pool utilization percentage during all load tests; no specific thresholds required as metrics serve observability purpose only
+- **FR-024**: System MUST generate test fixtures representing realistic codebases with: (1) file size distribution from 100 bytes to 50KB, (2) directory depth up to 5 levels, (3) language mix of Python (60%) and JavaScript (40%), and (4) code complexity including functions, classes, and imports
+- **FR-025**: System MUST enforce timeout values for: (1) database query execution: 5 seconds, (2) health check endpoint: 100 milliseconds, (3) indexing operation per file: 1 second, (4) client request processing: 30 seconds (per FR-016), and (5) database connection establishment: 10 seconds
+
+**Test Scenario Coverage Note**: FR-013 (structured logging), FR-014 (performance warnings), FR-015 (connection pools), FR-018 (hybrid regression), and FR-020 (performance reports) are validated through integration tests and quickstart scenarios rather than explicit user story acceptance criteria. Tasks T025-T032 provide comprehensive test coverage for these requirements.
+
+### Key Entities
+
+- **Performance Benchmark Result**: Record of a single performance benchmark run for regression detection. Includes server identifier (codebase-mcp or workflow-mcp), operation type (index/search/switch/query), timestamp, latency percentiles (p50/p95/p99), sample size, test parameters, and pass/fail status against target thresholds.
+
+- **Integration Test Case**: Definition of a cross-server workflow test scenario. Includes test name and description, list of required servers, setup/teardown steps, sequence of API calls with expected responses, assertions for validation, and last run status with timestamp.
+
+- **Load Test Result**: Record of load/stress test execution. Includes server identifier, concurrent client count, test duration, total/successful/failed request counts, latency metrics (average/p95/max), error breakdown by type, and resource usage statistics (CPU, memory, connection pool).
+
+## Terminology: Server Health States
+
+The specification uses informal terminology in user stories; formal definitions are in data-model.md:
+
+| Spec Term (User Stories) | Data Model Term (HealthCheckResponse) | Definition |
+|---------------------------|---------------------------------------|------------|
+| Operational | healthy | Server responding, DB connected, pool <80% utilized |
+| Unresponsive | degraded | Server slow (>1s queries) OR pool >80% OR DB slow |
+| Crashed | unhealthy | Server not responding OR DB disconnected OR pool exhausted |
+
+**Measurable Indicators:**
+- **healthy**: HTTP 200 response, response time <100ms, database ping <50ms, pool utilization <80%
+- **degraded**: HTTP 200 response, response time 100-1000ms, OR database ping 50-500ms, OR pool utilization 80-95%
+- **unhealthy**: HTTP 503/500 response, OR response time >1000ms, OR database unreachable, OR pool utilization >95%
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: Codebase-mcp indexes 10,000 files in under 60 seconds (p95) with less than 5% variance across 5 runs (variance calculated as coefficient of variation: standard deviation / mean × 100%)
+- **SC-002**: Codebase-mcp search queries return in under 500 milliseconds (p95) with 10 concurrent clients
+- **SC-003**: Workflow-mcp project switching completes in under 50 milliseconds (p95) across 20 switches
+- **SC-004**: Workflow-mcp entity queries complete in under 100 milliseconds (p95) with 1000 entities
+- **SC-005**: All performance metrics are within 10% of pre-split baseline measurements
+- **SC-006**: Both servers handle 50 concurrent clients without crashing or unresponsiveness
+- **SC-007**: System maintains 99.9% uptime during 1-hour continuous load testing period (uptime defined as successful request completion rate with failed requests <0.1%)
+- **SC-008**: Both servers automatically recover from database disconnections within 10 seconds with zero data loss
+- **SC-009**: Server failures remain isolated - one server failure does not cause the other server to fail
+- **SC-010**: Health check endpoints respond within 50 milliseconds with complete status information
+- **SC-011**: Integration test suite covers minimum 10 cross-server workflow scenarios with 100% pass rate
+- **SC-012**: Performance regression detection runs automatically in CI/CD pipeline on every commit
+- **SC-013**: System generates performance reports documenting pre/post-split comparison with latency histograms
+- **SC-014**: Error messages guide users and operators to resolution with clear context and recommended actions
+- **SC-015**: All Phase 06 test code passes mypy --strict type checking with zero errors (Constitutional Principle VIII: Pydantic-Based Type Safety)
+- **SC-016**: All Phase 06 commits follow Conventional Commits format with valid types (feat/test/docs/refactor) (Constitutional Principle X: Git Micro-Commit Strategy)
+- **SC-017**: Feature branch 011-performance-validation-multi exists with spec.md completed before implementation begins (Constitutional Principle VI: Specification-First Development)
+- **SC-018**: All performance benchmarks and integration tests are written and FAIL before implementation of validation infrastructure (Constitutional Principle VII: Test-Driven Development)
+
+## Assumptions
+
+1. **Baseline Availability**: Pre-split performance baselines are documented and available for comparison (assumed to be in docs/performance/baseline-*.json or similar location)
+2. **Test Environment**: Test environment has sufficient resources (CPU, memory, disk) to represent production conditions
+3. **Constitutional Targets**: Performance targets in constitution.md are considered minimum acceptable thresholds, not stretch goals
+4. **Database State**: Benchmark tests run against a clean database state (no existing data) unless testing specifically requires pre-populated data
+5. **Network Conditions**: Tests assume local or low-latency network conditions (< 10ms) between clients and servers
+6. **Single Instance Testing**: Load testing focuses on single-instance capacity; multi-instance deployment and load balancing are out of scope
+7. **Repository Size Boundaries**: Zero-file repositories are invalid test cases (must contain at least 1 parseable file); 10,000-file target has ±5% tolerance; repositories exceeding 50,000 files are out of scope per Edge Case #2
+8. **Platform Support**: Testing covers macOS and Linux development platforms; Windows support is deferred to future phases
+9. **Tool Version Requirements**: See plan.md for complete version requirements (k6 0.45+, pytest-benchmark 4.0+, tree-sitter 0.20+, pytest 7.0+, Python 3.11+, PostgreSQL 14+)
+10. **Ollama Service Availability**: Ollama must be running locally on default port 11434 with embedding model available (e.g., nomic-embed-text); if Ollama is unavailable, semantic search tests MUST be skipped with clear indication rather than failing the entire test suite
+
+## Out of Scope
+
+The following are explicitly NOT included in this feature:
+
+1. **Production Deployment**: This phase validates readiness but does not deploy servers to production environments
+2. **Multi-Instance Load Balancing**: Testing focuses on single-instance performance; load balancing across multiple instances is future work
+3. **Advanced Monitoring Stack**: Basic metrics are exposed, but integration with Grafana, Prometheus, or other monitoring platforms is deferred
+4. **Client Library Modifications**: MCP Python SDK integration is tested as-is; no modifications to client libraries in this phase
+5. **Performance Optimization Beyond Targets**: If constitutional targets are met, no additional optimization work is performed (diminishing returns)
+6. **Cross-Platform Testing**: Testing focuses on macOS/Linux; Windows support is deferred to future phases
+7. **Feature Development**: All features are complete in Phases 01-05; this phase only validates existing functionality
+
+   *Note: Health and metrics endpoints (User Story 5) are considered validation infrastructure required for observability during performance testing, not user-facing features. Their implementation in Phase 06 is necessary to enable validation of constitutional compliance.*
+8. **Documentation Updates**: User-facing documentation was completed in Phase 05; this phase generates operational/runbook documentation only
+
+## Additional Context
+
+### Phase Dependencies
+- **Phases 01-05 Complete**: Both workflow-mcp and codebase-mcp must be functional, integrated, and passing existing test suites. If workflow-mcp features are partially implemented, integration tests MUST use mocking/stubbing for unavailable endpoints while validating implemented functionality. All 5 user stories require both servers operational; partial implementation testing is acceptable for development but full implementation required for production validation.
+- **Parent Specification**: Reference specs/008-mcp-server-split/spec.md for the original split architecture requirements
+- **Baseline Metrics**: Pre-split performance data from the monolithic server must be available for regression comparison
+
+**Required Artifacts from Phases 01-05:**
+- [ ] workflow-mcp server running on port 8010 with health endpoint responding
+- [ ] codebase-mcp server running on port 8020 with health endpoint responding
+- [ ] Both servers passing existing unit test suites (pytest coverage >80%)
+- [ ] PostgreSQL databases provisioned for both servers
+- [ ] MCP Python SDK integration functional (client can connect via SSE)
+- [ ] Pre-split performance baseline JSON files available (or fallback synthetic baseline per Task T018)
+- [ ] Example 10,000-file repository available for indexing tests
+
+**Verification Command**: `curl http://localhost:8010/health && curl http://localhost:8020/health` (both should return 200 OK)
+
+### Related Work
+- **Phase 02 Data Migration**: Validated data integrity during migration; this phase validates performance post-migration
+- **Phase 05 Client Integration**: Established client integration patterns; this phase validates those patterns under load
+- **Constitutional Principles**: All performance targets derive from .specify/memory/constitution.md Principle IV (Performance Guarantees)
+
+### Future Enhancements (Post-Phase 06)
+1. **Advanced Monitoring**: Integration with Prometheus and Grafana for real-time dashboards and alerting
+2. **Multi-Region Deployment**: Testing latency and failover for geographically distributed server deployments
+3. **Chaos Engineering**: Automated random failure injection to continuously validate resilience
+4. **Performance Tuning Automation**: Machine learning-based connection pool and cache sizing based on workload patterns
+5. **Cross-Platform Support**: Comprehensive testing and optimization for Windows environments
+
+### Glossary
+
+- **MCP**: Model Context Protocol - standard for AI assistant server communication
+- **SSE**: Server-Sent Events - transport protocol for MCP streaming responses
+- **p50/p95/p99**: Percentile latencies (50th, 95th, 99th) - measures response time distribution
+- **TDD**: Test-Driven Development - writing tests before implementation
+- **pgvector**: PostgreSQL extension for vector similarity search with embeddings
+- **k6**: Load testing tool supporting SSE and high concurrency
+- **Coefficient of Variation (CV)**: Standard deviation divided by mean, expressed as percentage
+- **Constitutional Principles**: Project-specific non-negotiable requirements in .specify/memory/constitution.md
+- **Benchmark Run**: Single execution of performance test capturing latency measurements
+- **Hybrid Regression**: Detection logic requiring BOTH >10% baseline degradation AND constitutional target violation
+
+
+### References
+
+**Document Availability:**
+- constitution.md: Available at .specify/memory/constitution.md
+- specs/008-mcp-server-split/spec.md: Parent feature specification
+- Pre-split baseline JSON: May not exist yet; Task T018 provides synthetic baseline fallback if unavailable
+- Phase 06 Analysis: Optional reference document; not required for implementation
+
+**Reference Documents:**
+- Constitutional Principles: .specify/memory/constitution.md
+- Phase 06 Analysis: docs/mcp-split-plan/phases/phase-06-performance/analysis.md (if available)
+- Original Split Specification: specs/008-mcp-server-split/spec.md
+- Performance Baseline Data: docs/performance/ (assumed location, to be confirmed)
+
+### Known Limitations
+
+**Traceability**: Functional Requirements (FR-001 through FR-021) and Success Criteria (SC-001 through SC-018) trace to User Stories implicitly through document structure and thematic grouping. Explicit traceability matrices (FR→US, SC→FR) are not included in this specification. This is acceptable for Phase 06 as:
+- All requirements are organized by theme (performance, integration, resilience, observability)
+- Success criteria clearly reference the requirements they validate
+- Implementation tasks in tasks.md explicitly map to both FRs and SCs
+- The relationship between requirements and user stories is evident from context
+
+Explicit traceability matrices may be added in future specification revisions if needed for compliance documentation or audit requirements.
