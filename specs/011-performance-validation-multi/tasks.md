@@ -58,10 +58,10 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Create indexing performance benchmark in tests/benchmarks/test_indexing_perf.py (pytest-benchmark with 5 iterations, validate <60s p95 per quickstart.md lines 69-90)
-- [ ] T014 [P] [US1] Create search performance benchmark in tests/benchmarks/test_search_perf.py (10 concurrent clients, validate <500ms p95)
-- [ ] T015 [P] [US1] Create workflow-mcp project switching benchmark in tests/benchmarks/test_workflow_perf.py (20 consecutive switches, validate <50ms p95)
-- [ ] T016 [P] [US1] Create workflow-mcp entity query benchmark in tests/benchmarks/test_workflow_perf.py (1000 entities, validate <100ms p95)
+- [X] T013 [P] [US1] Create indexing performance benchmark in tests/benchmarks/test_indexing_perf.py (pytest-benchmark with 5 iterations, validate <60s p95 per quickstart.md lines 69-90)
+- [X] T014 [P] [US1] Create search performance benchmark in tests/benchmarks/test_search_perf.py (10 concurrent clients, validate <500ms p95)
+- [X] T015 [P] [US1] Create workflow-mcp project switching benchmark in tests/benchmarks/test_workflow_perf.py (20 consecutive switches, validate <50ms p95)
+- [X] T016 [P] [US1] Create workflow-mcp entity query benchmark in tests/benchmarks/test_workflow_perf.py (1000 entities, validate <100ms p95)
 - [ ] T017 [US1] Create pytest benchmark runner script in scripts/run_benchmarks.sh (executes all benchmarks and saves results to performance_baselines/)
 - [ ] T018 [US1] Collect pre-split baseline measurements and save to docs/performance/baseline-pre-split.json (if missing)
 - [ ] T019 [US1] Run all benchmarks and generate post-split baseline in docs/performance/baseline-post-split.json
