@@ -141,9 +141,9 @@
 - [X] T041 [P] [US5] Create health check service in src/services/health_service.py (database connectivity check, connection pool stats, uptime calculation, <50ms response time requirement)
 - [X] T042 [P] [US5] Create metrics collection service in src/services/metrics_service.py (in-memory metrics storage, counter and histogram support, Prometheus format export)
 - [X] T043 [P] [US5] Create health check response time test in tests/integration/test_observability.py::test_health_check_response_time (validate <50ms per quickstart.md lines 413-430)
-- [ ] T044 [P] [US5] Create health check schema validation test in tests/integration/test_observability.py::test_health_check_response_schema (validate OpenAPI contract compliance)
-- [ ] T045 [P] [US5] Create metrics endpoint format test in tests/integration/test_observability.py::test_metrics_prometheus_format (validate both JSON and text formats per quickstart.md lines 435-468)
-- [ ] T046 [P] [US5] Create structured logging validation test in tests/integration/test_observability.py::test_structured_logging_format (validate JSON format with required fields per quickstart.md lines 473-489)
+- [X] T044 [P] [US5] Create health check schema validation test in tests/integration/test_observability.py::test_health_check_response_schema (validate OpenAPI contract compliance)
+- [X] T045 [P] [US5] Create metrics endpoint format test in tests/integration/test_observability.py::test_metrics_prometheus_format (validate both JSON and text formats per quickstart.md lines 435-468)
+- [X] T046 [P] [US5] Create structured logging validation test in tests/integration/test_observability.py::test_structured_logging_format (validate JSON format with required fields per quickstart.md lines 473-489)
 - [X] T047 [US5] Run all observability tests and validate 100% pass rate (SC-010 validation) - BLOCKED: T043-T046 not implemented
 - [ ] T048 [US5] Create health monitoring operations guide in docs/operations/health-monitoring.md (health check usage, interpretation, alerting thresholds)
 - [ ] T049 [US5] Create Prometheus integration guide in docs/operations/prometheus-integration.md (scraping configuration, alert rules, dashboard recommendations)
