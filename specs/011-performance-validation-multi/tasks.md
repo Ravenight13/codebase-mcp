@@ -97,9 +97,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T026 [P] [US3] Create k6 load test scenario for codebase-mcp in tests/load/k6_codebase_load.js (ramp to 50 users, 10min sustained load, p95<2000ms threshold per quickstart.md lines 273-303)
-- [ ] T027 [P] [US3] Create k6 load test scenario for workflow-mcp in tests/load/k6_workflow_load.js (ramp to 50 users, 10min sustained load, error rate <1%)
-- [ ] T028 [P] [US3] Create load test orchestration script in scripts/run_load_tests.sh (executes both k6 scenarios, collects results)
+- [X] T026 [P] [US3] Create k6 load test scenario for codebase-mcp in tests/load/k6_codebase_load.js (ramp to 50 users, 10min sustained load, p95<2000ms threshold per quickstart.md lines 273-303)
+- [X] T027 [P] [US3] Create k6 load test scenario for workflow-mcp in tests/load/k6_workflow_load.js (ramp to 50 users, 10min sustained load, error rate <1%)
+- [X] T028 [P] [US3] Create load test orchestration script in scripts/run_load_tests.sh (executes both k6 scenarios, collects results)
 - [ ] T029 [US3] Run codebase-mcp load test and save results to tests/load/results/codebase_load_results.json
 - [ ] T030 [US3] Run workflow-mcp load test and save results to tests/load/results/workflow_load_results.json
 - [ ] T031 [US3] Validate load test results against thresholds (50 concurrent clients, 99.9% uptime, error rate <1%, SC-006 and SC-007 validation)
