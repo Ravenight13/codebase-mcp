@@ -79,10 +79,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T021 [P] [US2] Create cross-server workflow integration test in tests/integration/test_cross_server_workflow.py::test_search_to_work_item_workflow (httpx async client, validate entity reference persistence per quickstart.md lines 141-176)
-- [ ] T022 [P] [US2] Create server failure isolation test in tests/integration/test_resilience.py::test_workflow_continues_when_codebase_down (mock codebase-mcp unavailable, validate workflow continues per quickstart.md lines 196-210)
-- [ ] T023 [P] [US2] Create reverse isolation test in tests/integration/test_resilience.py::test_codebase_continues_when_workflow_down (mock workflow-mcp unavailable, validate search continues per quickstart.md lines 215-227)
-- [ ] T024 [P] [US2] Create stale entity reference handling test in tests/integration/test_resilience.py::test_stale_entity_reference_handled_gracefully (delete entity after work item creation, validate graceful handling per quickstart.md lines 232-245)
+- [X] T021 [P] [US2] Create cross-server workflow integration test in tests/integration/test_cross_server_workflow.py::test_search_to_work_item_workflow (httpx async client, validate entity reference persistence per quickstart.md lines 141-176)
+- [X] T022 [P] [US2] Create server failure isolation test in tests/integration/test_resilience.py::test_workflow_continues_when_codebase_down (mock codebase-mcp unavailable, validate workflow continues per quickstart.md lines 196-210)
+- [X] T023 [P] [US2] Create reverse isolation test in tests/integration/test_resilience.py::test_codebase_continues_when_workflow_down (mock workflow-mcp unavailable, validate search continues per quickstart.md lines 215-227)
+- [X] T024 [P] [US2] Create stale entity reference handling test in tests/integration/test_resilience.py::test_stale_entity_reference_handled_gracefully (delete entity after work item creation, validate graceful handling per quickstart.md lines 232-245)
 - [ ] T025 [US2] Run all cross-server integration tests and validate 100% pass rate (SC-011 validation)
 
 **Checkpoint**: Cross-server integration validated - workflows work seamlessly, servers fail independently, stale references handled
