@@ -1,0 +1,201 @@
+openapi: 3.1.0
+info:
+  title: Health Check Endpoint
+  version: 1.0.0
+  description: |
+    Health check endpoint for codebase-mcp and workflow-mcp servers.
+
+    Constitutional Compliance:
+    - Principle V: Production quality health monitoring
+    - FR-011: <50ms response time requirement
+    - FR-011: Returns database connectivity, connection pool stats, uptime
+
+servers:
+  - url: http://localhost:8020
+    description: Codebase-MCP server
+  - url: http://localhost:8010
+    description: Workflow-MCP server (hypothetical for Phase 06)
+
+paths:
+  /health:
+    get:
+      summary: Get server health status
+      description: |
+        Returns comprehensive health status including database connectivity,
+        connection pool statistics, and server uptime.
+
+        Response time target: <50ms (p95)
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Health check completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+              examples:
+                healthy:
+                  summary: Healthy server
+                  value:
+                    status: healthy
+                    timestamp: '2025-10-13T10:30:00Z'
+                    database_status: connected
+                    connection_pool:
+                      size: 8
+                      min_size: 5
+                      max_size: 20
+                      free: 6
+                      utilization_percent: 25.00
+                    uptime_seconds: 3600.50
+                    details: null
+                degraded:
+                  summary: Degraded server (high pool utilization)
+                  value:
+                    status: degraded
+                    timestamp: '2025-10-13T10:30:00Z'
+                    database_status: connected
+                    connection_pool:
+                      size: 18
+                      min_size: 5
+                      max_size: 20
+                      free: 2
+                      utilization_percent: 88.89
+                    uptime_seconds: 7200.00
+                    details:
+                      warning: 'Connection pool utilization exceeds 80%'
+                unhealthy:
+                  summary: Unhealthy server (database disconnected)
+                  value:
+                    status: unhealthy
+                    timestamp: '2025-10-13T10:30:00Z'
+                    database_status: disconnected
+                    connection_pool:
+                      size: 0
+                      min_size: 5
+                      max_size: 20
+                      free: 0
+                      utilization_percent: 0.00
+                    uptime_seconds: 900.00
+                    details:
+                      error: 'Database connection lost, reconnection in progress'
+        '500':
+          description: Health check failed (internal error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    HealthCheckResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - database_status
+        - connection_pool
+        - uptime_seconds
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: |
+            Overall health status:
+            - healthy: All systems operational
+            - degraded: Systems operational with warnings (high pool utilization, slow queries)
+            - unhealthy: Critical systems failing (database disconnected, pool exhausted)
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp in ISO 8601 format
+          example: '2025-10-13T10:30:00Z'
+        database_status:
+          type: string
+          enum:
+            - connected
+            - disconnected
+            - degraded
+          description: |
+            Database connectivity status:
+            - connected: Database reachable and responsive
+            - disconnected: Database unreachable
+            - degraded: Database reachable but slow (queries >1s)
+        connection_pool:
+          $ref: '#/components/schemas/ConnectionPoolStats'
+        uptime_seconds:
+          type: number
+          format: double
+          minimum: 0
+          description: Server uptime in seconds since startup
+          example: 3600.50
+        details:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Additional details for degraded/unhealthy status (error messages, warnings)
+          example:
+            warning: 'Connection pool utilization exceeds 80%'
+
+    ConnectionPoolStats:
+      type: object
+      required:
+        - size
+        - min_size
+        - max_size
+        - free
+        - utilization_percent
+      properties:
+        size:
+          type: integer
+          minimum: 0
+          description: Current connection pool size
+          example: 8
+        min_size:
+          type: integer
+          minimum: 0
+          description: Minimum pool size configuration
+          example: 5
+        max_size:
+          type: integer
+          minimum: 1
+          description: Maximum pool size configuration
+          example: 20
+        free:
+          type: integer
+          minimum: 0
+          description: Number of free (available) connections
+          example: 6
+        utilization_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Connection pool utilization percentage (computed as (size - free) / size * 100)
+          example: 25.00
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: 'health_check_error'
+        message:
+          type: string
+          description: Human-readable error message
+          example: 'Failed to query database health status'
+        details:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Additional error context
