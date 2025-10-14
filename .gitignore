@@ -88,3 +88,10 @@ Thumbs.db
 
 # Alembic
 alembic/versions/*.pyc
+
+# Performance Testing (Feature 011)
+# Keep baseline files, ignore temporary results
+tests/load/results/
+docs/performance/*.html
+docs/performance/*.json
+!docs/performance/README.md

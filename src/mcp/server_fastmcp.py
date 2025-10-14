@@ -73,11 +73,15 @@ logger.info(f"Log file: {LOG_FILE}")
 logger.info("=" * 80)
 
 # ==============================================================================
-# Module-Level Pool Manager (for tool access)
+# Module-Level Pool Manager and Services (for tool/resource access)
 # ==============================================================================
 
 # Global pool manager instance (initialized by lifespan)
 _pool_manager: ConnectionPoolManager | None = None
+
+# Global service instances (initialized by lifespan)
+_health_service: Any = None  # HealthService (avoid circular import)
+_metrics_service: Any = None  # MetricsService
 
 
 def get_pool_manager() -> ConnectionPoolManager:
@@ -105,6 +109,56 @@ def get_pool_manager() -> ConnectionPoolManager:
             "This is a server lifecycle issue - the pool should be initialized in lifespan."
         )
     return _pool_manager
+
+
+def get_health_service() -> Any:  # Returns HealthService
+    """Get the initialized health service.
+
+    This function provides access to the global health service instance for
+    MCP resources to perform health checks.
+
+    Returns:
+        HealthService: Initialized health service instance
+
+    Raises:
+        RuntimeError: If health service not initialized
+
+    Example:
+        >>> from src.mcp.server_fastmcp import get_health_service
+        >>> health_service = get_health_service()
+        >>> response = await health_service.check_health()
+    """
+    if _health_service is None:
+        raise RuntimeError(
+            "Health service not initialized. "
+            "This is a server lifecycle issue - the service should be initialized in lifespan."
+        )
+    return _health_service
+
+
+def get_metrics_service() -> Any:  # Returns MetricsService
+    """Get the initialized metrics service.
+
+    This function provides access to the global metrics service instance for
+    MCP resources to collect and export metrics.
+
+    Returns:
+        MetricsService: Initialized metrics service instance
+
+    Raises:
+        RuntimeError: If metrics service not initialized
+
+    Example:
+        >>> from src.mcp.server_fastmcp import get_metrics_service
+        >>> metrics_service = get_metrics_service()
+        >>> metrics_service.increment_counter("requests_total", "Total requests")
+    """
+    if _metrics_service is None:
+        raise RuntimeError(
+            "Metrics service not initialized. "
+            "This is a server lifecycle issue - the service should be initialized in lifespan."
+        )
+    return _metrics_service
 
 
 # ==============================================================================
@@ -139,12 +193,14 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     Raises:
         RuntimeError: If connection pool initialization fails
     """
-    global _pool_manager
+    global _pool_manager, _health_service, _metrics_service
 
-    # Import connection pool management
+    # Import connection pool management and services
     from src.config.settings import get_settings
     from src.connection_pool.config import PoolConfig
     from src.connection_pool.manager import ConnectionPoolManager
+    from src.services.health_service import HealthService
+    from src.services.metrics_service import MetricsService
 
     # Create connection pool manager instance
     pool_manager = ConnectionPoolManager()
@@ -176,8 +232,18 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
         # Store pool_manager in module-level variable for tool access
         _pool_manager = pool_manager
 
-        logger.info("✓ Connection pool initialized successfully")
-        sys.stderr.write("INFO: Connection pool initialized successfully\n")
+        # Initialize health service
+        logger.info("Initializing health service...")
+        _health_service = HealthService(pool_manager)
+        logger.info("✓ Health service initialized successfully")
+
+        # Initialize metrics service
+        logger.info("Initializing metrics service...")
+        _metrics_service = MetricsService()
+        logger.info("✓ Metrics service initialized successfully")
+
+        logger.info("✓ All services initialized successfully")
+        sys.stderr.write("INFO: All services initialized successfully\n")
 
     except Exception as e:
         logger.critical(
@@ -210,8 +276,8 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
 
 mcp = FastMCP("codebase-mcp", version="0.1.0", lifespan=lifespan)
 
-# Export for tool access
-__all__ = ["mcp", "get_pool_manager"]
+# Export for tool and resource access
+__all__ = ["mcp", "get_pool_manager", "get_health_service", "get_metrics_service"]
 
 # ==============================================================================
 # Main Entry Point
@@ -251,6 +317,8 @@ def main() -> None:
 
         logger.info("Importing resource modules...")
         import src.mcp.health  # noqa: F401
+        import src.mcp.resources.health_endpoint  # noqa: F401
+        import src.mcp.resources.metrics_endpoint  # noqa: F401
         logger.info("✓ Resource modules imported successfully")
     except ImportError as e:
         logger.critical(f"FATAL: Failed to import tool modules: {e}", exc_info=True)
@@ -271,6 +339,8 @@ def main() -> None:
         ]
         expected_resources = [
             "health://connection-pool",
+            "health://status",
+            "metrics://prometheus",
         ]
 
         logger.info(f"✓ Tool modules imported successfully")

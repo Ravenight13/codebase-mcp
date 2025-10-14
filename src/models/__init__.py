@@ -10,6 +10,10 @@ Model Organization:
 - code_chunk: CodeChunk entity with pgvector embeddings and schemas
 - project_identifier: Validated project identifier for multi-workspace support
 - workflow_context: WorkflowIntegrationContext for workflow-mcp integration
+- health: Health check response and connection pool statistics models
+- metrics: Prometheus-compatible metrics models (counters, histograms)
+- performance: Performance benchmark result models
+- load_testing: Load test results with error breakdown and resource usage models
 
 Constitutional Compliance:
 - Principle VIII: Type safety (all models fully typed with mypy --strict)
@@ -44,6 +48,18 @@ from .project_identifier import ProjectIdentifier
 from .workspace_config import WorkspaceConfig
 from .workflow_context import WorkflowIntegrationContext
 
+# Health check models
+from .health import ConnectionPoolStats, HealthCheckResponse
+
+# Metrics models
+from .metrics import LatencyHistogram, MetricCounter, MetricHistogram, MetricsResponse
+
+# Performance models
+from .performance import PerformanceBenchmarkResult
+
+# Load testing models
+from .load_testing import ErrorBreakdown, LoadTestResult, ResourceUsageStats
+
 # Export all models and schemas
 __all__ = [
     # Database infrastructure
@@ -71,4 +87,18 @@ __all__ = [
     "ProjectIdentifier",
     "WorkspaceConfig",
     "WorkflowIntegrationContext",
+    # Health check
+    "ConnectionPoolStats",
+    "HealthCheckResponse",
+    # Metrics
+    "LatencyHistogram",
+    "MetricCounter",
+    "MetricHistogram",
+    "MetricsResponse",
+    # Performance
+    "PerformanceBenchmarkResult",
+    # Load testing
+    "ErrorBreakdown",
+    "LoadTestResult",
+    "ResourceUsageStats",
 ]

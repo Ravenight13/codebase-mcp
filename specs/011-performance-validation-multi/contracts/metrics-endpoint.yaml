@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: Metrics Endpoint
+  version: 1.0.0
+  description: |
+    Prometheus-compatible metrics endpoint for codebase-mcp and workflow-mcp servers.
+
+    Constitutional Compliance:
+    - Principle V: Production quality observability
+    - FR-012: Prometheus-compatible format (request counts, latency histograms, error rates)
+    - FR-014: Performance warnings logged when thresholds exceeded
+
+servers:
+  - url: http://localhost:8020
+    description: Codebase-MCP server
+  - url: http://localhost:8010
+    description: Workflow-MCP server (hypothetical for Phase 06)
+
+paths:
+  /metrics:
+    get:
+      summary: Get Prometheus-compatible metrics
+      description: |
+        Returns server metrics in Prometheus exposition format, including:
+        - Request counters (total, successful, failed)
+        - Latency histograms with percentile buckets
+        - Error rate counters by type
+        - Resource utilization (connection pool, memory)
+
+        Response time: <100ms (does not impact main operations per edge case requirement)
+      operationId: getMetrics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+              examples:
+                codebase_mcp:
+                  summary: Codebase-MCP metrics
+                  value:
+                    counters:
+                      - name: codebase_mcp_requests_total
+                        help_text: Total number of requests
+                        value: 10000
+                      - name: codebase_mcp_errors_total
+                        help_text: Total number of errors
+                        value: 42
+                      - name: codebase_mcp_indexing_operations_total
+                        help_text: Total number of indexing operations
+                        value: 150
+                    histograms:
+                      - name: codebase_mcp_search_latency_seconds
+                        help_text: Search query latency
+                        buckets:
+                          - bucket_le: 0.1
+                            count: 450
+                          - bucket_le: 0.5
+                            count: 9500
+                          - bucket_le: 1.0
+                            count: 9950
+                          - bucket_le: 2.0
+                            count: 10000
+                        count: 10000
+                        sum: 2345.67
+                      - name: codebase_mcp_indexing_duration_seconds
+                        help_text: Repository indexing duration
+                        buckets:
+                          - bucket_le: 30.0
+                            count: 50
+                          - bucket_le: 60.0
+                            count: 140
+                          - bucket_le: 120.0
+                            count: 150
+                        count: 150
+                        sum: 7850.25
+            text/plain:
+              schema:
+                type: string
+                description: Prometheus text exposition format
+              example: |
+                # HELP codebase_mcp_requests_total Total number of requests
+                # TYPE codebase_mcp_requests_total counter
+                codebase_mcp_requests_total 10000
+
+                # HELP codebase_mcp_errors_total Total number of errors
+                # TYPE codebase_mcp_errors_total counter
+                codebase_mcp_errors_total 42
+
+                # HELP codebase_mcp_search_latency_seconds Search query latency
+                # TYPE codebase_mcp_search_latency_seconds histogram
+                codebase_mcp_search_latency_seconds_bucket{le="0.1"} 450
+                codebase_mcp_search_latency_seconds_bucket{le="0.5"} 9500
+                codebase_mcp_search_latency_seconds_bucket{le="1.0"} 9950
+                codebase_mcp_search_latency_seconds_bucket{le="2.0"} 10000
+                codebase_mcp_search_latency_seconds_bucket{le="+Inf"} 10000
+                codebase_mcp_search_latency_seconds_count 10000
+                codebase_mcp_search_latency_seconds_sum 2345.67
+        '500':
+          description: Metrics collection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    MetricsResponse:
+      type: object
+      required:
+        - counters
+        - histograms
+      properties:
+        counters:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricCounter'
+          description: Counter metrics (monotonically increasing values)
+        histograms:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricHistogram'
+          description: Histogram metrics (latency distributions)
+
+    MetricCounter:
+      type: object
+      required:
+        - name
+        - help_text
+        - value
+      properties:
+        name:
+          type: string
+          description: Metric name (Prometheus naming convention with underscores)
+          pattern: '^[a-z_][a-z0-9_]*$'
+          example: 'codebase_mcp_requests_total'
+        help_text:
+          type: string
+          description: Human-readable metric description
+          example: 'Total number of requests'
+        value:
+          type: integer
+          minimum: 0
+          description: Current counter value (monotonically increasing)
+          example: 10000
+
+    MetricHistogram:
+      type: object
+      required:
+        - name
+        - help_text
+        - buckets
+        - count
+        - sum
+      properties:
+        name:
+          type: string
+          description: Metric name (Prometheus naming convention)
+          pattern: '^[a-z_][a-z0-9_]*$'
+          example: 'codebase_mcp_search_latency_seconds'
+        help_text:
+          type: string
+          description: Human-readable metric description
+          example: 'Search query latency'
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/LatencyHistogramBucket'
+          description: Histogram buckets (must be sorted by bucket_le, monotonically increasing counts)
+          minItems: 1
+        count:
+          type: integer
+          minimum: 0
+          description: Total observation count (must equal highest bucket count)
+          example: 10000
+        sum:
+          type: number
+          format: double
+          minimum: 0
+          description: Sum of all observed values
+          example: 2345.67
+
+    LatencyHistogramBucket:
+      type: object
+      required:
+        - bucket_le
+        - count
+      properties:
+        bucket_le:
+          type: number
+          format: double
+          description: |
+            Bucket upper bound (le = less than or equal).
+            All observations <= bucket_le are counted in this bucket.
+          example: 0.5
+        count:
+          type: integer
+          minimum: 0
+          description: Cumulative count of observations <= bucket_le
+          example: 9500
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: 'metrics_collection_error'
+        message:
+          type: string
+          description: Human-readable error message
+          example: 'Failed to collect metrics from in-memory store'
+
+tags:
+  - name: Metrics
+    description: |
+      Prometheus-compatible metrics for observability.
+
+      Key Metrics:
+      - **Request Counters**: Total requests, successful requests, failed requests
+      - **Latency Histograms**: Search latency, indexing duration, query latency
+      - **Error Counters**: Errors by type (timeout, connection_pool_exhausted, etc.)
+      - **Resource Utilization**: Connection pool usage, memory usage
+
+      Constitutional Performance Targets:
+      - Search latency: p95 < 500ms
+      - Indexing duration: p95 < 60s
+      - Project switching (workflow-mcp): p95 < 50ms
+      - Entity queries (workflow-mcp): p95 < 100ms

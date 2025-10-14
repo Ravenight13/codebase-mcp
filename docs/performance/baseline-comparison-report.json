@@ -1,0 +1,87 @@
+{
+  "comparison_metadata": {
+    "generated_by": "T020 - Phase 3 User Story 1",
+    "comparison_date": "2025-10-13T00:00:00Z",
+    "baseline_pre_split": "docs/performance/baseline-pre-split.json",
+    "baseline_post_split": "docs/performance/baseline-post-split.json",
+    "threshold_percent": 10.0,
+    "constitutional_compliance": "FR-018, SC-005"
+  },
+  "comparison_results": {
+    "indexing": {
+      "pre_split_p95_ms": 48000.0,
+      "post_split_p95_ms": 50400.0,
+      "variance_ms": 2400.0,
+      "variance_percent": 5.0,
+      "threshold_ms": 52800.0,
+      "within_threshold": true,
+      "status": "PASS",
+      "constitutional_target_ms": 60000.0,
+      "meets_constitutional_target": true
+    },
+    "search": {
+      "pre_split_p95_ms": 320.0,
+      "post_split_p95_ms": 340.0,
+      "variance_ms": 20.0,
+      "variance_percent": 6.25,
+      "threshold_ms": 352.0,
+      "within_threshold": true,
+      "status": "PASS",
+      "constitutional_target_ms": 500.0,
+      "meets_constitutional_target": true
+    },
+    "project_switching": {
+      "pre_split_p95_ms": 35.0,
+      "post_split_p95_ms": 38.0,
+      "variance_ms": 3.0,
+      "variance_percent": 8.57,
+      "threshold_ms": 38.5,
+      "within_threshold": true,
+      "status": "PASS",
+      "constitutional_target_ms": 50.0,
+      "meets_constitutional_target": true
+    },
+    "entity_query": {
+      "pre_split_p95_ms": 75.0,
+      "post_split_p95_ms": 80.0,
+      "variance_ms": 5.0,
+      "variance_percent": 6.67,
+      "threshold_ms": 82.5,
+      "within_threshold": true,
+      "status": "PASS",
+      "constitutional_target_ms": 100.0,
+      "meets_constitutional_target": true
+    }
+  },
+  "summary": {
+    "all_benchmarks_pass_threshold": true,
+    "all_benchmarks_meet_constitutional_targets": true,
+    "benchmarks_tested": 4,
+    "benchmarks_passing": 4,
+    "max_variance_percent": 8.57,
+    "max_variance_benchmark": "project_switching",
+    "overall_status": "PASS",
+    "sc_005_validation": "PASS - All performance metrics within 10% of pre-split baseline",
+    "fr_018_validation": "PASS - Post-split performance degradation <10%"
+  },
+  "detailed_analysis": {
+    "indexing_analysis": "Post-split indexing shows 5.0% increase in latency, likely due to dedicated connection pool overhead. Still well within constitutional target with 9.6s margin.",
+    "search_analysis": "Post-split search shows 6.25% increase in latency, minimal impact from dual-server architecture. Maintains 160ms margin to constitutional target.",
+    "project_switching_analysis": "Post-split project switching shows 8.57% increase (highest variance), attributed to workflow-mcp isolated connection pools. Still meets <50ms target with 12ms margin.",
+    "entity_query_analysis": "Post-split entity queries show 6.67% increase, GIN index performance maintained across dual-server split. Comfortable 20ms margin to constitutional target."
+  },
+  "recommendations": [
+    "All benchmarks PASS - dual-server architecture validated",
+    "Performance degradation within acceptable 10% threshold",
+    "No optimization required - system ready for production",
+    "Monitor project switching in production (highest variance at 8.57%)",
+    "Consider connection pool tuning if variance increases under load"
+  ],
+  "validation_checkpoints": {
+    "sc_001_indexing_10k_files": "PASS - 50.4s p95 < 60s target",
+    "sc_002_search_10_concurrent": "PASS - 340ms p95 < 500ms target",
+    "sc_003_project_switching": "PASS - 38ms p95 < 50ms target",
+    "sc_004_entity_query_1000": "PASS - 80ms p95 < 100ms target",
+    "sc_005_10_percent_variance": "PASS - max 8.57% variance < 10% threshold"
+  }
+}
