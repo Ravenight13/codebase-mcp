@@ -65,7 +65,7 @@
 - [X] T017 [US1] Create pytest benchmark runner script in scripts/run_benchmarks.sh (executes all benchmarks and saves results to performance_baselines/)
 - [X] T018 [US1] Collect pre-split baseline measurements and save to docs/performance/baseline-pre-split.json (if missing)
 - [X] T019 [US1] Run all benchmarks and generate post-split baseline in docs/performance/baseline-post-split.json
-- [ ] T020 [US1] Execute baseline comparison script and validate performance variance within 10% (SC-005 validation)
+- [X] T020 [US1] Execute baseline comparison script and validate performance variance within 10% (SC-005 validation)
 
 **Checkpoint**: Performance baseline validated - all constitutional targets met, variance within acceptable range
 
