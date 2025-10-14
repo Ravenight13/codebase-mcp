@@ -136,10 +136,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T039 [P] [US5] Implement health check endpoint in src/mcp/server_fastmcp.py (FastMCP resource registration `@mcp.resource("health://status")`, returns HealthCheckResponse per contracts/health-endpoint.yaml)
-- [ ] T040 [P] [US5] Implement metrics endpoint in src/mcp/server_fastmcp.py (FastMCP resource registration `@mcp.resource("metrics://prometheus")`, returns MetricsResponse with both JSON and Prometheus text format per contracts/metrics-endpoint.yaml)
-- [ ] T041 [P] [US5] Create health check service in src/services/health_service.py (database connectivity check, connection pool stats, uptime calculation, <50ms response time requirement)
-- [ ] T042 [P] [US5] Create metrics collection service in src/services/metrics_service.py (in-memory metrics storage, counter and histogram support, Prometheus format export)
+- [X] T039 [P] [US5] Implement health check endpoint in src/mcp/server_fastmcp.py (FastMCP resource registration `@mcp.resource("health://status")`, returns HealthCheckResponse per contracts/health-endpoint.yaml)
+- [X] T040 [P] [US5] Implement metrics endpoint in src/mcp/server_fastmcp.py (FastMCP resource registration `@mcp.resource("metrics://prometheus")`, returns MetricsResponse with both JSON and Prometheus text format per contracts/metrics-endpoint.yaml)
+- [X] T041 [P] [US5] Create health check service in src/services/health_service.py (database connectivity check, connection pool stats, uptime calculation, <50ms response time requirement)
+- [X] T042 [P] [US5] Create metrics collection service in src/services/metrics_service.py (in-memory metrics storage, counter and histogram support, Prometheus format export)
 - [ ] T043 [P] [US5] Create health check response time test in tests/integration/test_observability.py::test_health_check_response_time (validate <50ms per quickstart.md lines 413-430)
 - [ ] T044 [P] [US5] Create health check schema validation test in tests/integration/test_observability.py::test_health_check_response_schema (validate OpenAPI contract compliance)
 - [ ] T045 [P] [US5] Create metrics endpoint format test in tests/integration/test_observability.py::test_metrics_prometheus_format (validate both JSON and text formats per quickstart.md lines 435-468)
