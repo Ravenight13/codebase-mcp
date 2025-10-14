@@ -117,9 +117,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T033 [P] [US4] Create database reconnection test in tests/integration/test_resilience.py::test_database_reconnection_after_failure (pytest-mock with asyncpg exceptions, validate <5s detection per quickstart.md lines 346-386)
-- [ ] T034 [P] [US4] Create connection pool exhaustion test in tests/integration/test_resilience.py::test_connection_pool_exhaustion_handling (simulate max pool usage, validate queuing and 503 responses per FR-016)
-- [ ] T035 [P] [US4] Create port conflict detection test in tests/integration/test_resilience.py::test_port_conflict_error_handling (attempt to start server on used port, validate clear error message)
+- [X] T033 [P] [US4] Create database reconnection test in tests/integration/test_resilience.py::test_database_reconnection_after_failure (pytest-mock with asyncpg exceptions, validate <5s detection per quickstart.md lines 346-386)
+- [X] T034 [P] [US4] Create connection pool exhaustion test in tests/integration/test_resilience.py::test_connection_pool_exhaustion_handling (simulate max pool usage, validate queuing and 503 responses per FR-016)
+- [X] T035 [P] [US4] Create port conflict detection test in tests/integration/test_resilience.py::test_port_conflict_error_handling (attempt to start server on used port, validate clear error message)
 - [ ] T036 [US4] Run all resilience tests and validate automatic recovery behavior (SC-008 validation)
 - [ ] T037 [US4] Validate structured logs contain failure detection and recovery events with correct timestamps
 - [ ] T038 [US4] Generate resilience testing report in docs/operations/resilience-validation-report.md
