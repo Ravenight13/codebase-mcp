@@ -62,7 +62,7 @@
 - [X] T014 [P] [US1] Create search performance benchmark in tests/benchmarks/test_search_perf.py (10 concurrent clients, validate <500ms p95)
 - [X] T015 [P] [US1] Create workflow-mcp project switching benchmark in tests/benchmarks/test_workflow_perf.py (20 consecutive switches, validate <50ms p95)
 - [X] T016 [P] [US1] Create workflow-mcp entity query benchmark in tests/benchmarks/test_workflow_perf.py (1000 entities, validate <100ms p95)
-- [ ] T017 [US1] Create pytest benchmark runner script in scripts/run_benchmarks.sh (executes all benchmarks and saves results to performance_baselines/)
+- [X] T017 [US1] Create pytest benchmark runner script in scripts/run_benchmarks.sh (executes all benchmarks and saves results to performance_baselines/)
 - [ ] T018 [US1] Collect pre-split baseline measurements and save to docs/performance/baseline-pre-split.json (if missing)
 - [ ] T019 [US1] Run all benchmarks and generate post-split baseline in docs/performance/baseline-post-split.json
 - [ ] T020 [US1] Execute baseline comparison script and validate performance variance within 10% (SC-005 validation)
