@@ -63,6 +63,12 @@ async def search_code(
 
     Performance target: <500ms p95 latency
 
+    Project Resolution Priority (4-tier chain):
+        1. Explicit project_id parameter (if provided)
+        2. Session-based config file (via set_working_directory)
+        3. workflow-mcp integration (active project)
+        4. Default project (fallback)
+
     Args:
         query: Natural language search query (required)
         project_id: Optional project identifier for workspace isolation
@@ -102,8 +108,8 @@ async def search_code(
     """
     start_time = time.perf_counter()
 
-    # Resolve project_id with workflow-mcp fallback
-    resolved_project_id = await resolve_project_id(project_id)
+    # Resolve project_id with workflow-mcp fallback (4-tier chain)
+    resolved_project_id = await resolve_project_id(explicit_id=project_id, ctx=ctx)
 
     # Dual logging: Context logging for MCP client + file logging for server
     if ctx:

@@ -59,7 +59,11 @@ async def index_repository(
     Args:
         repo_path: Absolute path to repository directory (required)
         project_id: Optional project identifier for workspace isolation.
-                   If None, resolves from workflow-mcp or uses default workspace.
+                   If None, uses 4-tier resolution chain:
+                   1. Session-based config file (via set_working_directory)
+                   2. workflow-mcp integration
+                   3. CODEBASE_MCP_PROJECT_ID environment variable
+                   4. Default project workspace
         force_reindex: Force full re-index even if already indexed (default: False)
         ctx: FastMCP context for progress reporting (optional)
 
@@ -88,8 +92,8 @@ async def index_repository(
     if ctx:
         await ctx.info(f"Indexing repository: {repo_path}")
 
-    # 1. Resolve project_id (with workflow-mcp fallback)
-    resolved_id = await resolve_project_id(project_id)
+    # 1. Resolve project_id (with 4-tier resolution chain)
+    resolved_id = await resolve_project_id(explicit_id=project_id, ctx=ctx)
 
     # 2. Validate project_id format if provided
     schema_name: str
