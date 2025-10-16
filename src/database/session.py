@@ -42,6 +42,14 @@ from src.mcp.mcp_logging import get_logger
 from src.config.settings import Settings, get_settings
 from src.services.workflow_client import WorkflowIntegrationClient
 
+# Session-based project resolution imports
+from pathlib import Path
+from fastmcp import Context
+from src.auto_switch.session_context import get_session_context_manager
+from src.auto_switch.discovery import find_config_file
+from src.auto_switch.validation import validate_config_syntax
+from src.auto_switch.cache import get_config_cache
+
 # ==============================================================================
 # Module Configuration
 # ==============================================================================
@@ -109,29 +117,142 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
 # ==============================================================================
 
 
+async def _resolve_project_context(
+    ctx: Context | None
+) -> tuple[str, str] | None:
+    """Resolve project from session config (graceful fallback).
+
+    Resolution algorithm:
+    1. Get session_id from FastMCP Context (explicit, async-safe)
+    2. Look up working_directory for that session
+    3. Search for .codebase-mcp/config.json (up to 20 levels)
+    4. Check cache (async LRU with mtime invalidation)
+    5. Parse and validate config (if cache miss)
+    6. Extract project.name or project.id
+    7. Return (project_id, schema_name)
+
+    Args:
+        ctx: FastMCP Context (contains session_id)
+
+    Returns:
+        Tuple of (project_id, schema_name) or None if resolution fails
+        (None enables graceful fallback to other resolution methods)
+
+    Note:
+        Does NOT raise exceptions - returns None for graceful fallback
+    """
+    # Must have context for session-based resolution
+    if ctx is None:
+        logger.debug("No FastMCP Context provided, cannot resolve from session")
+        return None
+
+    # Get session-specific working directory
+    session_id = ctx.session_id  # ✅ From FastMCP Context (explicit)
+    session_ctx_mgr = get_session_context_manager()
+
+    try:
+        working_dir = await session_ctx_mgr.get_working_directory(session_id)
+    except Exception as e:
+        logger.debug(f"Error getting working directory for session {session_id}: {e}")
+        return None
+
+    if not working_dir:
+        logger.debug(
+            f"No working directory set for session {session_id}. "
+            f"Call set_working_directory() first for session-based resolution."
+        )
+        return None
+
+    # Check cache first
+    cache = get_config_cache()
+    try:
+        config = await cache.get(working_dir)
+    except Exception as e:
+        logger.debug(f"Cache lookup failed for {working_dir}: {e}")
+        config = None
+
+    config_path = None
+
+    if config is None:
+        # Cache miss: search for config file
+        try:
+            config_path = find_config_file(Path(working_dir))
+        except Exception as e:
+            logger.debug(f"Config file search failed for {working_dir}: {e}")
+            return None
+
+        if not config_path:
+            logger.debug(
+                f"No .codebase-mcp/config.json found in {working_dir} or ancestors "
+                f"(searched up to 20 levels)"
+            )
+            return None
+
+        # Parse and validate config
+        try:
+            config = validate_config_syntax(config_path)
+        except ValueError as e:
+            logger.debug(f"Config validation failed for {config_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error validating config {config_path}: {e}")
+            return None
+
+        # Store in cache
+        try:
+            await cache.set(working_dir, config, config_path)
+        except Exception as e:
+            logger.debug(f"Failed to cache config for {working_dir}: {e}")
+            # Continue anyway (caching is optional)
+
+    # Extract project identifier
+    project_name = config['project']['name']
+    project_id = config['project'].get('id')  # Optional
+
+    # If project_id provided, use directly (no registry lookup needed)
+    if project_id:
+        schema_name = f"project_{project_id.replace('-', '_')}"
+        logger.debug(
+            f"Resolved from session config (by ID): {project_id} "
+            f"(schema: {schema_name})"
+        )
+        return (project_id, schema_name)
+
+    # Otherwise, use name as project_id (registry lookup future enhancement)
+    schema_name = f"project_{project_name.replace('-', '_')}"
+    logger.debug(
+        f"Resolved from session config (by name): {project_name} "
+        f"(schema: {schema_name})"
+    )
+    return (project_name, schema_name)
+
+
 async def resolve_project_id(
     explicit_id: str | None,
     settings: Settings | None = None,
+    ctx: Context | None = None,
 ) -> str | None:
-    """Resolve project_id with workflow-mcp fallback logic.
+    """Resolve project_id with 4-tier resolution chain.
 
-    Implements the multi-project workspace resolution strategy with three-tier
+    Implements the multi-project workspace resolution strategy with four-tier
     fallback logic to determine which workspace context to use for database
     operations.
 
     Resolution Order (FR-012, FR-013, FR-014):
         1. **Explicit ID**: If explicit_id is provided, return immediately
            (highest priority, user-specified context)
-        2. **workflow-mcp Integration**: Query external workflow-mcp server
+        2. **Session-based config**: Query .codebase-mcp/config.json via FastMCP Context
+        3. **workflow-mcp Integration**: Query external workflow-mcp server
            for active project context with timeout protection
-        3. **Default Workspace**: Fallback to None when workflow-mcp is
-           unavailable, timeout occurs, or no active project exists
+        4. **Default Workspace**: Fallback to None when all resolution methods
+           are unavailable, timeout occurs, or no active project exists
 
     Args:
         explicit_id: Explicitly provided project identifier (from MCP tool parameters).
                     Takes precedence over all other resolution methods.
         settings: Optional Settings instance for workflow-mcp configuration.
                  If not provided, uses global settings singleton.
+        ctx: Optional FastMCP Context for session-based config resolution.
 
     Returns:
         Resolved project_id string or None for default workspace:
@@ -187,7 +308,21 @@ async def resolve_project_id(
         )
         return explicit_id
 
-    # 2. Try workflow-mcp integration (if configured)
+    # 2. Try session-based config resolution (if Context provided)
+    if ctx is not None:
+        try:
+            result = await _resolve_project_context(ctx)
+            if result is not None:
+                project_id, _ = result
+                logger.debug(
+                    "Resolved project via session config",
+                    extra={"context": {"operation": "resolve_project_id", "project_id": project_id, "resolution_method": "session_config"}}
+                )
+                return project_id
+        except Exception as e:
+            logger.debug(f"Session-based resolution failed: {e}")
+
+    # 3. Try workflow-mcp integration (if configured)
     if settings is None:
         settings = get_settings()
 
@@ -252,9 +387,9 @@ async def resolve_project_id(
             # Always close client connection to prevent resource leaks
             await client.close()
 
-    # 3. Fallback to default workspace
+    # 4. Fallback to default workspace
     logger.debug(
-        "Using default workspace (no explicit ID, workflow-mcp unavailable/disabled)",
+        "Using default workspace (no explicit ID, session config unavailable, workflow-mcp unavailable/disabled)",
         extra={
             "context": {
                 "operation": "resolve_project_id",
@@ -632,6 +767,7 @@ __all__ = [
     "get_session",
     "get_session_factory",
     "resolve_project_id",
+    "_resolve_project_context",
     "check_database_health",
     "init_db_connection",
     "close_db_connection",
