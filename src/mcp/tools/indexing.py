@@ -56,16 +56,20 @@ async def index_repository(
     Orchestrates the complete repository indexing workflow: scanning,
     chunking, embedding generation, and storage in PostgreSQL with pgvector.
 
+    Multi-Project Isolation:
+        Uses schema-based isolation within a shared database connection pool.
+        Each project has a dedicated PostgreSQL schema (e.g., "project_myapp").
+
     Args:
         repo_path: Absolute path to repository directory (required)
         project_id: Optional project identifier for workspace isolation.
                    If None, uses 4-tier resolution chain:
-                   1. Session-based config file (via set_working_directory)
-                   2. workflow-mcp integration
+                   1. Session-based config (via set_working_directory + .codebase-mcp/config.json)
+                   2. workflow-mcp integration (active project query)
                    3. CODEBASE_MCP_PROJECT_ID environment variable
-                   4. Default project workspace
+                   4. Default project workspace (project_default schema)
         force_reindex: Force full re-index even if already indexed (default: False)
-        ctx: FastMCP context for progress reporting (optional)
+        ctx: FastMCP context for session-based config resolution and progress reporting (optional)
 
     Returns:
         Dictionary with indexing results matching MCP contract:
@@ -87,6 +91,24 @@ async def index_repository(
     Performance:
         Target: <60 seconds for 10,000 files
         Uses batching for files (100/batch) and embeddings (50/batch)
+
+    Config-Based Auto-Switching:
+        When ctx is provided, the tool automatically discovers project configuration:
+        1. Retrieves working directory from session context (ctx.session_id)
+        2. Searches for .codebase-mcp/config.json (up to 20 parent directories)
+        3. Caches config with mtime-based invalidation (<1ms cached lookups)
+        4. Uses project.name or project.id from config
+        5. Falls back to workflow-mcp or default workspace if config not found
+
+    Example:
+        >>> # Set working directory once per session
+        >>> await set_working_directory("/Users/alice/my-project", ctx=ctx)
+
+        >>> # All subsequent calls auto-resolve project from config
+        >>> result = await index_repository(
+        ...     repo_path="/Users/alice/my-project",
+        ...     ctx=ctx  # Uses .codebase-mcp/config.json automatically
+        ... )
     """
     # Context logging (to MCP client)
     if ctx:

@@ -61,13 +61,17 @@ async def search_code(
     and pgvector similarity matching. Supports filtering by repository, file type,
     and directory with multi-project workspace isolation.
 
+    Multi-Project Isolation:
+        Uses schema-based isolation within a shared database connection pool.
+        Each project has a dedicated PostgreSQL schema (e.g., "project_myapp").
+
     Performance target: <500ms p95 latency
 
     Project Resolution Priority (4-tier chain):
         1. Explicit project_id parameter (if provided)
-        2. Session-based config file (via set_working_directory)
-        3. workflow-mcp integration (active project)
-        4. Default project (fallback)
+        2. Session-based config (via set_working_directory + .codebase-mcp/config.json)
+        3. workflow-mcp integration (active project query)
+        4. Default project workspace (project_default schema)
 
     Args:
         query: Natural language search query (required)
@@ -76,7 +80,7 @@ async def search_code(
         file_type: Optional file extension filter (e.g., "py", "js")
         directory: Optional directory path filter (supports wildcards)
         limit: Maximum number of results (1-50, default: 10)
-        ctx: FastMCP context for client logging (injected automatically)
+        ctx: FastMCP context for session-based config resolution and progress reporting (optional)
 
     Returns:
         Dictionary with search results matching MCP contract:
@@ -105,6 +109,24 @@ async def search_code(
 
     Performance:
         Target: <500ms p95 latency (includes embedding generation and search)
+
+    Config-Based Auto-Switching:
+        When ctx is provided, the tool automatically discovers project configuration:
+        1. Retrieves working directory from session context (ctx.session_id)
+        2. Searches for .codebase-mcp/config.json (up to 20 parent directories)
+        3. Caches config with mtime-based invalidation (<1ms cached lookups)
+        4. Uses project.name or project.id from config
+        5. Falls back to workflow-mcp or default workspace if config not found
+
+    Example:
+        >>> # Set working directory once per session
+        >>> await set_working_directory("/Users/alice/my-project", ctx=ctx)
+
+        >>> # All subsequent calls auto-resolve project from config
+        >>> result = await search_code(
+        ...     query="authentication logic",
+        ...     ctx=ctx  # Uses .codebase-mcp/config.json automatically
+        ... )
     """
     start_time = time.perf_counter()
 

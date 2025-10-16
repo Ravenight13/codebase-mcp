@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "codebase-mcp",
+    "id": "eca49f13-f342-4958-95a0-d7b9ba2a42eb"
+  },
+  "auto_switch": true,
+  "strict_mode": false,
+  "dry_run": false,
+  "description": "Config for codebase-mcp project (Project B in multi-client isolation testing)"
+}

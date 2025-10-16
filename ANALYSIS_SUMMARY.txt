@@ -1,0 +1,184 @@
+================================================================================
+CODEBASE-MCP MULTI-PROJECT TRACKING SYSTEM ANALYSIS
+================================================================================
+
+ANALYSIS COMPLETED: 2025-10-16
+LOCATION: /Users/cliffclarke/Claude_Code/codebase-mcp/
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+1. CURRENT PROJECT TRACKING MECHANISM
+   - Stateless per-request model (NO global active project state)
+   - Three-tier resolution: Explicit param → workflow-mcp → default workspace
+   - PostgreSQL schema isolation via SET search_path (not separate databases)
+   - Single shared connection pool for all projects
+   - No session files or persistent configuration
+
+2. MCP TOOLS REQUIRING UPDATES (2 tools)
+   ✓ index_repository (src/mcp/tools/indexing.py)
+     - Accepts optional project_id parameter
+     - Calls resolve_project_id() with fallback
+     - Passes to indexer service
+
+   ✓ search_code (src/mcp/tools/search.py)
+     - Accepts optional project_id parameter
+     - Calls resolve_project_id() with fallback
+     - Passes to searcher service
+
+3. DATABASE CONNECTION MANAGEMENT
+   - Single global AsyncPG connection pool
+   - Pool created during server startup (lifespan)
+   - Stored as module-level singleton: _pool_manager
+   - Shared across all projects/schemas
+   - Pool size: min=2, max=10 (configurable)
+
+4. SERVICE CONSTRUCTOR PATTERNS
+   - Services receive: db (AsyncSession), project_id (for logging), operation-specific params
+   - Database layer handles search_path setting (schema isolation)
+   - Services don't manage project context - it's transparent
+   - Session auto-commit/rollback handled by get_session() context manager
+
+5. EXISTING CONFIG INFRASTRUCTURE
+   - Environment variables only (NO .codebase-mcp directory)
+   - Settings model via Pydantic (src/config/settings.py)
+   - Optional workflow-mcp integration via WORKFLOW_MCP_URL
+   - No persistent session storage
+
+================================================================================
+CRITICAL CODE LOCATIONS (ABSOLUTE PATHS)
+================================================================================
+
+Project Resolution & Session:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/database/session.py
+    - resolve_project_id() [lines 112-265]
+    - get_session() [lines 273-399]
+
+Workflow-MCP Integration:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/services/workflow_client.py
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/models/workflow_context.py
+
+MCP Tools:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/mcp/tools/indexing.py [lines 50-150]
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/mcp/tools/search.py [lines 48-160]
+
+Infrastructure:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/mcp/server_fastmcp.py [lines 76-270]
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/connection_pool/manager.py
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/config/settings.py
+
+Services:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/services/indexer.py
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/services/searcher.py
+  /Users/cliffclarke/Claude_Code/codebase-mcp/src/services/workspace_manager.py
+
+================================================================================
+DIFFERENCES FROM WORKFLOW-MCP APPROACH
+================================================================================
+
+Codebase-MCP                          | Workflow-MCP
+-------------------------------------|-------------------------------------
+Stateless per-request                | Stateful session-based
+No session files                      | Session file + TTL-based expiration
+No global active project              | Session file stores active project
+Shared pool + search_path             | Per-project connection pools
+Explicit tool project_id parameters   | Implicit (from session file)
+Environment variables only            | Config files + environment variables
+Three-tier resolution: explicit →     | Session file first, then fallback
+workflow-mcp → default                |
+
+KEY IMPLICATION: Codebase-MCP is fundamentally stateless, while workflow-mcp
+is stateful. Integration requires bridging these architectural differences.
+
+================================================================================
+POTENTIAL MIGRATION CHALLENGES
+================================================================================
+
+Challenge #1: Removing Global State
+  - Current: Module-level variables (_pool_manager, _health_service, etc.)
+  - Required: Session file writing/reading
+  - Risk: Adding persistent state to stateless design
+
+Challenge #2: Tool Parameter Changes
+  - Current: Explicit optional project_id parameter
+  - Workflow-MCP: Would remove (comes from session)
+  - Risk: Breaking change for existing clients
+
+Challenge #3: Connection Pool Architecture
+  - Current: Single shared pool
+  - Workflow-MCP Pattern: Per-project pools
+  - Risk: Architectural change or incompatibility
+
+Challenge #4: Configuration Format
+  - Current: Environment variables only
+  - Workflow-MCP: Config files required
+  - Risk: Breaks env-var-only deployment model
+
+Challenge #5: Session Persistence
+  - Current: No session state
+  - Required: File I/O for session files
+  - Risk: Concurrency, file locking, cleanup
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+PHASE 1: Low-Risk Migration Path (RECOMMENDED)
+✓ Keep current shared connection pool
+✓ Keep tool project_id parameters
+✓ Add session file reading (read-only, non-persistent)
+✓ Preserve backward compatibility
+
+New resolution order:
+  1. Explicit project_id parameter (highest priority)
+  2. Session file (if exists)
+  3. Query workflow-mcp (if configured)
+  4. Default workspace (fallback)
+
+PHASE 2: Implementation Approach
+1. Create SessionManager class (reads .codebase-mcp/session.json if exists)
+2. Update resolve_project_id() to check session file first
+3. Keep all existing tool signatures unchanged
+4. Add optional environment variable to enable session support
+5. Document that explicit project_id always overrides session
+
+AVOID (High-Risk):
+✗ Removing project_id from tool parameters (breaking change)
+✗ Switching to per-project connection pools (major architecture change)
+✗ Implementing session persistence/writes (adds state complexity)
+✗ Requiring config files (breaks current deployment)
+✗ Breaking environment-variable-only support
+
+================================================================================
+DELIVERABLES
+================================================================================
+
+Generated Analysis Documents:
+1. CODEBASE_MCP_ANALYSIS.md (720 lines)
+   - Comprehensive technical analysis
+   - Full architecture documentation
+   - Code snippets and examples
+   - Detailed migration strategy
+
+2. QUICK_REFERENCE.md
+   - Quick lookup tables
+   - Architecture summary
+   - Key files and responsibilities
+   - Migration considerations
+
+Both files saved to repository root:
+  /Users/cliffclarke/Claude_Code/codebase-mcp/CODEBASE_MCP_ANALYSIS.md
+  /Users/cliffclarke/Claude_Code/codebase-mcp/QUICK_REFERENCE.md
+
+================================================================================
+NEXT STEPS FOR INTEGRATION
+================================================================================
+
+1. Review CODEBASE_MCP_ANALYSIS.md for full technical details
+2. Use QUICK_REFERENCE.md for quick lookups during implementation
+3. Consider Phase 1 (low-risk) approach for initial migration
+4. Maintain backward compatibility with existing tool interfaces
+5. Plan Phase 2 for deeper workflow-mcp integration if needed
+
+================================================================================
