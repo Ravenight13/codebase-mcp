@@ -9,8 +9,20 @@
 - Marked parallel execution opportunities with [P] notation
 - Increased time estimates for higher-risk tasks
 
-**Status**: Approved with Structural Improvements Applied
-**Estimated Time**: 10-13 hours (with debugging buffer, excluding comprehensive tests)
+**Critical Fixes Applied** (2025-10-16):
+- Fixed ALL file paths throughout document (src/auto_switch/ instead of src/codebase_mcp/auto_switch/)
+- Added Task 0.1: Validate FastMCP Context before Phase 1
+- Added Task 1.7: Populate auto_switch __init__.py exports
+- Added Task 2.4: Test workspace provisioning
+- Added Task 6A.3: Test background cleanup
+- Added Task 7.5: Create ARCHITECTURE.md
+- Added Task 7.6: Run mypy type checking
+- Updated time estimates to 10.5-13.5h total
+- Clarified Task 4.1 creates NEW file src/mcp/tools/project.py
+- Added specific validation commands throughout
+
+**Status**: Approved with Structural Improvements and Critical Fixes Applied
+**Estimated Time**: 10.5-13.5 hours (with debugging buffer, excluding comprehensive tests)
 **Approach**: Streamlined implementation focused on getting it working
 
 ---
@@ -47,19 +59,48 @@
 
 ---
 
+## Phase 0: Pre-Implementation Validation (5 min)
+
+### Task 0.1: Validate FastMCP Context provides session_id
+**Time**: 5 min
+**Dependencies**: None
+**Files**: Quick validation script
+
+**Actions**:
+- Verify FastMCP Context has session_id attribute
+- Check that existing tools already use ctx: Context parameter
+
+**Validation**:
+```python
+from fastmcp import Context
+from src.mcp.tools.indexing import index_repository
+import inspect
+
+# Check Context has session_id
+ctx = Context(session_id="test")
+assert hasattr(ctx, 'session_id')
+
+# Check tool signature has ctx parameter
+sig = inspect.signature(index_repository)
+assert 'ctx' in sig.parameters
+print("✓ FastMCP Context validation passed")
+```
+
+---
+
 ## Phase 1: Config Infrastructure (2.5-3.5h with debugging buffer)
 
 ### Task 1.1: Create auto_switch module structure
 **Time**: 5 min
 **Dependencies**: None
 **Files**:
-- `src/codebase_mcp/auto_switch/`
-- `src/codebase_mcp/auto_switch/__init__.py`
+- `src/auto_switch/`
+- `src/auto_switch/__init__.py`
 
 **Actions**:
 ```bash
-mkdir -p src/codebase_mcp/auto_switch
-touch src/codebase_mcp/auto_switch/__init__.py
+mkdir -p src/auto_switch
+touch src/auto_switch/__init__.py
 ```
 
 **Validation**:
@@ -70,7 +111,7 @@ touch src/codebase_mcp/auto_switch/__init__.py
 ### Task 1.2 [P]: Implement Pydantic models
 **Time**: 25 min (added 5 min debug buffer)
 **Dependencies**: Task 1.1
-**Files**: `src/codebase_mcp/auto_switch/models.py`
+**Files**: `src/auto_switch/models.py`
 
 **Actions**:
 - Copy the `models.py` implementation from CONVERSION_PLAN_REVISED.md (lines 540-583)
@@ -80,7 +121,7 @@ touch src/codebase_mcp/auto_switch/__init__.py
 
 **Validation**:
 ```python
-from codebase_mcp.auto_switch.models import CodebaseMCPConfig
+from src.auto_switch.models import CodebaseMCPConfig
 config = CodebaseMCPConfig(version="1.0", project={"name": "test"})
 assert config.project.name == "test"
 ```
@@ -90,7 +131,7 @@ assert config.project.name == "test"
 ### Task 1.3 [P]: Implement config validation
 **Time**: 30 min (added 5 min debug buffer)
 **Dependencies**: Task 1.1
-**Files**: `src/codebase_mcp/auto_switch/validation.py`
+**Files**: `src/auto_switch/validation.py`
 
 **Actions**:
 - Copy the `validation.py` implementation from CONVERSION_PLAN_REVISED.md (lines 470-536)
@@ -111,7 +152,7 @@ with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
     json.dump({"version": "1.0", "project": {"name": "test"}}, f)
     config_path = Path(f.name)
 
-from codebase_mcp.auto_switch.validation import validate_config_syntax
+from src.auto_switch.validation import validate_config_syntax
 config = validate_config_syntax(config_path)
 assert config['project']['name'] == 'test'
 ```
@@ -121,7 +162,7 @@ assert config['project']['name'] == 'test'
 ### Task 1.4 [P]: Implement config discovery
 **Time**: 35 min (added 5 min debug buffer)
 **Dependencies**: Task 1.1
-**Files**: `src/codebase_mcp/auto_switch/discovery.py`
+**Files**: `src/auto_switch/discovery.py`
 
 **Actions**:
 - Copy the `discovery.py` implementation from CONVERSION_PLAN_REVISED.md (lines 287-344)
@@ -144,7 +185,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     config_file = config_dir / "config.json"
     config_file.write_text(json.dumps({"version": "1.0", "project": {"name": "test"}}))
 
-    from codebase_mcp.auto_switch.discovery import find_config_file
+    from src.auto_switch.discovery import find_config_file
     found = find_config_file(Path(tmpdir))
     assert found == config_file
 ```
@@ -154,7 +195,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 ### Task 1.5 [P]: Implement async config cache
 **Time**: 50 min (added 5 min debug buffer)
 **Dependencies**: Task 1.1
-**Files**: `src/codebase_mcp/auto_switch/cache.py`
+**Files**: `src/auto_switch/cache.py`
 
 **Actions**:
 - Copy the `cache.py` implementation from CONVERSION_PLAN_REVISED.md (lines 347-466)
@@ -173,7 +214,7 @@ import json
 import tempfile
 
 async def test_cache():
-    from codebase_mcp.auto_switch.cache import get_config_cache
+    from src.auto_switch.cache import get_config_cache
 
     cache = get_config_cache()
 
@@ -198,7 +239,7 @@ asyncio.run(test_cache())
 ### Task 1.6 [P]: Implement SessionContextManager
 **Time**: 55 min (added 5 min debug buffer - higher risk task)
 **Dependencies**: Task 1.1
-**Files**: `src/codebase_mcp/auto_switch/session_context.py`
+**Files**: `src/auto_switch/session_context.py`
 
 **Actions**:
 - Copy the `session_context.py` implementation from CONVERSION_PLAN_REVISED.md (lines 142-283)
@@ -218,7 +259,7 @@ asyncio.run(test_cache())
 import asyncio
 
 async def test_session_manager():
-    from codebase_mcp.auto_switch.session_context import SessionContextManager
+    from src.auto_switch.session_context import SessionContextManager
 
     mgr = SessionContextManager()
     await mgr.start()
@@ -237,20 +278,61 @@ asyncio.run(test_session_manager())
 
 ---
 
+### Task 1.7: Populate auto_switch __init__.py exports
+**Time**: 5 min
+**Dependencies**: Tasks 1.2-1.6
+**Files**: `src/auto_switch/__init__.py`
+
+**Actions**:
+- Add module exports to make imports work
+
+**Code**:
+```python
+"""Config-based project tracking with session isolation."""
+
+from .models import CodebaseMCPConfig, ProjectConfig, CONFIG_SCHEMA
+from .validation import validate_config_syntax
+from .discovery import find_config_file
+from .cache import get_config_cache, ConfigCache
+from .session_context import get_session_context_manager, SessionContextManager
+
+__all__ = [
+    "CodebaseMCPConfig",
+    "ProjectConfig",
+    "CONFIG_SCHEMA",
+    "validate_config_syntax",
+    "find_config_file",
+    "get_config_cache",
+    "ConfigCache",
+    "get_session_context_manager",
+    "SessionContextManager",
+]
+```
+
+**Validation**:
+```python
+from src.auto_switch import get_session_context_manager, get_config_cache
+assert get_session_context_manager is not None
+assert get_config_cache is not None
+```
+
+---
+
 ## Phase 1 Validation Checkpoint
 
 **Required before proceeding to Phase 2:**
 1. All module imports work without errors:
    ```python
-   from codebase_mcp.auto_switch.models import CodebaseMCPConfig
-   from codebase_mcp.auto_switch.validation import validate_config_syntax
-   from codebase_mcp.auto_switch.discovery import find_config_file
-   from codebase_mcp.auto_switch.cache import get_config_cache
-   from codebase_mcp.auto_switch.session_context import get_session_context_manager
+   from src.auto_switch.models import CodebaseMCPConfig
+   from src.auto_switch.validation import validate_config_syntax
+   from src.auto_switch.discovery import find_config_file
+   from src.auto_switch.cache import get_config_cache
+   from src.auto_switch.session_context import get_session_context_manager
    ```
 2. Basic unit tests pass for each module
 3. No import cycles or missing dependencies
-4. Commit Phase 1: `git add . && git commit -m "feat(auto-switch): implement config infrastructure modules"`
+4. Task 1.7 completed - __init__.py exports all required symbols
+5. Commit Phase 1: `git add . && git commit -m "feat(auto-switch): implement config infrastructure modules"`
 
 ---
 
@@ -259,17 +341,17 @@ asyncio.run(test_session_manager())
 ### Task 2.1: Implement _resolve_project_context()
 **Time**: 1h 20min (added 5 min debug buffer - complex task)
 **Dependencies**: Phase 1 complete
-**Files**: `src/codebase_mcp/db/connection.py`
+**Files**: `src/database/session.py`
 
 **Code Location**:
 - Add new function after imports section, before `resolve_project_id()` function
 - Add these imports at the top of the file (after existing imports):
   ```python
   from pathlib import Path
-  from codebase_mcp.auto_switch.session_context import get_session_context_manager
-  from codebase_mcp.auto_switch.discovery import find_config_file
-  from codebase_mcp.auto_switch.validation import validate_config_syntax
-  from codebase_mcp.auto_switch.cache import get_config_cache
+  from src.auto_switch.session_context import get_session_context_manager
+  from src.auto_switch.discovery import find_config_file
+  from src.auto_switch.validation import validate_config_syntax
+  from src.auto_switch.cache import get_config_cache
   ```
 
 **Actions**:
