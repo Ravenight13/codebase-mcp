@@ -177,6 +177,50 @@ Development consists of:
 3. **Updating scripts**: Edit `.specify/scripts/bash/*.sh`
 4. **Customizing constitution**: Use `/constitution` command
 
+## Background Indexing
+
+Large repositories (10,000+ files) require 5-10 minutes to index. Use background indexing for these repositories to avoid MCP client timeouts.
+
+### Usage Pattern: Start and Poll
+
+```python
+# Start indexing
+result = await start_indexing_background(
+    repo_path="/path/to/large/repo",
+    ctx=ctx
+)
+job_id = result["job_id"]
+
+# Poll for completion
+while True:
+    status = await get_indexing_status(job_id=job_id, ctx=ctx)
+    if status["status"] in ["completed", "failed"]:
+        break
+    await asyncio.sleep(2)
+
+if status["status"] == "completed":
+    print(f"✅ Indexed {status['files_indexed']} files!")
+else:
+    print(f"❌ Indexing failed: {status['error_message']}")
+```
+
+### When to Use
+
+- **Foreground** (`index_repository`): Repositories <5,000 files (completes in <60s)
+- **Background** (`start_indexing_background`): Repositories 10,000+ files (requires 5-10 minutes)
+
+### MCP Tools Available
+
+- `start_indexing_background(repo_path, project_id, ctx)` - Start job, returns job_id immediately
+- `get_indexing_status(job_id, project_id, ctx)` - Query job status for polling
+
+### Job States
+
+- `pending` - Job created, worker not started yet
+- `running` - Worker actively indexing repository
+- `completed` - Indexing finished successfully
+- `failed` - Indexing encountered an error (see `error_message`)
+
 ## Running Database Migrations
 
 This project uses Alembic for database schema migrations. Follow these procedures for safe migration execution.
