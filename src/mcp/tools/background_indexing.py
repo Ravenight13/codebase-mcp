@@ -30,7 +30,8 @@ from uuid import UUID
 
 from fastmcp import Context
 
-from src.database.session import get_session, resolve_project_id
+from src.database.session import get_session, resolve_project_id, engine
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import mcp
 from src.models.indexing_job import IndexingJob, IndexingJobCreate
@@ -93,8 +94,9 @@ async def start_indexing_background(
         project_id=resolved_id,
     )
 
-    # Create job record in database (status=pending)
-    async with get_session(project_id=resolved_id, ctx=ctx) as session:
+    # Create job record in main database (status=pending)
+    # Note: indexing_jobs table lives in main codebase_mcp database, not project databases
+    async with AsyncSession(engine) as session:
         job = IndexingJob(
             repo_path=job_input.repo_path,
             project_id=resolved_id,
@@ -201,8 +203,9 @@ async def get_indexing_status(
         )
         raise ValueError(f"Invalid job_id format: {job_id}") from e
 
-    # Query job from database
-    async with get_session(project_id=resolved_id, ctx=ctx) as session:
+    # Query job from main database
+    # Note: indexing_jobs table lives in main codebase_mcp database, not project databases
+    async with AsyncSession(engine) as session:
         job = await session.get(IndexingJob, job_uuid)
 
         if job is None:

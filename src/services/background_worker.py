@@ -35,7 +35,8 @@ from uuid import UUID
 
 from fastmcp import Context
 
-from src.database.session import get_session
+from src.database.session import get_session, engine
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.mcp.mcp_logging import get_logger
 from src.models.indexing_job import IndexingJob
 from src.services.indexer import index_repository
@@ -80,7 +81,8 @@ async def _background_indexing_worker(
 
     try:
         # 1. Update status to running
-        async with get_session(project_id=project_id, ctx=ctx) as session:
+        # Note: indexing_jobs table lives in main codebase_mcp database
+        async with AsyncSession(engine) as session:
             job = await session.get(IndexingJob, job_id)
             if job is None:
                 logger.error(f"Job {job_id} not found")
@@ -99,8 +101,19 @@ async def _background_indexing_worker(
                 project_id=project_id,
             )
 
-        # 3. Update to completed with results
-        async with get_session(project_id=project_id, ctx=ctx) as session:
+        # 3. Check if indexing succeeded (files_indexed > 0 or path exists check)
+        repo_path_obj = Path(repo_path)
+        if not repo_path_obj.exists():
+            # Path doesn't exist - mark as failed
+            raise FileNotFoundError(f"Repository path does not exist: {repo_path}")
+
+        if not repo_path_obj.is_dir():
+            # Path is not a directory - mark as failed
+            raise NotADirectoryError(f"Repository path is not a directory: {repo_path}")
+
+        # 4. Update to completed with results
+        # Note: indexing_jobs table lives in main codebase_mcp database
+        async with AsyncSession(engine) as session:
             job = await session.get(IndexingJob, job_id)
             if job is None:
                 logger.error(f"Job {job_id} not found for completion update")
@@ -138,7 +151,8 @@ async def _background_indexing_worker(
         )
 
         try:
-            async with get_session(project_id=project_id, ctx=ctx) as session:
+            # Note: indexing_jobs table lives in main codebase_mcp database
+            async with AsyncSession(engine) as session:
                 job = await session.get(IndexingJob, job_id)
                 if job is not None:
                     job.status = "failed"

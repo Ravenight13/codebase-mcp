@@ -58,7 +58,7 @@ logger = get_logger(__name__)
 
 # Batching configuration
 FILE_BATCH_SIZE: Final[int] = 100  # Files per chunking batch
-EMBEDDING_BATCH_SIZE: Final[int] = 50  # Texts per embedding batch (from settings)
+EMBEDDING_BATCH_SIZE: Final[int] = 5  # Texts per embedding batch - reduced to prevent Ollama overload
 
 # Performance targets
 TARGET_INDEXING_TIME_SECONDS: Final[int] = 60  # 60s for 10K files

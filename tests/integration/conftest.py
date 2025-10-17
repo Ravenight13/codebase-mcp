@@ -98,6 +98,7 @@ async def test_engine(database_url: str) -> AsyncGenerator[AsyncEngine, None]:
             WorkItemDependency,
             WorkItemDeploymentLink,
         )
+        from src.models.indexing_job import IndexingJob  # noqa: F401
 
         # Install pgvector extension
         await conn.execute(sqlalchemy.text("CREATE EXTENSION IF NOT EXISTS vector"))
