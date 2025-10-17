@@ -338,6 +338,7 @@ def main() -> None:
     # correct mcp instance (the one that will be used by the protocol handlers)
     try:
         logger.info("Importing tool modules...")
+        import src.mcp.tools.background_indexing  # noqa: F401
         import src.mcp.tools.indexing  # noqa: F401
         import src.mcp.tools.project  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
@@ -362,8 +363,10 @@ def main() -> None:
 
         # List expected tools and resources for diagnostics
         expected_tools = [
+            "get_indexing_status",
             "index_repository",
             "search_code",
+            "start_indexing_background",
         ]
         expected_resources = [
             "health://connection-pool",
