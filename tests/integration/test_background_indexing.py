@@ -251,6 +251,7 @@ async def test_start_indexing_path_validation() -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.slow
+@pytest.mark.timeout(600)  # 10 minutes for large repository indexing
 async def test_large_repository_indexing() -> None:
     """Test background indexing with large repository (codebase-mcp itself).
 
@@ -261,7 +262,13 @@ async def test_large_repository_indexing() -> None:
     - Production readiness
 
     This test indexes the codebase-mcp project itself, which should have
-    100+ Python files and take several minutes to complete.
+    100+ Python files and may take 5-10 minutes to complete with embeddings.
+
+    Note: Test duration depends on:
+    - Repository size (number of files)
+    - EMBEDDING_BATCH_SIZE setting
+    - Ollama response time
+    - Network conditions
     """
     from datetime import datetime
 
@@ -291,8 +298,8 @@ async def test_large_repository_indexing() -> None:
     job_id = result["job_id"]
     print(f"✅ Job created: {job_id}")
 
-    # 2. Poll until completion (allow up to 5 minutes)
-    max_attempts = 150  # 5 minutes at 2s intervals
+    # 2. Poll until completion (allow up to 10 minutes)
+    max_attempts = 300  # 10 minutes at 2s intervals
     final_status = None
 
     for attempt in range(max_attempts):
@@ -316,7 +323,7 @@ async def test_large_repository_indexing() -> None:
 
     # 3. Verify completion within timeout
     assert final_status is not None, \
-        "Job did not complete within 5 minutes (may need longer timeout for very large repos)"
+        "Job did not complete within 10 minutes (may need longer timeout for very large repos)"
 
     # 4. Verify successful completion
     assert final_status["status"] == "completed", \
