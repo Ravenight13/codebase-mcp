@@ -17,9 +17,11 @@ Key Features:
 - Incremental updates (only reindex changed files)
 - Batch processing for performance (100 files/batch, 50 embeddings/batch)
 - Comprehensive error tracking with partial success support
-- Change event tracking for analytics
 - Performance metrics (files indexed, chunks created, duration)
 - Force reindex option (reindex all files)
+
+Note: Change event and embedding metadata tracking removed in database-per-project
+      refactoring (non-essential analytics not included in simplified schema).
 """
 
 from __future__ import annotations
@@ -38,10 +40,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config.settings import get_settings
 from src.mcp.mcp_logging import get_logger
 from src.models import (
-    ChangeEvent,
+    # ChangeEvent,  # Removed - non-essential analytics not in database-per-project schema
     CodeChunk,
     CodeFile,
-    EmbeddingMetadata,
+    # EmbeddingMetadata,  # Removed - non-essential analytics not in database-per-project schema
     Repository,
 )
 from src.services.chunker import chunk_files_batch, detect_language
@@ -586,9 +588,9 @@ async def index_repository(
         if changeset.deleted:
             await _mark_files_deleted(db, repository.id, changeset.deleted)
 
-        # Create change events
-        if changeset.has_changes:
-            await _create_change_events(db, repository.id, changeset, repo_path)
+        # Create change events (disabled - non-essential analytics not in database-per-project schema)
+        # if changeset.has_changes:
+        #     await _create_change_events(db, repository.id, changeset, repo_path)
 
         # If no files to index, return early
         if not files_to_index:
