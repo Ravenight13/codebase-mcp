@@ -52,6 +52,23 @@ class Settings(BaseSettings):
     All settings are loaded from environment variables with .env file support.
     Required fields must be set or server startup will fail.
 
+    Database-Per-Project Architecture:
+        Codebase-MCP uses a database-per-project architecture where each project
+        workspace has its own isolated PostgreSQL database:
+
+        - **Registry Database** (REGISTRY_DATABASE_URL): Tracks project metadata,
+          config mappings, and workspace provisioning
+        - **Project Databases** (cb_proj_*): Isolated databases for each project's
+          code repositories, files, and chunks
+        - **Default Database** (DATABASE_URL): Fallback workspace for unassociated
+          repositories (optional, can be same as registry)
+
+        This architecture provides:
+        - Complete isolation between projects (no cross-contamination)
+        - Independent scaling and backup strategies per project
+        - Config-driven project discovery (.codebase-mcp/config.json)
+        - Automatic database provisioning on first use
+
     Connection Pool Integration:
         The Settings class automatically initializes a PoolConfig instance from
         DATABASE_URL and POOL_* environment variables. This ensures fail-fast
@@ -63,8 +80,9 @@ class Settings(BaseSettings):
         environment variables are set, default values from PoolConfig are used.
 
     Example .env:
-        # Required: Database connection
+        # Required: Database connections
         DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp
+        REGISTRY_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp_registry
 
         # Ollama Configuration
         OLLAMA_BASE_URL=http://localhost:11434
@@ -115,7 +133,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="forbid",  # Fail on unknown env vars to catch typos
+        extra="ignore",  # Ignore unknown env vars (allows coexistence with workflow-mcp)
     )
 
     # ============================================================================
@@ -127,7 +145,21 @@ class Settings(BaseSettings):
         Field(
             description=(
                 "PostgreSQL connection URL with asyncpg driver. "
-                "Format: postgresql+asyncpg://user:password@host:port/database"
+                "Format: postgresql+asyncpg://user:password@host:port/database. "
+                "NOTE: In database-per-project architecture, this is the DEFAULT database. "
+                "Each project uses its own isolated database (cb_proj_*)."
+            ),
+        ),
+    ]
+
+    registry_database_url: Annotated[
+        PostgresDsn,
+        Field(
+            default="postgresql+asyncpg://localhost/codebase_mcp_registry",
+            description=(
+                "Registry database URL for project tracking in database-per-project architecture. "
+                "Format: postgresql+asyncpg://user:password@host:port/database. "
+                "Environment variables: REGISTRY_DATABASE_URL or CODEBASE_MCP_REGISTRY_URL"
             ),
         ),
     ]
@@ -310,11 +342,11 @@ class Settings(BaseSettings):
     # Validators
     # ============================================================================
 
-    @field_validator("database_url")
+    @field_validator("database_url", "registry_database_url")
     @classmethod
     def validate_asyncpg_driver(cls, v: PostgresDsn) -> PostgresDsn:
         """
-        Ensure DATABASE_URL uses asyncpg driver for async SQLAlchemy.
+        Ensure database URLs use asyncpg driver for async SQLAlchemy.
 
         Args:
             v: PostgreSQL DSN to validate
@@ -327,11 +359,12 @@ class Settings(BaseSettings):
         """
         if v.scheme != "postgresql+asyncpg":
             error_msg = (
-                "DATABASE_URL must use asyncpg driver for async operations.\n"
+                "Database URL must use asyncpg driver for async operations.\n"
                 f"Found: {v.scheme}\n"
                 "Expected: postgresql+asyncpg\n\n"
                 "Fix: Update .env file:\n"
-                "  DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp"
+                "  DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp\n"
+                "  REGISTRY_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp_registry"
             )
             raise ValueError(error_msg)
         return v

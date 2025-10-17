@@ -171,8 +171,8 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     """Lifespan context manager for FastMCP server.
 
     Manages server startup and shutdown lifecycle:
-    - Startup: Initialize connection pool (blocking to ensure ready before serving)
-    - Shutdown: Close connection pool gracefully with 30s timeout
+    - Startup: Initialize session manager, connection pool (blocking to ensure ready)
+    - Shutdown: Close connection pool, stop session manager gracefully
 
     Blocking Pattern:
     - Wait for pool to be ready before accepting connections from Claude Desktop
@@ -191,11 +191,12 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
         None (context manager pattern)
 
     Raises:
-        RuntimeError: If connection pool initialization fails
+        RuntimeError: If connection pool or session manager initialization fails
     """
     global _pool_manager, _health_service, _metrics_service
 
-    # Import connection pool management and services
+    # Import connection pool management, services, and session manager
+    from src.auto_switch.session_context import get_session_context_manager
     from src.config.settings import get_settings
     from src.connection_pool.config import PoolConfig
     from src.connection_pool.manager import ConnectionPoolManager
@@ -205,9 +206,21 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
     # Create connection pool manager instance
     pool_manager = ConnectionPoolManager()
 
-    # Startup: Initialize connection pool (blocking to ensure ready before serving)
-    # Wait for pool to be ready before accepting connections from Claude Desktop
+    # Get session context manager instance
+    session_mgr = get_session_context_manager()
+
+    # Startup: Initialize session manager and connection pool
+    # (blocking to ensure ready before serving)
     try:
+        logger.info("Starting codebase-mcp server...")
+        sys.stderr.write("INFO: Starting codebase-mcp server...\n")
+
+        # Start session manager first (enables per-session isolation)
+        await session_mgr.start()
+        logger.info("Session manager started")
+        sys.stderr.write("INFO: Session manager started\n")
+
+        # Initialize connection pool
         logger.info("Initializing connection pool...")
         sys.stderr.write("INFO: Initializing connection pool...\n")
 
@@ -243,26 +256,40 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
         logger.info("✓ Metrics service initialized successfully")
 
         logger.info("✓ All services initialized successfully")
+        logger.info("Server startup complete")
         sys.stderr.write("INFO: All services initialized successfully\n")
+        sys.stderr.write("INFO: Server startup complete\n")
 
     except Exception as e:
         logger.critical(
-            f"Failed to initialize connection pool: {e}",
+            f"Failed to initialize server: {e}",
             exc_info=True,
         )
-        sys.stderr.write(f"FATAL: Connection pool initialization failed: {e}\n")
+        sys.stderr.write(f"FATAL: Server initialization failed: {e}\n")
         sys.stderr.write("FIX: Check PostgreSQL is running and DATABASE_URL is correct\n")
-        raise RuntimeError(f"Connection pool initialization failed: {e}") from e
+        raise RuntimeError(f"Server initialization failed: {e}") from e
 
     # Yield control to FastMCP server (tools are visible NOW)
     yield
 
-    # Shutdown: Close connection pool gracefully with 30s timeout
+    # Shutdown: Close connection pool and stop session manager gracefully
     try:
-        logger.info("Shutting down server...")
+        logger.info("Shutting down codebase-mcp server...")
+        sys.stderr.write("INFO: Shutting down codebase-mcp server...\n")
+
+        # Close connection pool first
         logger.info("Closing connection pool gracefully...")
         await pool_manager.shutdown(timeout=30.0)
         logger.info("Connection pool closed successfully")
+
+        # Stop session manager
+        await session_mgr.stop()
+        logger.info("Session manager stopped")
+        sys.stderr.write("INFO: Session manager stopped\n")
+
+        logger.info("Server shutdown complete")
+        sys.stderr.write("INFO: Server shutdown complete\n")
+
     except Exception as e:
         logger.error(
             f"Error during shutdown: {e}",
@@ -311,7 +338,9 @@ def main() -> None:
     # correct mcp instance (the one that will be used by the protocol handlers)
     try:
         logger.info("Importing tool modules...")
+        import src.mcp.tools.background_indexing  # noqa: F401
         import src.mcp.tools.indexing  # noqa: F401
+        import src.mcp.tools.project  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
         logger.info("✓ Tool modules imported successfully")
 
@@ -334,8 +363,10 @@ def main() -> None:
 
         # List expected tools and resources for diagnostics
         expected_tools = [
+            "get_indexing_status",
             "index_repository",
             "search_code",
+            "start_indexing_background",
         ]
         expected_resources = [
             "health://connection-pool",

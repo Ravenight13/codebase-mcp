@@ -247,6 +247,7 @@ See [Multi-Project Architecture](docs/architecture/multi-project-design.md) for 
 ## Documentation
 
 - **[Multi-Project Architecture](docs/architecture/multi-project-design.md)** - System architecture and data flow
+- **[Auto-Switch Architecture](docs/architecture/AUTO_SWITCH.md)** - Config-based project switching internals
 - **[Configuration Guide](docs/configuration/production-config.md)** - Production deployment and tuning
 - **[API Reference](docs/api/tool-reference.md)** - Complete MCP tool documentation
 - **[CLAUDE.md](CLAUDE.md)** - Specify workflow for AI-assisted development
@@ -386,6 +387,136 @@ ollama list | grep nomic-embed-text
 ```
 
 **Setup Complete**: If all verification steps pass, Codebase MCP Server v2.0 is ready for use. Proceed to the Quick Start section for first-time indexing and search operations.
+
+## Multi-Project Configuration
+
+The Codebase MCP server supports automatic project switching based on your working directory using `.codebase-mcp/config.json` files.
+
+### Quick Start
+
+1. **Create a config file** in your project root:
+```bash
+mkdir -p .codebase-mcp
+cat > .codebase-mcp/config.json <<EOF
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "id": "optional-uuid-here"
+  },
+  "auto_switch": true
+}
+EOF
+```
+
+2. **Set your working directory** (via MCP client):
+```javascript
+await mcpClient.callTool("set_working_directory", {
+  directory: "/absolute/path/to/your/project"
+});
+```
+
+3. **Use tools normally** - they'll automatically use your project:
+```javascript
+// Automatically uses "my-project" workspace
+await mcpClient.callTool("index_repository", {
+  repo_path: "/path/to/repo"
+});
+```
+
+### Config File Format
+
+```json
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project-name",
+    "id": "optional-project-uuid"
+  },
+  "auto_switch": true,
+  "strict_mode": false,
+  "dry_run": false,
+  "description": "Optional project description"
+}
+```
+
+**Fields:**
+- `version` (required): Config version (currently "1.0")
+- `project.name` (required): Project identifier (used if no ID provided)
+- `project.id` (optional): Explicit project UUID (takes priority over name)
+- `auto_switch` (optional, default true): Enable automatic project switching
+- `strict_mode` (optional, default false): Reject operations if project mismatch
+- `dry_run` (optional, default false): Log intended switches without executing
+
+### Project Resolution Priority
+
+When you call MCP tools, the server resolves the project workspace using this 4-tier priority system:
+
+1. **Explicit `project_id` parameter** (highest priority)
+   ```javascript
+   await mcpClient.callTool("index_repository", {
+     repo_path: "/path/to/repo",
+     project_id: "explicit-project-id"  // Always takes priority
+   });
+   ```
+
+2. **Session-based config file** (via `set_working_directory`)
+   - Server searches up to 20 directory levels for `.codebase-mcp/config.json`
+   - Cached with mtime-based invalidation for performance
+   - Isolated per MCP session (multiple clients stay independent)
+
+3. **workflow-mcp integration** (external project tracking)
+   - Queries workflow-mcp server for active project context
+   - Configurable timeout and caching
+
+4. **Default workspace** (fallback)
+   - Uses `project_default` schema when no other resolution succeeds
+
+### Multi-Session Isolation
+
+The server maintains separate working directories for each MCP session (client connection):
+
+```javascript
+// Session 1 (Claude Code instance A)
+await mcpClient1.callTool("set_working_directory", {
+  directory: "/Users/alice/project-a"
+});
+
+// Session 2 (Claude Code instance B)
+await mcpClient2.callTool("set_working_directory", {
+  directory: "/Users/bob/project-b"
+});
+
+// Each session independently resolves its own project
+// No cross-contamination between sessions
+```
+
+### Config File Discovery
+
+The server searches for `.codebase-mcp/config.json` by:
+1. Starting from your working directory
+2. Searching up to 20 parent directories
+3. Stopping at the first config file found
+4. Caching the result (with automatic invalidation on file modification)
+
+**Example directory structure:**
+```
+/Users/alice/projects/my-app/     <- .codebase-mcp/config.json here
+├── .codebase-mcp/
+│   └── config.json
+├── src/
+│   └── components/               <- Working directory
+│       └── Button.tsx
+```
+
+If you set working directory to `/Users/alice/projects/my-app/src/components/`, the server will find the config at `/Users/alice/projects/my-app/.codebase-mcp/config.json`.
+
+### Performance
+
+- **Config discovery**: <50ms (with upward traversal)
+- **Cache hit**: <5ms
+- **Session lookup**: <1ms
+- **Background cleanup**: Hourly (removes sessions inactive >24h)
 
 ## Database Setup
 

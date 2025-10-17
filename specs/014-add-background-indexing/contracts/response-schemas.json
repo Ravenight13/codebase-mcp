@@ -1,0 +1,571 @@
+{
+  "StartIndexingBackgroundResponse": {
+    "type": "object",
+    "description": "Response schema for start_indexing_background tool",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique job identifier for tracking progress",
+        "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+      },
+      "status": {
+        "type": "string",
+        "enum": ["pending", "running"],
+        "description": "Initial job status",
+        "examples": ["running", "pending"]
+      },
+      "message": {
+        "type": "string",
+        "description": "Human-readable status message",
+        "examples": [
+          "Job started successfully",
+          "Job queued (3 jobs currently running)"
+        ]
+      },
+      "estimated_duration_seconds": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Estimated indexing duration based on file count",
+        "examples": [120.5, 480.0, 90.0]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Resolved project workspace identifier",
+        "examples": ["my-project", "client-a", "default"]
+      },
+      "database_name": {
+        "type": "string",
+        "description": "PostgreSQL schema name for workspace isolation",
+        "pattern": "^cb_proj_[a-z0-9_]+_[a-f0-9]{8}$",
+        "examples": [
+          "cb_proj_my_project_abc123de",
+          "cb_proj_client_a_def456gh",
+          "cb_proj_default_00000000"
+        ]
+      }
+    },
+    "required": ["job_id", "status", "message", "project_id", "database_name"],
+    "additionalProperties": false
+  },
+  "GetJobStatusResponse": {
+    "type": "object",
+    "description": "Response schema for get_job_status tool",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique job identifier"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+        "description": "Current job lifecycle state"
+      },
+      "progress_percentage": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Overall progress (0-100)"
+      },
+      "progress_message": {
+        "type": "string",
+        "description": "Human-readable progress description",
+        "examples": [
+          "Scanning repository...",
+          "Chunking files: 5000/10000",
+          "Generating embeddings: 25000/50000",
+          "Writing to database...",
+          "Indexing complete",
+          "Embedding generation failed"
+        ]
+      },
+      "files_scanned": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Total files found during scan"
+      },
+      "files_indexed": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Files successfully processed"
+      },
+      "chunks_created": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Code chunks generated"
+      },
+      "created_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Job creation timestamp (ISO 8601)",
+        "examples": ["2025-10-17T10:30:00Z"]
+      },
+      "started_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Job start timestamp (null if pending)",
+        "examples": ["2025-10-17T10:30:02Z", null]
+      },
+      "completed_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Job completion timestamp (null if not completed)",
+        "examples": ["2025-10-17T10:32:30Z", null]
+      },
+      "cancelled_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Job cancellation timestamp (null if not cancelled)",
+        "examples": ["2025-10-17T10:31:45Z", null]
+      },
+      "error_message": {
+        "type": "string",
+        "description": "Error description (null if no error)",
+        "examples": [
+          "Ollama embedding service unavailable after 5 retry attempts",
+          "Insufficient storage space",
+          "Database connection lost",
+          null
+        ]
+      },
+      "error_type": {
+        "type": "string",
+        "description": "Error classification (null if no error)",
+        "examples": [
+          "EmbeddingServiceError",
+          "DatabaseError",
+          "StorageError",
+          "ValidationError",
+          null
+        ]
+      },
+      "estimated_time_remaining_seconds": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Estimated seconds until completion (null if unavailable)",
+        "examples": [65.2, 120.0, null]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project workspace identifier"
+      },
+      "database_name": {
+        "type": "string",
+        "description": "PostgreSQL schema name"
+      }
+    },
+    "required": [
+      "job_id",
+      "status",
+      "progress_percentage",
+      "progress_message",
+      "files_scanned",
+      "files_indexed",
+      "chunks_created",
+      "created_at",
+      "project_id",
+      "database_name"
+    ],
+    "additionalProperties": false
+  },
+  "ListBackgroundJobsResponse": {
+    "type": "object",
+    "description": "Response schema for list_background_jobs tool",
+    "properties": {
+      "jobs": {
+        "type": "array",
+        "description": "List of jobs matching filter criteria",
+        "items": {
+          "type": "object",
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Unique job identifier"
+            },
+            "repo_path": {
+              "type": "string",
+              "description": "Repository path being indexed"
+            },
+            "repo_name": {
+              "type": "string",
+              "description": "Repository display name"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+              "description": "Job lifecycle state"
+            },
+            "progress_percentage": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Progress percentage"
+            },
+            "files_indexed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Files processed count"
+            },
+            "chunks_created": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Chunks generated count"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Creation timestamp"
+            },
+            "started_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Start timestamp (null if pending)"
+            },
+            "completed_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Completion timestamp (null if not completed)"
+            },
+            "project_id": {
+              "type": "string",
+              "description": "Project workspace identifier"
+            }
+          },
+          "required": [
+            "job_id",
+            "repo_path",
+            "repo_name",
+            "status",
+            "progress_percentage",
+            "files_indexed",
+            "chunks_created",
+            "created_at",
+            "project_id"
+          ]
+        }
+      },
+      "total_count": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Total jobs matching filter (ignoring pagination)"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Limit used for query"
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Offset used for query"
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Resolved project workspace identifier"
+      }
+    },
+    "required": ["jobs", "total_count", "limit", "offset", "project_id"],
+    "additionalProperties": false
+  },
+  "CancelJobResponse": {
+    "type": "object",
+    "description": "Response schema for cancel_job tool",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Job identifier that was cancelled"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["cancelled", "cancelling"],
+        "description": "Cancellation status",
+        "examples": ["cancelling", "cancelled"]
+      },
+      "message": {
+        "type": "string",
+        "description": "Cancellation confirmation message",
+        "examples": [
+          "Cancellation requested. Job will stop within 5 seconds after finishing current batch.",
+          "Job cancelled successfully. Partial data retained (7200 files, 36000 chunks)."
+        ]
+      },
+      "files_indexed": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Files processed before cancellation"
+      },
+      "chunks_created": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Chunks generated before cancellation (retained)"
+      },
+      "cancelled_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Cancellation request timestamp",
+        "examples": ["2025-10-17T10:35:00Z"]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project workspace identifier"
+      }
+    },
+    "required": [
+      "job_id",
+      "status",
+      "message",
+      "files_indexed",
+      "chunks_created",
+      "cancelled_at",
+      "project_id"
+    ],
+    "additionalProperties": false
+  },
+  "ErrorResponse": {
+    "type": "object",
+    "description": "Standard error response schema for all tools (MCP-compliant)",
+    "properties": {
+      "error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_ERROR",
+              "JOB_NOT_FOUND",
+              "DUPLICATE_JOB",
+              "INVALID_STATUS",
+              "DATABASE_ERROR",
+              "POOL_TIMEOUT",
+              "CONNECTION_ERROR"
+            ],
+            "description": "Machine-readable error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional error context (optional)",
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Field that caused validation error"
+              },
+              "value": {
+                "type": "string",
+                "description": "Invalid value provided"
+              },
+              "suggestion": {
+                "type": "string",
+                "description": "Suggested fix or action"
+              },
+              "pool_statistics": {
+                "type": "object",
+                "description": "Connection pool statistics for database errors"
+              }
+            }
+          }
+        },
+        "required": ["code", "message"]
+      }
+    },
+    "required": ["error"],
+    "examples": [
+      {
+        "name": "Validation error",
+        "response": {
+          "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Repository path must be absolute: relative/path",
+            "details": {
+              "field": "repo_path",
+              "value": "relative/path",
+              "suggestion": "Provide absolute path starting with '/' (POSIX) or drive letter (Windows)"
+            }
+          }
+        }
+      },
+      {
+        "name": "Job not found",
+        "response": {
+          "error": {
+            "code": "JOB_NOT_FOUND",
+            "message": "Job not found: 550e8400-e29b-41d4-a716-446655440000",
+            "details": {
+              "job_id": "550e8400-e29b-41d4-a716-446655440000",
+              "suggestion": "Verify job_id is correct and job exists in current project workspace"
+            }
+          }
+        }
+      },
+      {
+        "name": "Database error",
+        "response": {
+          "error": {
+            "code": "DATABASE_ERROR",
+            "message": "Connection pool timeout during indexing",
+            "details": {
+              "error_type": "PoolTimeoutError",
+              "pool_statistics": {
+                "total_connections": 20,
+                "active_connections": 20,
+                "waiting_requests": 5
+              },
+              "suggestion": "Try: Increase POOL_MAX_SIZE environment variable or reduce concurrent operations"
+            }
+          }
+        }
+      },
+      {
+        "name": "Invalid status",
+        "response": {
+          "error": {
+            "code": "INVALID_STATUS",
+            "message": "Cannot cancel job in status 'completed'. Only pending/running jobs can be cancelled.",
+            "details": {
+              "job_id": "550e8400-e29b-41d4-a716-446655440000",
+              "current_status": "completed",
+              "allowed_statuses": ["pending", "running"]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "ProgressPhases": {
+    "description": "Progress tracking phases with percentage ranges",
+    "phases": [
+      {
+        "name": "Scanning",
+        "percentage_range": "0-10%",
+        "description": "File discovery and counting",
+        "message_examples": ["Scanning repository...", "Found 10,000 files"]
+      },
+      {
+        "name": "Chunking",
+        "percentage_range": "10-50%",
+        "description": "AST-based code chunking per file",
+        "message_examples": [
+          "Chunking files: 2500/10000",
+          "Processing file batch 5/10"
+        ]
+      },
+      {
+        "name": "Embedding",
+        "percentage_range": "50-90%",
+        "description": "Vector embedding generation via Ollama",
+        "message_examples": [
+          "Generating embeddings: 25000/50000",
+          "Embedding batch 50/100"
+        ]
+      },
+      {
+        "name": "Writing",
+        "percentage_range": "90-100%",
+        "description": "Database persistence and indexing",
+        "message_examples": ["Writing to database...", "Indexing complete"]
+      }
+    ],
+    "update_frequency": {
+      "time_based": "Every 2 seconds during execution",
+      "work_based": "Every 500 files or 2500 embeddings",
+      "checkpoint_based": "Every 30 seconds for long-running operations"
+    }
+  },
+  "PerformanceTargets": {
+    "description": "Performance requirements from functional requirements",
+    "targets": {
+      "job_creation": {
+        "target": "1 second",
+        "requirement": "FR-001, FR-002",
+        "description": "Return job_id immediately to allow client disconnection"
+      },
+      "status_query": {
+        "target": "100ms",
+        "requirement": "FR-006",
+        "description": "Return current status with accurate progress"
+      },
+      "list_jobs": {
+        "target": "200ms",
+        "requirement": "FR-007",
+        "description": "Return all matching jobs with filters"
+      },
+      "cancellation": {
+        "target": "5 seconds",
+        "requirement": "FR-008",
+        "description": "Graceful stop after finishing current batch"
+      },
+      "progress_update": {
+        "target": "10 seconds or 100 work units",
+        "requirement": "FR-005",
+        "description": "Frequent progress updates for visibility"
+      },
+      "resume_after_restart": {
+        "target": "10 seconds",
+        "requirement": "FR-009",
+        "description": "Automatic job resumption on server restart"
+      },
+      "concurrent_jobs": {
+        "target": "3 jobs without degradation",
+        "requirement": "FR-011",
+        "description": "Support multiple concurrent indexing operations"
+      }
+    }
+  },
+  "StateTransitions": {
+    "description": "Valid job status transitions",
+    "transitions": [
+      {
+        "from": null,
+        "to": "pending",
+        "trigger": "Job created when concurrency limit reached (3 active jobs)"
+      },
+      {
+        "from": "pending",
+        "to": "running",
+        "trigger": "Slot becomes available, job starts execution"
+      },
+      {
+        "from": null,
+        "to": "running",
+        "trigger": "Job created and started immediately (< 3 active jobs)"
+      },
+      {
+        "from": "running",
+        "to": "completed",
+        "trigger": "Indexing finished successfully"
+      },
+      {
+        "from": "running",
+        "to": "failed",
+        "trigger": "Error occurred during indexing (embedding service, storage, etc.)"
+      },
+      {
+        "from": "running",
+        "to": "cancelled",
+        "trigger": "User cancelled job via cancel_job tool"
+      },
+      {
+        "from": "pending",
+        "to": "cancelled",
+        "trigger": "User cancelled queued job before it started"
+      },
+      {
+        "from": "running",
+        "to": "blocked",
+        "trigger": "Job waiting for external resource (embedding service, database connectivity)"
+      },
+      {
+        "from": "blocked",
+        "to": "running",
+        "trigger": "External resource became available, job resumed"
+      }
+    ],
+    "terminal_states": ["completed", "failed", "cancelled"],
+    "resumable_states": ["running", "blocked"],
+    "notes": "Jobs in terminal states cannot transition to other states. Jobs in resumable states will automatically resume after server restart (FR-009)."
+  }
+}

@@ -1,0 +1,753 @@
+{
+  "start_indexing_background": {
+    "description": "Start background indexing for large repositories (>60s estimated duration). Returns immediately with job ID for progress tracking. Automatically detects when operations will exceed MCP client timeout limit (30 seconds) and initiates asynchronous execution instead of blocking. Supports resumption after server restarts via PostgreSQL-based checkpoints.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo_path": {
+          "type": "string",
+          "description": "Absolute path to repository directory (required). Must be an existing directory with read permissions.",
+          "minLength": 1,
+          "pattern": "^/.*"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name for repository (optional). Defaults to directory name if not provided.",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project workspace identifier (optional). If not provided, uses 4-tier resolution chain: (1) session-based config, (2) workflow-mcp integration, (3) CODEBASE_MCP_PROJECT_ID env var, (4) default project workspace.",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "force_reindex": {
+          "type": "boolean",
+          "default": false,
+          "description": "Reindex even if repository already indexed. If false, returns existing repository without re-processing (default: false)."
+        }
+      },
+      "required": ["repo_path"]
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique job identifier for tracking progress and status"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running"],
+          "description": "Initial job status: 'pending' if queued (3 jobs already running), 'running' if started immediately"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable status message explaining current state"
+        },
+        "estimated_duration_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated indexing duration in seconds based on file count and historical performance"
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Resolved project workspace identifier used for this job"
+        },
+        "database_name": {
+          "type": "string",
+          "description": "PostgreSQL schema name for project workspace isolation (e.g., 'cb_proj_myapp_abc123de')"
+        }
+      },
+      "required": ["job_id", "status", "message", "project_id", "database_name"]
+    },
+    "examples": [
+      {
+        "name": "Start indexing large repository",
+        "input": {
+          "repo_path": "/Users/dev/my-project",
+          "name": "my-project"
+        },
+        "output": {
+          "job_id": "550e8400-e29b-41d4-a716-446655440000",
+          "status": "running",
+          "message": "Job started successfully",
+          "estimated_duration_seconds": 120.5,
+          "project_id": "my-project",
+          "database_name": "cb_proj_my_project_abc123de"
+        }
+      },
+      {
+        "name": "Start indexing with explicit project",
+        "input": {
+          "repo_path": "/Users/dev/enterprise-app",
+          "name": "enterprise-app",
+          "project_id": "client-a",
+          "force_reindex": true
+        },
+        "output": {
+          "job_id": "660e8400-e29b-41d4-a716-446655440001",
+          "status": "running",
+          "message": "Job started successfully",
+          "estimated_duration_seconds": 480.0,
+          "project_id": "client-a",
+          "database_name": "cb_proj_client_a_def456gh"
+        }
+      },
+      {
+        "name": "Job queued when concurrency limit reached",
+        "input": {
+          "repo_path": "/Users/dev/another-repo",
+          "name": "another-repo"
+        },
+        "output": {
+          "job_id": "770e8400-e29b-41d4-a716-446655440002",
+          "status": "pending",
+          "message": "Job queued (3 jobs currently running)",
+          "estimated_duration_seconds": 90.0,
+          "project_id": "default",
+          "database_name": "cb_proj_default_00000000"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Repository path must be absolute: relative/path",
+        "conditions": "When repo_path is not an absolute path"
+      },
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Repository path does not exist: /nonexistent/path",
+        "conditions": "When repo_path points to nonexistent location"
+      },
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Repository path must be a directory: /path/to/file.txt",
+        "conditions": "When repo_path points to a file instead of directory"
+      },
+      {
+        "code": "DUPLICATE_JOB",
+        "message": "Repository already being indexed (job_id: 550e8400-e29b-41d4-a716-446655440000)",
+        "conditions": "When repository is already being indexed by another active job (FR-012)"
+      },
+      {
+        "code": "DATABASE_ERROR",
+        "message": "Failed to create background job: connection pool exhausted",
+        "conditions": "When database operations fail during job creation"
+      }
+    ]
+  },
+  "get_job_status": {
+    "description": "Query current status of a background indexing job. Returns detailed progress information including files processed, current phase, estimated time remaining, and any errors. Status queries return within 100ms (FR-006). Supports polling-based progress monitoring.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique job identifier returned by start_indexing_background"
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project workspace identifier (optional). Uses same 4-tier resolution as start_indexing_background if not provided.",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
+      "required": ["job_id"]
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique job identifier"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+          "description": "Current job lifecycle state (FR-004)"
+        },
+        "progress_percentage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Overall progress percentage (0-100)"
+        },
+        "progress_message": {
+          "type": "string",
+          "description": "Human-readable progress message describing current activity (e.g., 'Chunking files: 5000/10000')"
+        },
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of indexable files found during repository scan"
+        },
+        "files_indexed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files successfully processed so far"
+        },
+        "chunks_created": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of code chunks generated and stored"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when job was created"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when job execution began (null if pending)"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when job finished (null if not completed)"
+        },
+        "cancelled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when job was cancelled (null if not cancelled)"
+        },
+        "error_message": {
+          "type": "string",
+          "description": "Error description if status is 'failed' (null otherwise)"
+        },
+        "error_type": {
+          "type": "string",
+          "description": "Error type classification if status is 'failed' (e.g., 'EmbeddingServiceError', 'DatabaseError')"
+        },
+        "estimated_time_remaining_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated seconds until completion (null if unavailable or completed)"
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project workspace identifier for this job"
+        },
+        "database_name": {
+          "type": "string",
+          "description": "PostgreSQL schema name for workspace isolation"
+        }
+      },
+      "required": [
+        "job_id",
+        "status",
+        "progress_percentage",
+        "progress_message",
+        "files_scanned",
+        "files_indexed",
+        "chunks_created",
+        "created_at",
+        "project_id",
+        "database_name"
+      ]
+    },
+    "examples": [
+      {
+        "name": "Job actively running",
+        "input": {
+          "job_id": "550e8400-e29b-41d4-a716-446655440000"
+        },
+        "output": {
+          "job_id": "550e8400-e29b-41d4-a716-446655440000",
+          "status": "running",
+          "progress_percentage": 45,
+          "progress_message": "Chunking files: 5000/10000",
+          "files_scanned": 10000,
+          "files_indexed": 5000,
+          "chunks_created": 25000,
+          "created_at": "2025-10-17T10:30:00Z",
+          "started_at": "2025-10-17T10:30:02Z",
+          "completed_at": null,
+          "cancelled_at": null,
+          "error_message": null,
+          "error_type": null,
+          "estimated_time_remaining_seconds": 65.2,
+          "project_id": "my-project",
+          "database_name": "cb_proj_my_project_abc123de"
+        }
+      },
+      {
+        "name": "Job completed successfully",
+        "input": {
+          "job_id": "660e8400-e29b-41d4-a716-446655440001"
+        },
+        "output": {
+          "job_id": "660e8400-e29b-41d4-a716-446655440001",
+          "status": "completed",
+          "progress_percentage": 100,
+          "progress_message": "Indexing complete",
+          "files_scanned": 15000,
+          "files_indexed": 15000,
+          "chunks_created": 75000,
+          "created_at": "2025-10-17T09:00:00Z",
+          "started_at": "2025-10-17T09:00:01Z",
+          "completed_at": "2025-10-17T09:02:30Z",
+          "cancelled_at": null,
+          "error_message": null,
+          "error_type": null,
+          "estimated_time_remaining_seconds": null,
+          "project_id": "client-a",
+          "database_name": "cb_proj_client_a_def456gh"
+        }
+      },
+      {
+        "name": "Job failed with error",
+        "input": {
+          "job_id": "770e8400-e29b-41d4-a716-446655440002"
+        },
+        "output": {
+          "job_id": "770e8400-e29b-41d4-a716-446655440002",
+          "status": "failed",
+          "progress_percentage": 30,
+          "progress_message": "Embedding generation failed",
+          "files_scanned": 8000,
+          "files_indexed": 2400,
+          "chunks_created": 12000,
+          "created_at": "2025-10-17T11:00:00Z",
+          "started_at": "2025-10-17T11:00:01Z",
+          "completed_at": null,
+          "cancelled_at": null,
+          "error_message": "Ollama embedding service unavailable after 5 retry attempts",
+          "error_type": "EmbeddingServiceError",
+          "estimated_time_remaining_seconds": null,
+          "project_id": "default",
+          "database_name": "cb_proj_default_00000000"
+        }
+      },
+      {
+        "name": "Job cancelled by user",
+        "input": {
+          "job_id": "880e8400-e29b-41d4-a716-446655440003"
+        },
+        "output": {
+          "job_id": "880e8400-e29b-41d4-a716-446655440003",
+          "status": "cancelled",
+          "progress_percentage": 60,
+          "progress_message": "Cancelled by user (partial data retained)",
+          "files_scanned": 12000,
+          "files_indexed": 7200,
+          "chunks_created": 36000,
+          "created_at": "2025-10-17T12:00:00Z",
+          "started_at": "2025-10-17T12:00:01Z",
+          "completed_at": null,
+          "cancelled_at": "2025-10-17T12:01:45Z",
+          "error_message": null,
+          "error_type": null,
+          "estimated_time_remaining_seconds": null,
+          "project_id": "my-project",
+          "database_name": "cb_proj_my_project_abc123de"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "code": "JOB_NOT_FOUND",
+        "message": "Job not found: 550e8400-e29b-41d4-a716-446655440000",
+        "conditions": "When job_id does not exist in database"
+      },
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid job_id format: not-a-uuid",
+        "conditions": "When job_id is not a valid UUID"
+      },
+      {
+        "code": "DATABASE_ERROR",
+        "message": "Failed to query job status: connection timeout",
+        "conditions": "When database operations fail during status query"
+      }
+    ]
+  },
+  "list_background_jobs": {
+    "description": "List all background indexing jobs with optional filtering by status, repository, and creation date. Supports pagination and ordering by creation timestamp (newest first). Returns within 200ms (FR-007). Useful for monitoring multiple concurrent jobs and reviewing job history within 7-day retention window.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+          "description": "Filter by job status (optional). Returns jobs in all states if not specified."
+        },
+        "repo_path": {
+          "type": "string",
+          "description": "Filter by repository path (optional). Supports partial matching (e.g., '/Users/dev' matches all repos in that directory)."
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Filter by project workspace (optional). Uses same 4-tier resolution if not provided.",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "description": "Maximum number of jobs to return (1-100, default: 20)"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of jobs to skip for pagination (default: 0)"
+        }
+      },
+      "required": []
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "type": "array",
+          "description": "List of background jobs matching filter criteria",
+          "items": {
+            "type": "object",
+            "properties": {
+              "job_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Unique job identifier"
+              },
+              "repo_path": {
+                "type": "string",
+                "description": "Absolute path to repository being indexed"
+              },
+              "repo_name": {
+                "type": "string",
+                "description": "Display name for repository"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+                "description": "Current job lifecycle state"
+              },
+              "progress_percentage": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Overall progress percentage"
+              },
+              "files_indexed": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of files processed"
+              },
+              "chunks_created": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of chunks generated"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp when job was created"
+              },
+              "started_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp when job started (null if pending)"
+              },
+              "completed_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 timestamp when job finished (null if not completed)"
+              },
+              "project_id": {
+                "type": "string",
+                "description": "Project workspace identifier"
+              }
+            },
+            "required": [
+              "job_id",
+              "repo_path",
+              "repo_name",
+              "status",
+              "progress_percentage",
+              "files_indexed",
+              "chunks_created",
+              "created_at",
+              "project_id"
+            ]
+          }
+        },
+        "total_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of jobs matching filter criteria (ignoring pagination)"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Limit parameter used for this query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Offset parameter used for this query"
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Resolved project workspace identifier used for query"
+        }
+      },
+      "required": ["jobs", "total_count", "limit", "offset", "project_id"]
+    },
+    "examples": [
+      {
+        "name": "List all active jobs",
+        "input": {
+          "status": "running"
+        },
+        "output": {
+          "jobs": [
+            {
+              "job_id": "550e8400-e29b-41d4-a716-446655440000",
+              "repo_path": "/Users/dev/project-a",
+              "repo_name": "project-a",
+              "status": "running",
+              "progress_percentage": 45,
+              "files_indexed": 5000,
+              "chunks_created": 25000,
+              "created_at": "2025-10-17T10:30:00Z",
+              "started_at": "2025-10-17T10:30:02Z",
+              "completed_at": null,
+              "project_id": "project-a"
+            },
+            {
+              "job_id": "660e8400-e29b-41d4-a716-446655440001",
+              "repo_path": "/Users/dev/project-b",
+              "repo_name": "project-b",
+              "status": "running",
+              "progress_percentage": 20,
+              "files_indexed": 2000,
+              "chunks_created": 10000,
+              "created_at": "2025-10-17T10:32:00Z",
+              "started_at": "2025-10-17T10:32:01Z",
+              "completed_at": null,
+              "project_id": "project-b"
+            }
+          ],
+          "total_count": 2,
+          "limit": 20,
+          "offset": 0,
+          "project_id": "default"
+        }
+      },
+      {
+        "name": "List completed jobs with pagination",
+        "input": {
+          "status": "completed",
+          "limit": 10,
+          "offset": 0
+        },
+        "output": {
+          "jobs": [
+            {
+              "job_id": "770e8400-e29b-41d4-a716-446655440002",
+              "repo_path": "/Users/dev/project-c",
+              "repo_name": "project-c",
+              "status": "completed",
+              "progress_percentage": 100,
+              "files_indexed": 15000,
+              "chunks_created": 75000,
+              "created_at": "2025-10-17T09:00:00Z",
+              "started_at": "2025-10-17T09:00:01Z",
+              "completed_at": "2025-10-17T09:02:30Z",
+              "project_id": "project-c"
+            }
+          ],
+          "total_count": 25,
+          "limit": 10,
+          "offset": 0,
+          "project_id": "default"
+        }
+      },
+      {
+        "name": "Filter by repository path",
+        "input": {
+          "repo_path": "/Users/dev/my-monorepo"
+        },
+        "output": {
+          "jobs": [
+            {
+              "job_id": "880e8400-e29b-41d4-a716-446655440003",
+              "repo_path": "/Users/dev/my-monorepo",
+              "repo_name": "my-monorepo",
+              "status": "completed",
+              "progress_percentage": 100,
+              "files_indexed": 50000,
+              "chunks_created": 250000,
+              "created_at": "2025-10-16T14:00:00Z",
+              "started_at": "2025-10-16T14:00:02Z",
+              "completed_at": "2025-10-16T14:08:30Z",
+              "project_id": "monorepo"
+            }
+          ],
+          "total_count": 1,
+          "limit": 20,
+          "offset": 0,
+          "project_id": "default"
+        }
+      },
+      {
+        "name": "Empty result set",
+        "input": {
+          "status": "running"
+        },
+        "output": {
+          "jobs": [],
+          "total_count": 0,
+          "limit": 20,
+          "offset": 0,
+          "project_id": "default"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Invalid status value: invalid-status",
+        "conditions": "When status parameter is not one of the allowed enum values"
+      },
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Limit must be between 1 and 100: 150",
+        "conditions": "When limit parameter exceeds maximum allowed value"
+      },
+      {
+        "code": "DATABASE_ERROR",
+        "message": "Failed to list jobs: connection timeout",
+        "conditions": "When database operations fail during job listing"
+      }
+    ]
+  },
+  "cancel_job": {
+    "description": "Cancel a running or pending background indexing job. Job stops gracefully within 5 seconds (FR-008), finishing current batch before shutdown to maintain database consistency. Partial work is retained and marked with 'cancelled' status. Requires explicit confirmation to prevent accidental cancellation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique job identifier to cancel"
+        },
+        "confirmed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicit confirmation flag. Must be true to proceed with cancellation (prevents accidental cancellations)."
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project workspace identifier (optional). Uses same 4-tier resolution if not provided.",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
+      "required": ["job_id"]
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Job identifier that was cancelled"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["cancelled", "cancelling"],
+          "description": "Cancellation status: 'cancelling' (request received), 'cancelled' (fully stopped)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable cancellation confirmation message"
+        },
+        "files_indexed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files successfully processed before cancellation"
+        },
+        "chunks_created": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of chunks generated before cancellation (retained in database)"
+        },
+        "cancelled_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when cancellation was requested"
+        },
+        "project_id": {
+          "type": "string",
+          "description": "Project workspace identifier for this job"
+        }
+      },
+      "required": ["job_id", "status", "message", "files_indexed", "chunks_created", "cancelled_at", "project_id"]
+    },
+    "examples": [
+      {
+        "name": "Successfully cancel running job",
+        "input": {
+          "job_id": "550e8400-e29b-41d4-a716-446655440000",
+          "confirmed": true
+        },
+        "output": {
+          "job_id": "550e8400-e29b-41d4-a716-446655440000",
+          "status": "cancelling",
+          "message": "Cancellation requested. Job will stop within 5 seconds after finishing current batch.",
+          "files_indexed": 5000,
+          "chunks_created": 25000,
+          "cancelled_at": "2025-10-17T10:35:00Z",
+          "project_id": "my-project"
+        }
+      },
+      {
+        "name": "Cancel with explicit project",
+        "input": {
+          "job_id": "660e8400-e29b-41d4-a716-446655440001",
+          "confirmed": true,
+          "project_id": "client-a"
+        },
+        "output": {
+          "job_id": "660e8400-e29b-41d4-a716-446655440001",
+          "status": "cancelled",
+          "message": "Job cancelled successfully. Partial data retained (7200 files, 36000 chunks).",
+          "files_indexed": 7200,
+          "chunks_created": 36000,
+          "cancelled_at": "2025-10-17T11:00:00Z",
+          "project_id": "client-a"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "code": "JOB_NOT_FOUND",
+        "message": "Job not found: 550e8400-e29b-41d4-a716-446655440000",
+        "conditions": "When job_id does not exist in database"
+      },
+      {
+        "code": "VALIDATION_ERROR",
+        "message": "Confirmation required to cancel job. Set confirmed=true.",
+        "conditions": "When confirmed parameter is false or not provided (prevents accidental cancellation)"
+      },
+      {
+        "code": "INVALID_STATUS",
+        "message": "Cannot cancel job in status 'completed'. Only pending/running jobs can be cancelled.",
+        "conditions": "When attempting to cancel job that is already completed, failed, or cancelled"
+      },
+      {
+        "code": "DATABASE_ERROR",
+        "message": "Failed to cancel job: connection timeout",
+        "conditions": "When database operations fail during cancellation"
+      }
+    ]
+  }
+}

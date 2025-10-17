@@ -60,6 +60,9 @@ from .performance import PerformanceBenchmarkResult
 # Load testing models
 from .load_testing import ErrorBreakdown, LoadTestResult, ResourceUsageStats
 
+# Background indexing models
+from .indexing_job import IndexingJob, IndexingJobCreate, IndexingJobResponse
+
 # Export all models and schemas
 __all__ = [
     # Database infrastructure
@@ -101,4 +104,8 @@ __all__ = [
     "ErrorBreakdown",
     "LoadTestResult",
     "ResourceUsageStats",
+    # Background indexing
+    "IndexingJob",
+    "IndexingJobCreate",
+    "IndexingJobResponse",
 ]

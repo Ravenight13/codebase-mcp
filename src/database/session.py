@@ -1,9 +1,11 @@
-"""Async SQLAlchemy session factory for PostgreSQL with connection pooling.
+"""Async SQLAlchemy session factory for PostgreSQL with database-per-project architecture.
 
 This module provides production-grade database session management with:
-- AsyncPG driver for high-performance PostgreSQL connections
-- Connection pooling with configurable size and overflow
+- Database-per-project isolation instead of schema-based isolation
+- Registry database for project metadata and lookups
+- Per-project connection pools with AsyncPG
 - Context manager pattern for automatic transaction management
+- Session-based project resolution via .codebase-mcp/config.json
 - Proper cleanup and error handling
 - Health check functionality for monitoring
 
@@ -16,7 +18,7 @@ Constitutional Compliance:
 Usage:
     >>> from src.database.session import get_session, check_database_health
     >>> # In MCP tools:
-    >>> async with get_session() as session:
+    >>> async with get_session(ctx=ctx) as session:
     ...     result = await session.execute(select(Repository))
     ...     # Session automatically commits on success, rolls back on error
     >>> # Health monitoring:
@@ -27,20 +29,31 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict
 
+import asyncpg
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 from sqlalchemy.sql import text
 
 from src.mcp.mcp_logging import get_logger
 from src.config.settings import Settings, get_settings
-from src.services.workflow_client import WorkflowIntegrationClient
+
+# Session-based project resolution imports
+from pathlib import Path
+from fastmcp import Context
+from src.auto_switch.session_context import get_session_context_manager
+from src.auto_switch.discovery import find_config_file
+from src.auto_switch.validation import validate_config_syntax
+from src.auto_switch.cache import get_config_cache
+
+# Database provisioning and registry imports
+from src.database.provisioning import create_pool
 
 # ==============================================================================
 # Module Configuration
@@ -48,60 +61,229 @@ from src.services.workflow_client import WorkflowIntegrationClient
 
 logger = get_logger(__name__)
 
-# Database URL from environment with secure default (localhost)
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL", "postgresql+asyncpg://localhost/codebase_mcp"
+# Registry database URL from environment with secure default
+REGISTRY_DATABASE_URL: str = os.getenv(
+    "REGISTRY_DATABASE_URL",
+    os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/codebase_mcp_registry")
 )
 
 # SQL echo mode for debugging (disabled in production for performance)
 SQL_ECHO: bool = os.getenv("SQL_ECHO", "false").lower() == "true"
 
-# Connection pool configuration
-POOL_SIZE: int = 10  # Core connections maintained in pool
-MAX_OVERFLOW: int = 20  # Additional connections beyond pool_size
-POOL_TIMEOUT: int = 30  # Seconds to wait for connection before timeout
+# Connection pool configuration for project databases
+POOL_MIN_SIZE: int = int(os.getenv("POOL_MIN_SIZE", "2"))
+POOL_MAX_SIZE: int = int(os.getenv("POOL_MAX_SIZE", "10"))
+
+# Default project database name
+DEFAULT_PROJECT_DB: str = "cb_proj_default_00000000"
 
 # ==============================================================================
-# Engine Creation
+# Global Connection Pools
 # ==============================================================================
 
-# Global async engine (created at module import for singleton pattern)
+# Registry database pool (initialized on first use)
+_registry_pool: asyncpg.Pool | None = None
+
+# Per-project database pools: {database_name: asyncpg.Pool}
+_project_pools: Dict[str, asyncpg.Pool] = {}
+
+# Legacy global engine for backward compatibility (will be phased out)
+# This is kept to avoid breaking existing code that imports it directly
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL", "postgresql+asyncpg://localhost/codebase_mcp"
+)
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=SQL_ECHO,
-    pool_size=POOL_SIZE,
-    max_overflow=MAX_OVERFLOW,
-    pool_timeout=POOL_TIMEOUT,
-    pool_pre_ping=True,  # Validate connections before use
-    pool_recycle=3600,  # Recycle connections after 1 hour
+    poolclass=NullPool,  # Disabled pooling (using AsyncPG pools instead)
 )
 
 logger.info(
-    "Async database engine created",
+    "Legacy async database engine created (no pooling - will be phased out)",
     extra={
         "context": {
             "operation": "engine_creation",
-            "pool_size": POOL_SIZE,
-            "max_overflow": MAX_OVERFLOW,
-            "pool_timeout": POOL_TIMEOUT,
             "database_host": DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "localhost",
+            "note": "Use get_session() for production access"
         }
     },
 )
 
-# ==============================================================================
-# Session Factory
-# ==============================================================================
-
-# Session factory for creating async sessions
-# Configuration:
-# - expire_on_commit: False (retain objects after commit for better performance)
-# - class_: AsyncSession (use async session class)
+# Legacy session factory (kept for backward compatibility)
 SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+# ==============================================================================
+# Registry Pool Initialization
+# ==============================================================================
+
+
+async def _initialize_registry_pool() -> asyncpg.Pool:
+    """Initialize the registry database connection pool.
+
+    Creates a connection pool to the codebase_mcp_registry database for
+    project metadata lookups. This pool is used to map project_id/name to
+    database_name.
+
+    Returns:
+        AsyncPG connection pool for registry database
+
+    Raises:
+        asyncpg.PostgresError: If pool creation fails
+    """
+    global _registry_pool
+
+    if _registry_pool is not None:
+        return _registry_pool
+
+    # Extract database name from registry URL
+    # Format: postgresql+asyncpg://user:pass@host:port/database
+    if "@" in REGISTRY_DATABASE_URL:
+        db_part = REGISTRY_DATABASE_URL.split("@")[1]
+        registry_db_name = db_part.split("/")[-1] if "/" in db_part else "codebase_mcp_registry"
+    else:
+        registry_db_name = "codebase_mcp_registry"
+
+    logger.info(
+        "Initializing registry database pool",
+        extra={
+            "context": {
+                "operation": "initialize_registry_pool",
+                "database_name": registry_db_name,
+                "min_size": POOL_MIN_SIZE,
+                "max_size": POOL_MAX_SIZE,
+            }
+        },
+    )
+
+    try:
+        # Use provisioning utility to create pool
+        _registry_pool = await create_pool(
+            database_name=registry_db_name,
+            min_size=POOL_MIN_SIZE,
+            max_size=POOL_MAX_SIZE,
+        )
+
+        logger.info(
+            "Registry database pool initialized successfully",
+            extra={
+                "context": {
+                    "operation": "initialize_registry_pool",
+                    "database_name": registry_db_name,
+                }
+            },
+        )
+
+        return _registry_pool
+
+    except asyncpg.PostgresError as e:
+        logger.error(
+            "Failed to initialize registry database pool",
+            extra={
+                "context": {
+                    "operation": "initialize_registry_pool",
+                    "database_name": registry_db_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            },
+            exc_info=True,
+        )
+        raise
+
+
+# ==============================================================================
+# Per-Project Pool Management
+# ==============================================================================
+
+
+async def get_or_create_project_pool(database_name: str) -> asyncpg.Pool:
+    """Get or create a connection pool for a specific project database.
+
+    Manages per-project connection pools with lazy initialization. Pools are
+    cached in module-level dict for reuse across sessions.
+
+    Args:
+        database_name: Project database name (cb_proj_*)
+
+    Returns:
+        AsyncPG connection pool for project database
+
+    Raises:
+        asyncpg.PostgresError: If pool creation fails
+
+    Example:
+        >>> pool = await get_or_create_project_pool("cb_proj_my_project_abc123de")
+        >>> async with pool.acquire() as conn:
+        ...     result = await conn.fetch("SELECT * FROM repositories")
+    """
+    # Check if pool already exists
+    if database_name in _project_pools:
+        logger.debug(
+            f"Using existing pool for database: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project_pool",
+                    "database_name": database_name,
+                    "pool_exists": True,
+                }
+            },
+        )
+        return _project_pools[database_name]
+
+    logger.info(
+        f"Creating new pool for database: {database_name}",
+        extra={
+            "context": {
+                "operation": "get_or_create_project_pool",
+                "database_name": database_name,
+                "min_size": POOL_MIN_SIZE,
+                "max_size": POOL_MAX_SIZE,
+            }
+        },
+    )
+
+    try:
+        # Use provisioning utility to create pool
+        pool = await create_pool(
+            database_name=database_name,
+            min_size=POOL_MIN_SIZE,
+            max_size=POOL_MAX_SIZE,
+        )
+
+        # Cache pool for reuse
+        _project_pools[database_name] = pool
+
+        logger.info(
+            f"Project pool created successfully: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project_pool",
+                    "database_name": database_name,
+                    "total_pools": len(_project_pools),
+                }
+            },
+        )
+
+        return pool
+
+    except asyncpg.PostgresError as e:
+        logger.error(
+            f"Failed to create pool for database: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project_pool",
+                    "database_name": database_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            },
+            exc_info=True,
+        )
+        raise
 
 
 # ==============================================================================
@@ -109,59 +291,214 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
 # ==============================================================================
 
 
-async def resolve_project_id(
-    explicit_id: str | None,
-    settings: Settings | None = None,
-) -> str | None:
-    """Resolve project_id with workflow-mcp fallback logic.
+async def _resolve_project_context(
+    ctx: Context | None
+) -> tuple[str, str] | None:
+    """Resolve project from session config (graceful fallback).
 
-    Implements the multi-project workspace resolution strategy with three-tier
+    Resolution algorithm:
+    1. Get session_id from FastMCP Context (explicit, async-safe)
+    2. Look up working_directory for that session
+    3. Search for .codebase-mcp/config.json (up to 20 levels)
+    4. Check cache (async LRU with mtime invalidation)
+    5. Parse and validate config (if cache miss)
+    6. Extract project.name or project.id
+    7. Look up project in registry database to get database_name
+    8. Return (project_id, database_name)
+
+    Args:
+        ctx: FastMCP Context (contains session_id)
+
+    Returns:
+        Tuple of (project_id, database_name) or None if resolution fails
+        (None enables graceful fallback to other resolution methods)
+
+    Note:
+        Does NOT raise exceptions - returns None for graceful fallback
+    """
+    # Must have context for session-based resolution
+    if ctx is None:
+        logger.debug("No FastMCP Context provided, cannot resolve from session")
+        return None
+
+    # Get session-specific working directory
+    session_id = ctx.session_id  # ✅ From FastMCP Context (explicit)
+    session_ctx_mgr = get_session_context_manager()
+
+    try:
+        working_dir = await session_ctx_mgr.get_working_directory(session_id)
+    except Exception as e:
+        logger.debug(f"Error getting working directory for session {session_id}: {e}")
+        return None
+
+    if not working_dir:
+        logger.debug(
+            f"No working directory set for session {session_id}. "
+            f"Call set_working_directory() first for session-based resolution."
+        )
+        return None
+
+    # Check cache first
+    cache = get_config_cache()
+    try:
+        config = await cache.get(working_dir)
+    except Exception as e:
+        logger.debug(f"Cache lookup failed for {working_dir}: {e}")
+        config = None
+
+    config_path = None
+
+    if config is None:
+        # Cache miss: search for config file
+        try:
+            config_path = find_config_file(Path(working_dir))
+        except Exception as e:
+            logger.debug(f"Config file search failed for {working_dir}: {e}")
+            return None
+
+        if not config_path:
+            logger.debug(
+                f"No .codebase-mcp/config.json found in {working_dir} or ancestors "
+                f"(searched up to 20 levels)"
+            )
+            return None
+
+        # Parse and validate config
+        try:
+            config = validate_config_syntax(config_path)
+        except ValueError as e:
+            logger.debug(f"Config validation failed for {config_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error validating config {config_path}: {e}")
+            return None
+
+        # Store in cache
+        try:
+            await cache.set(working_dir, config, config_path)
+        except Exception as e:
+            logger.debug(f"Failed to cache config for {working_dir}: {e}")
+            # Continue anyway (caching is optional)
+
+    # Extract project identifier
+    project_name = config['project']['name']
+    project_id = config['project'].get('id')  # Optional
+
+    # Use project_id if provided, otherwise use name
+    identifier = project_id if project_id else project_name
+
+    # Look up project in registry to get database_name
+    try:
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            # Query registry for project by id or name
+            row = await conn.fetchrow(
+                """
+                SELECT id, database_name
+                FROM projects
+                WHERE id = $1 OR name = $1
+                LIMIT 1
+                """,
+                identifier
+            )
+
+            if row is None:
+                logger.debug(
+                    f"Project not found in registry: {identifier}",
+                    extra={
+                        "context": {
+                            "operation": "_resolve_project_context",
+                            "identifier": identifier,
+                        }
+                    },
+                )
+                return None
+
+            resolved_project_id = row['id']
+            database_name = row['database_name']
+
+            logger.debug(
+                f"Resolved from session config: {resolved_project_id} "
+                f"(database: {database_name})",
+                extra={
+                    "context": {
+                        "operation": "_resolve_project_context",
+                        "project_id": resolved_project_id,
+                        "database_name": database_name,
+                    }
+                },
+            )
+
+            return (resolved_project_id, database_name)
+
+    except Exception as e:
+        logger.error(
+            f"Registry lookup failed for project: {identifier}",
+            extra={
+                "context": {
+                    "operation": "_resolve_project_context",
+                    "identifier": identifier,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            },
+            exc_info=True,
+        )
+        return None
+
+
+async def resolve_project_id(
+    explicit_id: str | None = None,
+    settings: Settings | None = None,
+    ctx: Context | None = None,
+) -> tuple[str, str]:
+    """Resolve project_id and database_name with 4-tier resolution chain.
+
+    Implements the multi-project workspace resolution strategy with four-tier
     fallback logic to determine which workspace context to use for database
     operations.
 
     Resolution Order (FR-012, FR-013, FR-014):
-        1. **Explicit ID**: If explicit_id is provided, return immediately
+        1. **Explicit ID**: If explicit_id is provided, look up in registry
            (highest priority, user-specified context)
-        2. **workflow-mcp Integration**: Query external workflow-mcp server
+        2. **Session-based config**: Query .codebase-mcp/config.json via FastMCP Context
+        3. **workflow-mcp Integration**: Query external workflow-mcp server
            for active project context with timeout protection
-        3. **Default Workspace**: Fallback to None when workflow-mcp is
-           unavailable, timeout occurs, or no active project exists
+        4. **Default Workspace**: Fallback to default project database when all
+           resolution methods are unavailable, timeout occurs, or no active project exists
 
     Args:
         explicit_id: Explicitly provided project identifier (from MCP tool parameters).
                     Takes precedence over all other resolution methods.
         settings: Optional Settings instance for workflow-mcp configuration.
                  If not provided, uses global settings singleton.
+        ctx: Optional FastMCP Context for session-based config resolution.
 
     Returns:
-        Resolved project_id string or None for default workspace:
-        - str: Project UUID from explicit_id or workflow-mcp
-        - None: Default workspace (backward compatibility)
+        Tuple of (project_id, database_name):
+        - project_id: Project UUID or name
+        - database_name: Physical PostgreSQL database name (cb_proj_*)
 
     Error Handling:
-        All workflow-mcp errors are handled gracefully by returning None:
+        All workflow-mcp errors are handled gracefully by returning default:
         - Timeout: workflow-mcp query exceeds timeout threshold
         - Connection refused: workflow-mcp server not running
         - Invalid response: malformed JSON or unexpected error
 
     Performance:
-        - Explicit ID: <1μs (immediate return)
+        - Explicit ID: <10ms (registry lookup)
+        - Session config: <1ms (cached) or <60ms (uncached)
         - workflow-mcp query: <1000ms (timeout protection)
-        - Default fallback: <1μs (no I/O)
+        - Default fallback: <1ms (constant)
 
     Example:
         >>> # Explicit ID takes precedence
-        >>> project = await resolve_project_id("client-a")
-        >>> assert project == "client-a"
+        >>> project_id, db_name = await resolve_project_id("client-a")
+        >>> assert db_name.startswith("cb_proj_")
 
         >>> # Query workflow-mcp when no explicit ID
-        >>> project = await resolve_project_id(None)
-        >>> # Returns active project UUID or None if unavailable
-
-        >>> # Fallback to None when workflow-mcp timeout
-        >>> project = await resolve_project_id(None)
-        >>> if project is None:
-        ...     print("Using default workspace")
+        >>> project_id, db_name = await resolve_project_id(None, ctx=ctx)
+        >>> # Returns active project or default if unavailable
 
     Constitutional Compliance:
         - Principle II: Local-first (graceful degradation when workflow-mcp unavailable)
@@ -176,7 +513,7 @@ async def resolve_project_id(
     # 1. Explicit ID takes precedence (highest priority)
     if explicit_id is not None:
         logger.debug(
-            "Using explicit project_id",
+            "Using explicit project_id, looking up in registry",
             extra={
                 "context": {
                     "operation": "resolve_project_id",
@@ -185,9 +522,72 @@ async def resolve_project_id(
                 }
             },
         )
-        return explicit_id
 
-    # 2. Try workflow-mcp integration (if configured)
+        try:
+            registry_pool = await _initialize_registry_pool()
+            async with registry_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, database_name
+                    FROM projects
+                    WHERE id = $1 OR name = $1
+                    LIMIT 1
+                    """,
+                    explicit_id
+                )
+
+                if row is None:
+                    logger.warning(
+                        f"Explicit project_id not found in registry: {explicit_id}, using default",
+                        extra={
+                            "context": {
+                                "operation": "resolve_project_id",
+                                "project_id": explicit_id,
+                                "resolution_method": "default_fallback",
+                            }
+                        },
+                    )
+                    return ("default", DEFAULT_PROJECT_DB)
+
+                return (row['id'], row['database_name'])
+
+        except Exception as e:
+            logger.error(
+                f"Registry lookup failed for explicit project_id: {explicit_id}",
+                extra={
+                    "context": {
+                        "operation": "resolve_project_id",
+                        "project_id": explicit_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                },
+                exc_info=True,
+            )
+            return ("default", DEFAULT_PROJECT_DB)
+
+    # 2. Try session-based config resolution (if Context provided)
+    if ctx is not None:
+        try:
+            result = await _resolve_project_context(ctx)
+            if result is not None:
+                project_id, database_name = result
+                logger.debug(
+                    "Resolved project via session config",
+                    extra={
+                        "context": {
+                            "operation": "resolve_project_id",
+                            "project_id": project_id,
+                            "database_name": database_name,
+                            "resolution_method": "session_config"
+                        }
+                    }
+                )
+                return (project_id, database_name)
+        except Exception as e:
+            logger.debug(f"Session-based resolution failed: {e}")
+
+    # 3. Try workflow-mcp integration (if configured)
     if settings is None:
         settings = get_settings()
 
@@ -203,6 +603,8 @@ async def resolve_project_id(
             },
         )
 
+        from src.services.workflow_client import WorkflowIntegrationClient
+
         client = WorkflowIntegrationClient(
             base_url=str(settings.workflow_mcp_url),
             timeout=settings.workflow_mcp_timeout,
@@ -213,17 +615,42 @@ async def resolve_project_id(
             active_project = await client.get_active_project()
 
             if active_project is not None:
-                logger.info(
-                    "Resolved project from workflow-mcp",
-                    extra={
-                        "context": {
-                            "operation": "resolve_project_id",
-                            "project_id": active_project,
-                            "resolution_method": "workflow_mcp",
-                        }
-                    },
-                )
-                return active_project
+                # Look up in registry to get database_name
+                registry_pool = await _initialize_registry_pool()
+                async with registry_pool.acquire() as conn:
+                    row = await conn.fetchrow(
+                        """
+                        SELECT id, database_name
+                        FROM projects
+                        WHERE id = $1 OR name = $1
+                        LIMIT 1
+                        """,
+                        active_project
+                    )
+
+                    if row is not None:
+                        logger.info(
+                            "Resolved project from workflow-mcp",
+                            extra={
+                                "context": {
+                                    "operation": "resolve_project_id",
+                                    "project_id": row['id'],
+                                    "database_name": row['database_name'],
+                                    "resolution_method": "workflow_mcp",
+                                }
+                            },
+                        )
+                        return (row['id'], row['database_name'])
+                    else:
+                        logger.warning(
+                            f"workflow-mcp project not found in registry: {active_project}",
+                            extra={
+                                "context": {
+                                    "operation": "resolve_project_id",
+                                    "project_id": active_project,
+                                }
+                            },
+                        )
             else:
                 logger.debug(
                     "workflow-mcp returned no active project, using default workspace",
@@ -252,9 +679,9 @@ async def resolve_project_id(
             # Always close client connection to prevent resource leaks
             await client.close()
 
-    # 3. Fallback to default workspace
+    # 4. Fallback to default workspace
     logger.debug(
-        "Using default workspace (no explicit ID, workflow-mcp unavailable/disabled)",
+        "Using default workspace (no explicit ID, session config unavailable, workflow-mcp unavailable/disabled)",
         extra={
             "context": {
                 "operation": "resolve_project_id",
@@ -262,7 +689,7 @@ async def resolve_project_id(
             }
         },
     )
-    return None
+    return ("default", DEFAULT_PROJECT_DB)
 
 
 # ==============================================================================
@@ -271,25 +698,31 @@ async def resolve_project_id(
 
 
 @asynccontextmanager
-async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSession, None]:
+async def get_session(
+    project_id: str | None = None,
+    ctx: Context | None = None,
+) -> AsyncGenerator[AsyncSession, None]:
     """Async context manager for database sessions with automatic transaction management.
 
-    Provides a database session with automatic commit on success and rollback on error.
-    This is the primary way to interact with the database in MCP tools.
+    Provides a database session connected to the correct project database with
+    automatic commit on success and rollback on error. This is the primary way
+    to interact with the database in MCP tools.
 
     Args:
         project_id: Optional project identifier for workspace isolation.
-                   If None, uses default workspace (backward compatibility).
+                   If None, uses 4-tier resolution chain (explicit → session → workflow-mcp → default).
+        ctx: Optional FastMCP Context for session-based project resolution.
 
     Yields:
-        AsyncSession: Configured database session with search_path set to project schema
+        AsyncSession: Configured database session connected to project database
 
     Raises:
-        ValueError: If project_id format is invalid (from ProjectIdentifier validation)
+        ValueError: If project_id format is invalid
         Exception: Any exception from database operations (after rollback)
 
     Transaction Management:
-        - Sets search_path to project schema before yielding session
+        - Resolves project_id and database_name via 4-tier chain
+        - Creates session from project-specific connection pool
         - Automatically commits on successful completion
         - Automatically rolls back on any exception
         - Ensures session is closed after use
@@ -300,73 +733,107 @@ async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSess
         ...     result = await session.execute(select(Repository))
         ...     repos = result.scalars().all()
 
-        >>> # Backward compatible (no project_id):
-        >>> async with get_session() as session:
+        >>> # With session-based resolution:
+        >>> async with get_session(ctx=ctx) as session:
         ...     result = await session.execute(select(Repository))
-        ...     # Uses default workspace (project_default schema)
+        ...     # Uses project from .codebase-mcp/config.json
 
         >>> # With error handling:
         >>> try:
-        ...     async with get_session(project_id="frontend") as session:
+        ...     async with get_session(ctx=ctx) as session:
         ...         await session.execute(insert(Repository).values(...))
         ... except IntegrityError:
         ...     logger.error("Duplicate repository")
 
     Performance:
-        - Uses connection pooling for efficient resource usage
-        - Pre-ping ensures valid connections before use
+        - Uses per-project connection pools for efficient resource usage
         - Connection recycling prevents stale connections
-        - Schema existence check cached for performance
+        - Registry lookup cached for repeated access
 
     Constitutional Compliance:
         - Principle V: Production quality (proper error handling, cleanup)
         - Principle VIII: Type safety (mypy --strict compliance)
         - Principle XI: FastMCP Foundation (async pattern for MCP tools)
 
-    Multi-Project Support (FR-001, FR-002, FR-003, FR-009):
-        - Resolves project_id to PostgreSQL schema name
-        - Auto-provisions workspace if needed (FR-010)
-        - Sets search_path to isolated schema (FR-017 data isolation)
-        - Backward compatible with project_id=None (FR-018)
+    Multi-Project Support:
+        - Resolves project_id to physical database name (cb_proj_*)
+        - Uses dedicated connection pool per project database
+        - Complete data isolation (no shared tables or schemas)
+        - Backward compatible with project_id=None
     """
-    async with SessionLocal() as session:
+    # Resolve project_id and database_name via 4-tier resolution chain
+    resolved_project_id, database_name = await resolve_project_id(
+        explicit_id=project_id,
+        ctx=ctx,
+    )
+
+    logger.debug(
+        f"Resolved project for session: {resolved_project_id} (database: {database_name})",
+        extra={
+            "context": {
+                "operation": "get_session",
+                "project_id": resolved_project_id,
+                "database_name": database_name,
+            }
+        },
+    )
+
+    # Get or create connection pool for project database
+    try:
+        pool = await get_or_create_project_pool(database_name)
+    except Exception as e:
+        logger.error(
+            f"Failed to get pool for database: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_session",
+                    "database_name": database_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            },
+            exc_info=True,
+        )
+        raise
+
+    # Create SQLAlchemy engine from AsyncPG pool (temporary bridge)
+    # TODO: Move to pure AsyncPG for better performance
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    # Build connection string for this project database
+    db_user = os.getenv("DB_USER", os.getenv("USER", "postgres"))
+    db_host = os.getenv("DB_HOST", "localhost")
+    db_port = int(os.getenv("DB_PORT", "5432"))
+    db_password = os.getenv("DB_PASSWORD", "")
+
+    if db_password:
+        project_db_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{database_name}"
+    else:
+        project_db_url = f"postgresql+asyncpg://{db_user}@{db_host}:{db_port}/{database_name}"
+
+    # Create engine with pooling disabled (we manage pools separately)
+    project_engine = create_async_engine(
+        project_db_url,
+        echo=SQL_ECHO,
+        poolclass=NullPool,  # No SQLAlchemy pooling (using AsyncPG pools)
+    )
+
+    # Create session factory for this project
+    ProjectSessionLocal = async_sessionmaker(
+        project_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with ProjectSessionLocal() as session:
         try:
-            # Resolve schema name based on project_id
-            if project_id is None:
-                # Backward compatibility: use default workspace
-                schema_name = "project_default"
-                logger.debug(
-                    "Using default workspace (backward compatibility)",
-                    extra={"context": {"operation": "get_session", "schema_name": schema_name}},
-                )
-            else:
-                # Project workspace: ensure exists and get schema name
-                from src.services.workspace_manager import ProjectWorkspaceManager
-
-                manager = ProjectWorkspaceManager(engine)
-                schema_name = await manager.ensure_workspace_exists(project_id)
-
-                logger.debug(
-                    "Using project workspace",
-                    extra={
-                        "context": {
-                            "operation": "get_session",
-                            "project_id": project_id,
-                            "schema_name": schema_name,
-                        }
-                    },
-                )
-
-            # Set search_path to project schema (include public for pgvector extension)
-            await session.execute(text(f"SET search_path TO {schema_name}, public"))
-
             logger.debug(
-                "Database session started with search_path set",
+                "Database session started for project",
                 extra={
                     "context": {
                         "operation": "get_session",
-                        "schema_name": schema_name,
-                        "project_id": project_id,
+                        "project_id": resolved_project_id,
+                        "database_name": database_name,
                     }
                 },
             )
@@ -378,7 +845,12 @@ async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSess
 
             logger.debug(
                 "Database session committed successfully",
-                extra={"context": {"operation": "get_session"}},
+                extra={
+                    "context": {
+                        "operation": "get_session",
+                        "project_id": resolved_project_id,
+                    }
+                },
             )
 
         except Exception as e:
@@ -390,6 +862,8 @@ async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSess
                 extra={
                     "context": {
                         "operation": "get_session",
+                        "project_id": resolved_project_id,
+                        "database_name": database_name,
                         "error": str(e),
                         "error_type": type(e).__name__,
                     }
@@ -404,8 +878,16 @@ async def get_session(project_id: str | None = None) -> AsyncGenerator[AsyncSess
 
             logger.debug(
                 "Database session closed",
-                extra={"context": {"operation": "get_session"}},
+                extra={
+                    "context": {
+                        "operation": "get_session",
+                        "project_id": resolved_project_id,
+                    }
+                },
             )
+
+            # Dispose of project-specific engine
+            await project_engine.dispose()
 
 
 # ==============================================================================
@@ -423,20 +905,15 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     Returns:
         async_sessionmaker[AsyncSession]: Initialized session factory
 
+    Note:
+        This returns the LEGACY session factory. For production use,
+        prefer get_session() which uses per-project pools.
+
     Example:
-        >>> # Get factory and create session:
+        >>> # Legacy usage (backward compatibility):
         >>> factory = get_session_factory()
         >>> async with factory() as session:
         ...     result = await session.execute(select(Repository))
-
-        >>> # Use in FastAPI dependency:
-        >>> def get_db():
-        ...     factory = get_session_factory()
-        ...     return factory
-
-    Note:
-        This function returns the factory, NOT a session instance.
-        Call the returned factory to create a session: `factory()`
 
     Constitutional Compliance:
         - Principle VIII: Type safety (explicit return type annotation)
@@ -452,8 +929,9 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 async def check_database_health() -> bool:
     """Check database connection health.
 
-    Performs a simple query (`SELECT 1`) to verify the database is accessible
-    and responsive. This is useful for health check endpoints and monitoring.
+    Performs a simple query (`SELECT 1`) to verify the registry database is
+    accessible and responsive. This is useful for health check endpoints and
+    monitoring.
 
     Returns:
         bool: True if database is healthy, False otherwise
@@ -468,14 +946,8 @@ async def check_database_health() -> bool:
         ...         "database": "ok" if db_healthy else "error",
         ...     }
 
-        >>> # In startup validation:
-        >>> if not await check_database_health():
-        ...     logger.error("Database is not accessible")
-        ...     raise RuntimeError("Database health check failed")
-
     Performance:
         - Uses connection pool for efficient health checks
-        - Pre-ping ensures connection validity before query
         - Minimal overhead (<1ms typical latency)
 
     Constitutional Compliance:
@@ -483,9 +955,10 @@ async def check_database_health() -> bool:
         - Principle V: Production quality (comprehensive error logging)
     """
     try:
-        # Execute simple query to verify connection
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        # Check registry pool health
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
 
         logger.debug(
             "Database health check passed",
@@ -514,15 +987,10 @@ async def check_database_health() -> bool:
 
 
 async def init_db_connection() -> None:
-    """Initialize database connection pool.
+    """Initialize database connection pools.
 
-    This function is called during server startup to ensure the database
-    connection pool is properly initialized and ready to serve requests.
-
-    The engine is created at module import time (singleton pattern), but this
-    function provides an explicit initialization hook for the server lifecycle.
-    It verifies that the database is accessible before the server starts serving
-    requests.
+    This function is called during server startup to ensure the registry
+    database connection pool is properly initialized and ready to serve requests.
 
     Raises:
         RuntimeError: If database initialization fails (connection error, etc.)
@@ -540,25 +1008,27 @@ async def init_db_connection() -> None:
         - Principle IV: Performance (connection pool pre-warming)
     """
     try:
-        # Verify database is accessible
+        # Initialize registry pool
+        await _initialize_registry_pool()
+
+        # Verify registry database is accessible
         is_healthy = await check_database_health()
         if not is_healthy:
-            raise RuntimeError("Database health check failed during initialization")
+            raise RuntimeError("Registry database health check failed during initialization")
 
         logger.info(
-            "Database connection pool initialized successfully",
+            "Database connection pools initialized successfully",
             extra={
                 "context": {
                     "operation": "init_db_connection",
-                    "pool_size": POOL_SIZE,
-                    "max_overflow": MAX_OVERFLOW,
+                    "registry_pool_ready": True,
                 }
             },
         )
 
     except Exception as e:
         logger.critical(
-            "Failed to initialize database connection pool",
+            "Failed to initialize database connection pools",
             extra={
                 "context": {
                     "operation": "init_db_connection",
@@ -572,15 +1042,10 @@ async def init_db_connection() -> None:
 
 
 async def close_db_connection() -> None:
-    """Close database connection pool gracefully.
+    """Close database connection pools gracefully.
 
     This function is called during server shutdown to ensure all database
     connections are properly closed and resources are cleaned up.
-
-    Disposes of the global engine, which:
-    - Closes all active connections in the pool
-    - Waits for in-flight queries to complete (graceful shutdown)
-    - Releases connection resources
 
     Example:
         >>> # In FastMCP lifespan:
@@ -595,21 +1060,58 @@ async def close_db_connection() -> None:
     """
     try:
         logger.info(
-            "Closing database connection pool...",
+            "Closing database connection pools...",
             extra={"context": {"operation": "close_db_connection"}},
         )
 
-        # Dispose of engine (closes all connections in pool)
+        # Close all project pools
+        for database_name, pool in _project_pools.items():
+            try:
+                await pool.close()
+                logger.debug(f"Closed pool for database: {database_name}")
+            except Exception as e:
+                logger.error(
+                    f"Error closing pool for database: {database_name}",
+                    extra={
+                        "context": {
+                            "operation": "close_db_connection",
+                            "database_name": database_name,
+                            "error": str(e),
+                        }
+                    },
+                )
+
+        _project_pools.clear()
+
+        # Close registry pool
+        global _registry_pool
+        if _registry_pool is not None:
+            try:
+                await _registry_pool.close()
+                logger.debug("Closed registry pool")
+                _registry_pool = None
+            except Exception as e:
+                logger.error(
+                    "Error closing registry pool",
+                    extra={
+                        "context": {
+                            "operation": "close_db_connection",
+                            "error": str(e),
+                        }
+                    },
+                )
+
+        # Dispose of legacy engine
         await engine.dispose()
 
         logger.info(
-            "Database connection pool closed successfully",
+            "Database connection pools closed successfully",
             extra={"context": {"operation": "close_db_connection"}},
         )
 
     except Exception as e:
         logger.error(
-            "Error closing database connection pool",
+            "Error closing database connection pools",
             extra={
                 "context": {
                     "operation": "close_db_connection",
@@ -632,8 +1134,12 @@ __all__ = [
     "get_session",
     "get_session_factory",
     "resolve_project_id",
+    "_resolve_project_context",
     "check_database_health",
     "init_db_connection",
     "close_db_connection",
+    "get_or_create_project_pool",
+    "_initialize_registry_pool",
     "DATABASE_URL",
+    "REGISTRY_DATABASE_URL",
 ]

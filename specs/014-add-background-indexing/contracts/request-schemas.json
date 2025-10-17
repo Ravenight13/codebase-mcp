@@ -1,0 +1,253 @@
+{
+  "StartIndexingBackgroundRequest": {
+    "type": "object",
+    "description": "Request schema for starting background indexing job",
+    "properties": {
+      "repo_path": {
+        "type": "string",
+        "description": "Absolute path to repository directory",
+        "minLength": 1,
+        "pattern": "^/.*",
+        "examples": [
+          "/Users/dev/my-project",
+          "/home/alice/workspace/enterprise-app",
+          "/opt/repositories/monorepo"
+        ]
+      },
+      "name": {
+        "type": "string",
+        "description": "Display name for repository (optional, defaults to directory name)",
+        "minLength": 1,
+        "maxLength": 255,
+        "examples": ["my-project", "enterprise-app", "monorepo"]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project workspace identifier (optional, uses 4-tier resolution if not provided)",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[a-zA-Z0-9_-]+$",
+        "examples": ["my-project", "client-a", "default"]
+      },
+      "force_reindex": {
+        "type": "boolean",
+        "default": false,
+        "description": "Force full re-index even if repository already indexed",
+        "examples": [false, true]
+      }
+    },
+    "required": ["repo_path"],
+    "additionalProperties": false
+  },
+  "GetJobStatusRequest": {
+    "type": "object",
+    "description": "Request schema for querying job status",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique job identifier",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "examples": [
+          "550e8400-e29b-41d4-a716-446655440000",
+          "660e8400-e29b-41d4-a716-446655440001"
+        ]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project workspace identifier (optional)",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[a-zA-Z0-9_-]+$",
+        "examples": ["my-project", "client-a", "default"]
+      }
+    },
+    "required": ["job_id"],
+    "additionalProperties": false
+  },
+  "ListBackgroundJobsRequest": {
+    "type": "object",
+    "description": "Request schema for listing background jobs with filters",
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["pending", "running", "completed", "failed", "cancelled", "blocked"],
+        "description": "Filter by job status (optional)",
+        "examples": ["running", "completed", "failed"]
+      },
+      "repo_path": {
+        "type": "string",
+        "description": "Filter by repository path (supports partial matching)",
+        "examples": ["/Users/dev/my-project", "/home/alice/workspace"]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Filter by project workspace (optional)",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[a-zA-Z0-9_-]+$",
+        "examples": ["my-project", "client-a", "default"]
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 20,
+        "description": "Maximum number of jobs to return",
+        "examples": [10, 20, 50, 100]
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "Number of jobs to skip for pagination",
+        "examples": [0, 20, 40, 60]
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "CancelJobRequest": {
+    "type": "object",
+    "description": "Request schema for cancelling background job",
+    "properties": {
+      "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique job identifier to cancel",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "examples": [
+          "550e8400-e29b-41d4-a716-446655440000",
+          "660e8400-e29b-41d4-a716-446655440001"
+        ]
+      },
+      "confirmed": {
+        "type": "boolean",
+        "default": false,
+        "description": "Explicit confirmation flag (must be true to proceed)",
+        "examples": [true]
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project workspace identifier (optional)",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[a-zA-Z0-9_-]+$",
+        "examples": ["my-project", "client-a", "default"]
+      }
+    },
+    "required": ["job_id"],
+    "additionalProperties": false
+  },
+  "ValidationRules": {
+    "description": "Validation rules applied across all request schemas",
+    "rules": {
+      "repo_path": {
+        "format": "Absolute POSIX or Windows path",
+        "validation": [
+          "Must be non-empty string",
+          "Must be absolute path (starts with '/' on POSIX or drive letter on Windows)",
+          "Must point to existing directory (file system check)",
+          "Must have read permissions for server process"
+        ],
+        "error_messages": {
+          "empty": "Repository path cannot be empty",
+          "relative": "Repository path must be absolute: {path}",
+          "not_exists": "Repository path does not exist: {path}",
+          "not_directory": "Repository path must be a directory: {path}",
+          "no_permission": "Cannot read repository directory: {path}"
+        }
+      },
+      "job_id": {
+        "format": "UUID v4",
+        "validation": [
+          "Must be valid UUID format (8-4-4-4-12 hex digits)",
+          "Must exist in database (foreign key check)",
+          "Must match resolved project_id workspace"
+        ],
+        "error_messages": {
+          "invalid_format": "Invalid job_id format: {job_id}",
+          "not_found": "Job not found: {job_id}",
+          "wrong_project": "Job {job_id} not found in project {project_id}"
+        }
+      },
+      "project_id": {
+        "format": "Alphanumeric with hyphens and underscores",
+        "validation": [
+          "Must match pattern ^[a-zA-Z0-9_-]+$",
+          "Length between 1 and 255 characters",
+          "Must be valid project identifier (no special characters)"
+        ],
+        "error_messages": {
+          "invalid_format": "Invalid project_id format: {project_id}",
+          "too_long": "Project ID exceeds maximum length (255): {project_id}"
+        }
+      },
+      "status": {
+        "format": "Enum value",
+        "validation": [
+          "Must be one of: pending, running, completed, failed, cancelled, blocked"
+        ],
+        "error_messages": {
+          "invalid_enum": "Invalid status value: {status}"
+        }
+      },
+      "confirmed": {
+        "format": "Boolean",
+        "validation": [
+          "Must be explicitly set to true for destructive operations (cancellation)"
+        ],
+        "error_messages": {
+          "not_confirmed": "Confirmation required to cancel job. Set confirmed=true."
+        }
+      },
+      "pagination": {
+        "limit": {
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "error_messages": {
+            "below_min": "Limit must be at least 1: {limit}",
+            "above_max": "Limit must be at most 100: {limit}"
+          }
+        },
+        "offset": {
+          "minimum": 0,
+          "default": 0,
+          "error_messages": {
+            "below_min": "Offset must be non-negative: {offset}"
+          }
+        }
+      }
+    }
+  },
+  "PrerequisiteValidation": {
+    "description": "Validation rules enforced before operation execution",
+    "checks": {
+      "duplicate_job": {
+        "description": "Prevent duplicate indexing for same repository (FR-012)",
+        "query": "SELECT id FROM indexing_jobs WHERE repo_path = :repo_path AND status IN ('pending', 'running')",
+        "action": "If exists, return existing job_id instead of creating new job",
+        "error_code": "DUPLICATE_JOB"
+      },
+      "concurrency_limit": {
+        "description": "Enforce maximum 3 concurrent jobs (FR-011)",
+        "query": "SELECT COUNT(*) FROM indexing_jobs WHERE status = 'running'",
+        "action": "If count >= 3, create job with status='pending' (queued)",
+        "threshold": 3
+      },
+      "job_cancellable": {
+        "description": "Only pending/running jobs can be cancelled",
+        "query": "SELECT status FROM indexing_jobs WHERE id = :job_id",
+        "action": "If status not in ('pending', 'running'), reject with error",
+        "error_code": "INVALID_STATUS"
+      },
+      "database_connectivity": {
+        "description": "Verify database connection before accepting request",
+        "check": "Connection pool health check",
+        "action": "If pool exhausted or unhealthy, reject with DATABASE_ERROR",
+        "error_code": "DATABASE_ERROR"
+      }
+    }
+  }
+}

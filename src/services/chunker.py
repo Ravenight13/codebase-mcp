@@ -170,7 +170,7 @@ def detect_language(file_path: Path) -> str | None:
 
 
 def extract_chunks_from_ast(
-    tree: Tree, language: str, content: str, file_id: uuid.UUID
+    tree: Tree, language: str, content: str, file_id: uuid.UUID, project_id: str
 ) -> list[CodeChunkCreate]:
     """Extract semantic chunks from Tree-sitter AST.
 
@@ -179,6 +179,7 @@ def extract_chunks_from_ast(
         language: Language name
         content: File content as string
         file_id: UUID of file in database
+        project_id: Project workspace identifier
 
     Returns:
         List of CodeChunkCreate objects
@@ -214,6 +215,7 @@ def extract_chunks_from_ast(
             # Create chunk
             chunk = CodeChunkCreate(
                 code_file_id=file_id,
+                project_id=project_id,
                 content=chunk_content,
                 start_line=start_line,
                 end_line=end_line,
@@ -254,13 +256,14 @@ def _normalize_chunk_type(node_type: str) -> str:
 
 
 def fallback_line_chunking(
-    content: str, file_id: uuid.UUID, chunk_lines: int = FALLBACK_CHUNK_LINES
+    content: str, file_id: uuid.UUID, project_id: str, chunk_lines: int = FALLBACK_CHUNK_LINES
 ) -> list[CodeChunkCreate]:
     """Fallback to line-based chunking for unsupported languages.
 
     Args:
         content: File content
         file_id: UUID of file in database
+        project_id: Project workspace identifier
         chunk_lines: Lines per chunk (default: 500)
 
     Returns:
@@ -275,6 +278,7 @@ def fallback_line_chunking(
         chunks.append(
             CodeChunkCreate(
                 code_file_id=file_id,
+                project_id=project_id,
                 content=content,
                 start_line=1,
                 end_line=total_lines,
@@ -291,6 +295,7 @@ def fallback_line_chunking(
         chunks.append(
             CodeChunkCreate(
                 code_file_id=file_id,
+                project_id=project_id,
                 content=chunk_content,
                 start_line=start_idx + 1,  # 1-indexed
                 end_line=end_idx,  # 1-indexed
@@ -306,13 +311,16 @@ def fallback_line_chunking(
 # ==============================================================================
 
 
-async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[CodeChunkCreate]:
+async def chunk_file(
+    file_path: Path, content: str, file_id: uuid.UUID, project_id: str
+) -> list[CodeChunkCreate]:
     """Parse file and extract semantic chunks.
 
     Args:
         file_path: Path to source file
         content: File content as string
         file_id: UUID of file in database
+        project_id: Project workspace identifier
 
     Returns:
         List of CodeChunkCreate objects
@@ -336,7 +344,7 @@ async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[
             f"Unsupported language for {file_path}, using fallback chunking",
             extra={"context": {"file_path": str(file_path)}},
         )
-        return fallback_line_chunking(content, file_id)
+        return fallback_line_chunking(content, file_id, project_id)
 
     # Get parser for language
     cache = ParserCache()
@@ -348,7 +356,7 @@ async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[
             f"Parser not available for {language}, using fallback chunking",
             extra={"context": {"language": language, "file_path": str(file_path)}},
         )
-        return fallback_line_chunking(content, file_id)
+        return fallback_line_chunking(content, file_id, project_id)
 
     # Parse with Tree-sitter
     try:
@@ -356,7 +364,7 @@ async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[
         tree = parser.parse(content_bytes)
 
         # Extract chunks from AST
-        chunks = extract_chunks_from_ast(tree, language, content, file_id)
+        chunks = extract_chunks_from_ast(tree, language, content, file_id, project_id)
 
         if not chunks:
             # No chunks extracted (e.g., file with no functions/classes)
@@ -365,7 +373,7 @@ async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[
                 f"No chunks extracted from AST for {file_path}, using fallback",
                 extra={"context": {"file_path": str(file_path), "language": language}},
             )
-            return fallback_line_chunking(content, file_id)
+            return fallback_line_chunking(content, file_id, project_id)
 
         logger.debug(
             f"Extracted {len(chunks)} chunks from {file_path}",
@@ -392,16 +400,16 @@ async def chunk_file(file_path: Path, content: str, file_id: uuid.UUID) -> list[
                 }
             },
         )
-        return fallback_line_chunking(content, file_id)
+        return fallback_line_chunking(content, file_id, project_id)
 
 
 async def chunk_files_batch(
-    files: list[tuple[Path, str, uuid.UUID]]
+    files: list[tuple[Path, str, uuid.UUID, str]]
 ) -> list[list[CodeChunkCreate]]:
     """Chunk multiple files in parallel.
 
     Args:
-        files: List of (file_path, content, file_id) tuples
+        files: List of (file_path, content, file_id, project_id) tuples
 
     Returns:
         List of chunk lists (one per file)
@@ -409,7 +417,10 @@ async def chunk_files_batch(
     Performance:
         Uses asyncio.gather for parallel processing
     """
-    tasks = [chunk_file(path, content, file_id) for path, content, file_id in files]
+    tasks = [
+        chunk_file(path, content, file_id, project_id)
+        for path, content, file_id, project_id in files
+    ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Handle exceptions

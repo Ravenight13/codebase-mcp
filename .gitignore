@@ -95,3 +95,6 @@ tests/load/results/
 docs/performance/*.html
 docs/performance/*.json
 !docs/performance/README.md
+
+# Codebase MCP config (per-machine)
+.codebase-mcp/config.json

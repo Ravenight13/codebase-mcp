@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "id": "550e8400-e29b-41d4-a716-446655440000"
+  },
+  "auto_switch": true,
+  "strict_mode": false,
+  "dry_run": false,
+  "description": "Example configuration for codebase-mcp multi-project support"
+}
