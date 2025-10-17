@@ -380,66 +380,50 @@ async def _resolve_project_context(
             logger.debug(f"Failed to cache config for {working_dir}: {e}")
             # Continue anyway (caching is optional)
 
-    # Extract project identifier
-    project_name = config['project']['name']
-    project_id = config['project'].get('id')  # Optional
+    # Get config_path if we don't have it from cache miss
+    if config_path is None:
+        try:
+            config_path = find_config_file(Path(working_dir))
+        except Exception as e:
+            logger.debug(f"Config file search failed for {working_dir}: {e}")
+            return None
 
-    # Use project_id if provided, otherwise use name
-    identifier = project_id if project_id else project_name
-
-    # Look up project in registry to get database_name
-    try:
-        registry_pool = await _initialize_registry_pool()
-        async with registry_pool.acquire() as conn:
-            # Query registry for project by id or name
-            row = await conn.fetchrow(
-                """
-                SELECT id, database_name
-                FROM projects
-                WHERE id = $1 OR name = $1
-                LIMIT 1
-                """,
-                identifier
-            )
-
-            if row is None:
-                logger.debug(
-                    f"Project not found in registry: {identifier}",
-                    extra={
-                        "context": {
-                            "operation": "_resolve_project_context",
-                            "identifier": identifier,
-                        }
-                    },
-                )
-                return None
-
-            resolved_project_id = row['id']
-            database_name = row['database_name']
-
+        if not config_path:
             logger.debug(
-                f"Resolved from session config: {resolved_project_id} "
-                f"(database: {database_name})",
-                extra={
-                    "context": {
-                        "operation": "_resolve_project_context",
-                        "project_id": resolved_project_id,
-                        "database_name": database_name,
-                    }
-                },
+                f"No .codebase-mcp/config.json found in {working_dir} or ancestors"
             )
+            return None
 
-            return (resolved_project_id, database_name)
+    # Get or create project from config using auto-create module
+    try:
+        from src.database.auto_create import get_or_create_project_from_config
 
-    except Exception as e:
-        logger.error(
-            f"Registry lookup failed for project: {identifier}",
+        project = await get_or_create_project_from_config(
+            config_path=config_path,
+            registry=None  # Uses singleton registry
+        )
+
+        logger.debug(
+            f"Resolved project from config: {project.name}",
             extra={
                 "context": {
                     "operation": "_resolve_project_context",
-                    "identifier": identifier,
+                    "project_id": project.project_id,
+                    "database_name": project.database_name,
+                }
+            }
+        )
+
+        return (project.project_id, project.database_name)
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get/create project from config: {e}",
+            extra={
+                "context": {
+                    "operation": "_resolve_project_context",
+                    "config_path": str(config_path),
                     "error": str(e),
-                    "error_type": type(e).__name__,
                 }
             },
             exc_info=True,
@@ -537,23 +521,24 @@ async def resolve_project_id(
                 )
 
                 if row is None:
-                    logger.warning(
-                        f"Explicit project_id not found in registry: {explicit_id}, using default",
+                    logger.info(
+                        f"Explicit project_id not found in registry: {explicit_id}, trying other methods",
                         extra={
                             "context": {
                                 "operation": "resolve_project_id",
                                 "project_id": explicit_id,
-                                "resolution_method": "default_fallback",
+                                "resolution_method": "fallthrough_to_tier2",
                             }
                         },
                     )
-                    return ("default", DEFAULT_PROJECT_DB)
-
-                return (row['id'], row['database_name'])
+                    # Don't return - continue to Tier 2, 3, 4
+                else:
+                    # Found in registry - return immediately
+                    return (row['id'], row['database_name'])
 
         except Exception as e:
             logger.error(
-                f"Registry lookup failed for explicit project_id: {explicit_id}",
+                f"Registry lookup failed for explicit project_id: {explicit_id}, trying other methods",
                 extra={
                     "context": {
                         "operation": "resolve_project_id",
@@ -564,7 +549,7 @@ async def resolve_project_id(
                 },
                 exc_info=True,
             )
-            return ("default", DEFAULT_PROJECT_DB)
+            # Don't return - continue to Tier 2, 3, 4
 
     # 2. Try session-based config resolution (if Context provided)
     if ctx is not None:

@@ -67,7 +67,8 @@ async def test_background_indexing_complete_workflow(tmp_path: Path) -> None:
     assert "job_id" in result, "Response missing job_id"
     assert result["status"] == "pending", f"Expected status 'pending', got '{result['status']}'"
     assert result["message"] == "Indexing job started", f"Unexpected message: {result['message']}"
-    # Note: "test" project_id resolves to "default" if not in registry
+    # Note: Without a config file, explicit project_id "test" falls back to "default"
+    # For config-based auto-creation, see test_config_based_project_creation
     assert result["project_id"] in ["test", "default"], f"Unexpected project_id: {result['project_id']}'"
 
     job_id = result["job_id"]
