@@ -503,9 +503,11 @@ class TestAutoSwitchCache:
             config = {"version": "1.0", "project": {"name": "test"}}
             await cache.set(tmpdir, config, config_file)
 
-            cached = await cache.get(tmpdir)
-            assert cached is not None
-            assert cached["project"]["name"] == "test"
+            result = await cache.get(tmpdir)
+            assert result is not None
+            cached_config, cached_path = result
+            assert cached_config["project"]["name"] == "test"
+            assert cached_path == config_file
 
     @pytest.mark.asyncio
     async def test_cache_mtime_invalidation(self) -> None:
@@ -523,8 +525,8 @@ class TestAutoSwitchCache:
             await cache.set(tmpdir, config, config_file)
 
             # Verify cache hit
-            cached = await cache.get(tmpdir)
-            assert cached is not None
+            result = await cache.get(tmpdir)
+            assert result is not None
 
             # Modify file (change mtime)
             await asyncio.sleep(0.01)  # Ensure mtime changes
@@ -533,8 +535,8 @@ class TestAutoSwitchCache:
             )
 
             # Verify cache invalidated
-            cached = await cache.get(tmpdir)
-            assert cached is None
+            result = await cache.get(tmpdir)
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_cache_file_deletion_invalidation(self) -> None:
@@ -555,8 +557,8 @@ class TestAutoSwitchCache:
             config_file.unlink()
 
             # Verify cache invalidated
-            cached = await cache.get(tmpdir)
-            assert cached is None
+            result = await cache.get(tmpdir)
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_cache_lru_eviction(self) -> None:

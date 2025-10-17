@@ -169,7 +169,7 @@ async def index_repository(
     try:
         # Use get_session with project_id for workspace isolation
         # This will auto-provision workspace if needed
-        async with get_session(project_id=resolved_id) as db:
+        async with get_session(project_id=resolved_id, ctx=ctx) as db:
             # Progress callback for real-time updates via Context
             async def progress_callback(message: str) -> None:
                 if ctx:

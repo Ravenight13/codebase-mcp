@@ -207,7 +207,7 @@ async def search_code(
     # Perform semantic search with project isolation
     pool_info: dict[str, Any]  # Declare once for all exception handlers
     try:
-        async with get_session(project_id=resolved_project_id) as db:
+        async with get_session(project_id=resolved_project_id, ctx=ctx) as db:
             results: list[SearchResult] = await search_code_service(query, db, filters)
 
     except PoolTimeoutError as e:

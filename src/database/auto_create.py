@@ -384,6 +384,50 @@ async def get_or_create_project_from_config(
     # Add to registry
     registry.add(project)
 
+    # Sync to persistent PostgreSQL registry
+    # This ensures the project survives server restarts and is discoverable by Tier 1 resolution
+    try:
+        from src.database.session import _initialize_registry_pool
+
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO projects (id, name, description, database_name, created_at, updated_at, metadata)
+                VALUES ($1, $2, $3, $4, NOW(), NOW(), $5::jsonb)
+                ON CONFLICT (id) DO UPDATE SET updated_at = NOW()
+                """,
+                project_id,
+                project_name,
+                project.description or "",  # Handle None
+                database_name,
+                json.dumps({}),  # metadata as JSON string
+            )
+        logger.info(
+            f"Synced project to persistent registry: {project_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "project_id": project_id,
+                    "database_name": database_name,
+                    "sync": "postgresql",
+                }
+            },
+        )
+    except Exception as e:
+        # Don't fail project creation if registry sync fails
+        # The in-memory registry is sufficient for current session
+        logger.warning(
+            f"Failed to sync project to persistent registry (continuing): {e}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "project_id": project_id,
+                    "error": str(e),
+                }
+            },
+        )
+
     # Step 5: Update config with project.id
     if config["project"].get("id") != project_id:
         logger.info(

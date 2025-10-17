@@ -340,13 +340,17 @@ async def _resolve_project_context(
 
     # Check cache first
     cache = get_config_cache()
+    config = None
+    config_path = None
+
     try:
-        config = await cache.get(working_dir)
+        cache_result = await cache.get(working_dir)
+        if cache_result is not None:
+            config, config_path = cache_result
     except Exception as e:
         logger.debug(f"Cache lookup failed for {working_dir}: {e}")
         config = None
-
-    config_path = None
+        config_path = None
 
     if config is None:
         # Cache miss: search for config file
@@ -380,19 +384,10 @@ async def _resolve_project_context(
             logger.debug(f"Failed to cache config for {working_dir}: {e}")
             # Continue anyway (caching is optional)
 
-    # Get config_path if we don't have it from cache miss
-    if config_path is None:
-        try:
-            config_path = find_config_file(Path(working_dir))
-        except Exception as e:
-            logger.debug(f"Config file search failed for {working_dir}: {e}")
-            return None
-
-        if not config_path:
-            logger.debug(
-                f"No .codebase-mcp/config.json found in {working_dir} or ancestors"
-            )
-            return None
+    # At this point, we must have both config and config_path
+    # Either from cache hit or from cache miss + filesystem search
+    assert config is not None and config_path is not None, \
+        "Internal error: config and config_path should be set by this point"
 
     # Get or create project from config using auto-create module
     try:

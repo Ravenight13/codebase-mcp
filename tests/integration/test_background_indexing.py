@@ -67,8 +67,8 @@ async def test_background_indexing_complete_workflow(tmp_path: Path) -> None:
     assert "job_id" in result, "Response missing job_id"
     assert result["status"] == "pending", f"Expected status 'pending', got '{result['status']}'"
     assert result["message"] == "Indexing job started", f"Unexpected message: {result['message']}"
-    # Note: Without a config file, explicit project_id "test" falls back to "default"
-    # For config-based auto-creation, see test_config_based_project_creation
+    # Note: Explicit project_id "test" may resolve to existing project or default
+    # With registry sync fix, projects persist across calls
     assert result["project_id"] in ["test", "default"], f"Unexpected project_id: {result['project_id']}'"
 
     job_id = result["job_id"]
@@ -374,6 +374,9 @@ async def test_job_state_persistence() -> None:
     - Job record survives database pool closure
     - Status queryable after restart
     - All fields preserved
+
+    Note: With registry sync fix, auto-created projects also persist,
+    so this test validates BOTH job persistence AND project persistence.
 
     Constitutional Compliance:
     - Principle VII: TDD (validates persistence before production)

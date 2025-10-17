@@ -107,6 +107,24 @@ async def test_project_auto_creation_from_config(tmp_path: Path) -> None:
     assert len(project_id) == 36, f"project.id should be UUID format, got '{project_id}'"
     assert project_id == index_result["project_id"], "Config project.id should match indexing result"
 
+    # Step 4: Verify project exists in PostgreSQL registry (FIX VALIDATION)
+    from src.database.session import _initialize_registry_pool
+
+    registry_pool = await _initialize_registry_pool()
+    async with registry_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, name, database_name FROM projects WHERE id = $1",
+            project_id
+        )
+
+        assert row is not None, (
+            f"CRITICAL: Auto-created project not found in PostgreSQL registry. "
+            f"Registry sync failed for project {project_id}!"
+        )
+        assert row['id'] == project_id, "Project ID mismatch in registry"
+        assert row['name'] == "test-auto-create", "Project name mismatch in registry"
+        assert row['database_name'] == index_result["database_name"], "Database name mismatch"
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -159,6 +177,25 @@ async def test_existing_project_id_in_config(tmp_path: Path) -> None:
     # Verify config wasn't modified
     updated_config = json.loads(config_file.read_text())
     assert updated_config["project"]["id"] == existing_project_id
+
+    # Verify idempotency: calling again doesn't create duplicates
+    index_result2 = await index_repository.fn(repo_path=str(test_repo), ctx=mock_ctx)
+    assert index_result2["project_id"] == existing_project_id
+
+    # Verify only ONE project entry in PostgreSQL registry
+    from src.database.session import _initialize_registry_pool
+
+    registry_pool = await _initialize_registry_pool()
+    async with registry_pool.acquire() as conn:
+        count = await conn.fetchval(
+            "SELECT COUNT(*) FROM projects WHERE name = $1",
+            "existing-project"
+        )
+
+        assert count == 1, (
+            f"CRITICAL: Found {count} projects with name 'existing-project'. "
+            f"Expected exactly 1. ON CONFLICT clause should prevent duplicates!"
+        )
 
 
 @pytest.mark.integration
