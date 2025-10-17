@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from fastmcp import Context
@@ -42,6 +43,41 @@ from src.models.indexing_job import IndexingJob
 from src.services.indexer import index_repository
 
 logger = get_logger(__name__)
+
+
+async def update_job(
+    job_id: UUID,
+    **updates: Any,
+) -> None:
+    """Update job fields atomically in main database.
+
+    Args:
+        job_id: UUID of indexing_jobs row
+        **updates: Field names and values to update
+            (e.g., status="in_progress", files_indexed=100)
+
+    Example:
+        >>> await update_job(
+        ...     job_id=job_id,
+        ...     status="completed",
+        ...     files_indexed=1000,
+        ...     completed_at=datetime.now()
+        ... )
+    """
+    async with AsyncSession(engine) as session:
+        job = await session.get(IndexingJob, job_id)
+        if job is None:
+            logger.warning(f"Job {job_id} not found for update")
+            return
+
+        # Apply updates
+        for key, value in updates.items():
+            if hasattr(job, key):
+                setattr(job, key, value)
+            else:
+                logger.warning(f"Invalid field for job update: {key}")
+
+        await session.commit()
 
 
 async def _background_indexing_worker(
@@ -81,16 +117,11 @@ async def _background_indexing_worker(
 
     try:
         # 1. Update status to running
-        # Note: indexing_jobs table lives in main codebase_mcp database
-        async with AsyncSession(engine) as session:
-            job = await session.get(IndexingJob, job_id)
-            if job is None:
-                logger.error(f"Job {job_id} not found")
-                return
-
-            job.status = "running"
-            job.started_at = datetime.now()
-            await session.commit()
+        await update_job(
+            job_id=job_id,
+            status="running",
+            started_at=datetime.now(),
+        )
 
         # 2. Run existing indexer (NO MODIFICATIONS to indexer.py!)
         async with get_session(project_id=project_id, ctx=ctx) as session:
@@ -112,18 +143,13 @@ async def _background_indexing_worker(
             raise NotADirectoryError(f"Repository path is not a directory: {repo_path}")
 
         # 4. Update to completed with results
-        # Note: indexing_jobs table lives in main codebase_mcp database
-        async with AsyncSession(engine) as session:
-            job = await session.get(IndexingJob, job_id)
-            if job is None:
-                logger.error(f"Job {job_id} not found for completion update")
-                return
-
-            job.status = "completed"
-            job.completed_at = datetime.now()
-            job.files_indexed = result.files_indexed
-            job.chunks_created = result.chunks_created
-            await session.commit()
+        await update_job(
+            job_id=job_id,
+            status="completed",
+            files_indexed=result.files_indexed,
+            chunks_created=result.chunks_created,
+            completed_at=datetime.now(),
+        )
 
         logger.info(
             f"Job {job_id} completed successfully",
@@ -136,10 +162,36 @@ async def _background_indexing_worker(
             },
         )
 
-    except Exception as e:
-        # 4. Update to failed with error message
+    except FileNotFoundError as e:
+        # Repository not found
         logger.error(
-            f"Job {job_id} failed with error",
+            f"Repository not found for job {job_id}",
+            extra={"context": {"job_id": str(job_id), "repo_path": repo_path}},
+        )
+        await update_job(
+            job_id=job_id,
+            status="failed",
+            error_message=f"Repository not found: {repo_path}",
+            completed_at=datetime.now(),
+        )
+
+    except NotADirectoryError as e:
+        # Path exists but is not a directory
+        logger.error(
+            f"Path is not a directory for job {job_id}",
+            extra={"context": {"job_id": str(job_id), "repo_path": repo_path}},
+        )
+        await update_job(
+            job_id=job_id,
+            status="failed",
+            error_message=f"Path is not a directory: {repo_path}",
+            completed_at=datetime.now(),
+        )
+
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logger.error(
+            f"Unexpected error in job {job_id}",
             extra={
                 "context": {
                     "job_id": str(job_id),
@@ -150,15 +202,14 @@ async def _background_indexing_worker(
             exc_info=True,
         )
 
+        # Nested try/catch for status update failures
         try:
-            # Note: indexing_jobs table lives in main codebase_mcp database
-            async with AsyncSession(engine) as session:
-                job = await session.get(IndexingJob, job_id)
-                if job is not None:
-                    job.status = "failed"
-                    job.error_message = str(e)
-                    job.completed_at = datetime.now()
-                    await session.commit()
+            await update_job(
+                job_id=job_id,
+                status="failed",
+                error_message=str(e),
+                completed_at=datetime.now(),
+            )
         except Exception as update_error:
             logger.error(
                 f"Failed to update job {job_id} status to failed",
@@ -168,4 +219,5 @@ async def _background_indexing_worker(
 
 __all__ = [
     "_background_indexing_worker",
+    "update_job",
 ]

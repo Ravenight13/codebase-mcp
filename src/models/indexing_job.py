@@ -10,7 +10,7 @@ Entity Responsibilities:
 
 Job Status States:
 - pending: Job created but not started
-- in_progress: Job actively processing
+- running: Job actively processing
 - completed: Job finished successfully
 - failed: Job encountered error and stopped
 
@@ -41,11 +41,11 @@ class IndexingJob(Base):
 
     Constraints:
         - id: Primary key (UUID)
-        - status: Must be one of: pending, in_progress, completed, failed
+        - status: Must be one of: pending, running, completed, failed
 
     Lifecycle:
         1. pending: Job created, not started
-        2. in_progress: Worker processing repository
+        2. running: Worker processing repository
         3. completed/failed: Terminal states with metrics
 
     Metrics:
@@ -163,7 +163,7 @@ class IndexingJobResponse(BaseModel):
     """
 
     job_id: uuid.UUID = Field(alias="id", description="Unique job identifier")
-    status: str = Field(description="Job status: pending, in_progress, completed, failed")
+    status: str = Field(description="Job status: pending, running, completed, failed")
     repo_path: str = Field(description="Repository path being indexed")
     project_id: str = Field(description="Project workspace identifier")
     error_message: str | None = Field(None, description="Error message if failed")
