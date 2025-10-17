@@ -246,3 +246,245 @@ async def test_start_indexing_path_validation() -> None:
 
     print("✅ Path traversal rejected correctly")
     print("\n✅ Test passed: Path validation prevents security issues")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.slow
+async def test_large_repository_indexing() -> None:
+    """Test background indexing with large repository (codebase-mcp itself).
+
+    Validates:
+    - No timeout errors with real large repository
+    - Job completes successfully
+    - Metrics accurate (files_indexed, chunks_created)
+    - Production readiness
+
+    This test indexes the codebase-mcp project itself, which should have
+    100+ Python files and take several minutes to complete.
+    """
+    from datetime import datetime
+
+    # Use codebase-mcp repository itself (traverse up from tests/)
+    test_file_path = Path(__file__).resolve()
+    repo_path = test_file_path.parent.parent.parent  # tests/integration/test_*.py -> repo root
+
+    print(f"\n📂 Testing with repository: {repo_path}")
+    print(f"   (Should be codebase-mcp root directory)")
+
+    # Verify it's the right directory
+    assert (repo_path / "src").exists(), "src/ directory not found"
+    assert (repo_path / "pyproject.toml").exists(), "pyproject.toml not found"
+
+    # Import MCP tools
+    from src.mcp.tools.background_indexing import (
+        start_indexing_background,
+        get_indexing_status,
+    )
+
+    # 1. Start background indexing
+    result = await start_indexing_background.fn(
+        repo_path=str(repo_path),
+        project_id="test-large-repo",
+    )
+
+    job_id = result["job_id"]
+    print(f"✅ Job created: {job_id}")
+
+    # 2. Poll until completion (allow up to 5 minutes)
+    max_attempts = 150  # 5 minutes at 2s intervals
+    final_status = None
+
+    for attempt in range(max_attempts):
+        status = await get_indexing_status.fn(
+            job_id=job_id,
+            project_id="test-large-repo",
+        )
+
+        # Log progress every 30 seconds
+        if attempt % 15 == 0:
+            print(f"⏳ [{attempt * 2}s] Status: {status['status']}, "
+                  f"Files: {status['files_indexed']}, "
+                  f"Chunks: {status['chunks_created']}")
+
+        # Check if completed
+        if status["status"] in ["completed", "failed"]:
+            final_status = status
+            break
+
+        await asyncio.sleep(2)
+
+    # 3. Verify completion within timeout
+    assert final_status is not None, \
+        "Job did not complete within 5 minutes (may need longer timeout for very large repos)"
+
+    # 4. Verify successful completion
+    assert final_status["status"] == "completed", \
+        f"Job failed: {final_status.get('error_message')}"
+
+    # 5. Verify realistic metrics
+    files_indexed = final_status["files_indexed"]
+    chunks_created = final_status["chunks_created"]
+
+    assert files_indexed > 50, \
+        f"Expected >50 files, got {files_indexed} (codebase-mcp should have many Python files)"
+
+    assert chunks_created > 500, \
+        f"Expected >500 chunks, got {chunks_created}"
+
+    # 6. Verify timestamps
+    assert final_status["created_at"] is not None, "Missing created_at timestamp"
+    assert final_status["started_at"] is not None, "Missing started_at timestamp"
+    assert final_status["completed_at"] is not None, "Missing completed_at timestamp"
+
+    # 7. Verify no error message
+    assert final_status["error_message"] is None, \
+        f"Unexpected error message: {final_status['error_message']}"
+
+    # 8. Calculate duration
+    started = datetime.fromisoformat(final_status["started_at"])
+    completed = datetime.fromisoformat(final_status["completed_at"])
+    duration = (completed - started).total_seconds()
+
+    print(f"\n✅ Large repository test PASSED!")
+    print(f"   Files indexed: {files_indexed}")
+    print(f"   Chunks created: {chunks_created}")
+    print(f"   Duration: {duration:.1f}s")
+    print(f"   Repository: {repo_path}")
+
+    # Sanity check: duration should be reasonable (not instant, not forever)
+    assert 5 < duration < 600, \
+        f"Duration {duration}s seems unrealistic (expected 5-600s)"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_job_state_persistence() -> None:
+    """Test job state persists across simulated server restarts.
+
+    Validates:
+    - Job record survives database pool closure
+    - Status queryable after restart
+    - All fields preserved
+
+    Constitutional Compliance:
+    - Principle VII: TDD (validates persistence before production)
+    - Principle II: Local-First (validates offline persistence)
+    """
+    from src.database.session import engine
+    from src.models.indexing_job import IndexingJob
+    from datetime import datetime
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import uuid
+
+    # 1. Create job directly in database (simulating tool call)
+    job_id = uuid.uuid4()
+    test_repo_path = "/tmp/test-repo-persistence"
+
+    async with AsyncSession(engine) as session:
+        job = IndexingJob(
+            id=job_id,
+            repo_path=test_repo_path,
+            project_id="test-persistence",
+            status="pending",
+            files_indexed=0,
+            chunks_created=0,
+            created_at=datetime.utcnow(),
+        )
+        session.add(job)
+        await session.commit()
+
+    print(f"✅ Created job {job_id} with status=pending")
+
+    # 2. Simulate server restart (dispose engine connections)
+    await engine.dispose()
+    print("🔄 Simulated server restart (engine disposed)")
+
+    # 3. Query job after restart using MCP tool
+    from src.mcp.tools.background_indexing import get_indexing_status
+
+    status = await get_indexing_status.fn(
+        job_id=str(job_id),
+        project_id="test-persistence",
+    )
+
+    # 4. Verify state preserved
+    assert status["job_id"] == str(job_id), "Job ID mismatch"
+    assert status["status"] == "pending", f"Expected pending, got {status['status']}"
+    assert status["repo_path"] == test_repo_path, "Repo path mismatch"
+    assert status["project_id"] == "test-persistence", "Project ID mismatch"
+    assert status["files_indexed"] == 0, "Files indexed should be 0"
+    assert status["chunks_created"] == 0, "Chunks created should be 0"
+    assert status["created_at"] is not None, "Created timestamp missing"
+
+    print(f"✅ Test passed: Job state persisted across restart")
+    print(f"   Job ID: {status['job_id']}")
+    print(f"   Status: {status['status']}")
+    print(f"   Repo: {status['repo_path']}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_job_state_persistence_with_updates() -> None:
+    """Test job state with updates persists across simulated restart.
+
+    Validates:
+    - Updated job fields survive restart
+    - Timestamps preserved
+    - Metrics preserved
+
+    Constitutional Compliance:
+    - Principle VII: TDD (validates persistence before production)
+    - Principle II: Local-First (validates offline persistence)
+    """
+    from src.database.session import engine
+    from src.models.indexing_job import IndexingJob
+    from datetime import datetime
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import uuid
+
+    # 1. Create job with completed status and metrics
+    job_id = uuid.uuid4()
+    started_time = datetime.utcnow()
+    completed_time = datetime.utcnow()
+
+    async with AsyncSession(engine) as session:
+        job = IndexingJob(
+            id=job_id,
+            repo_path="/tmp/test-completed",
+            project_id="test-persistence",
+            status="completed",
+            files_indexed=42,
+            chunks_created=420,
+            started_at=started_time,
+            completed_at=completed_time,
+            created_at=datetime.utcnow(),
+        )
+        session.add(job)
+        await session.commit()
+
+    print(f"✅ Created completed job {job_id}")
+
+    # 2. Simulate server restart
+    await engine.dispose()
+    print("🔄 Simulated server restart")
+
+    # 3. Query job after restart
+    from src.mcp.tools.background_indexing import get_indexing_status
+
+    status = await get_indexing_status.fn(
+        job_id=str(job_id),
+        project_id="test-persistence",
+    )
+
+    # 4. Verify all fields preserved
+    assert status["status"] == "completed"
+    assert status["files_indexed"] == 42
+    assert status["chunks_created"] == 420
+    assert status["started_at"] is not None
+    assert status["completed_at"] is not None
+    assert status["error_message"] is None
+
+    print(f"✅ Test passed: Updated job state persisted")
+    print(f"   Files indexed: {status['files_indexed']}")
+    print(f"   Chunks created: {status['chunks_created']}")
