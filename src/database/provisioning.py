@@ -163,11 +163,13 @@ async def create_database(database_name: str, db_user: str | None = None) -> Non
         finally:
             await conn.close()
     except asyncpg.DuplicateDatabaseError:
-        logger.warning(
-            f"Database already exists: {database_name}",
+        logger.info(
+            f"Database already exists (idempotent): {database_name}",
             extra={"context": {"operation": "create_database", "database_name": database_name}},
         )
-        raise
+        # Treat as success - idempotent operation
+        # Note: Caller is responsible for schema initialization/migration
+        return
     except asyncpg.PostgresError as e:
         logger.error(
             f"Failed to create database: {database_name}",

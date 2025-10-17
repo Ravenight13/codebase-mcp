@@ -263,7 +263,7 @@ async def test_search_uses_correct_project_database(tmp_path: Path) -> None:
         "    return validate_credentials(username, password)\n"
     )
 
-    from src.mcp.tools.session import set_working_directory
+    from src.mcp.tools.project import set_working_directory
     from src.mcp.tools.indexing import index_repository
     from src.mcp.tools.search import search_code
 

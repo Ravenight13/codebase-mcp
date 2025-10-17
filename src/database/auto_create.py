@@ -307,7 +307,7 @@ async def get_or_create_project_from_config(
             )
             return existing
 
-    # Step 3: Lookup by name
+    # Step 3: Lookup by name (in-memory registry)
     existing = registry.get_by_name(project_name)
     if existing:
         # Update config with project.id if missing
@@ -326,6 +326,74 @@ async def get_or_create_project_from_config(
             write_config(config_path, config)
 
         return existing
+
+    # Step 3.5: Check PostgreSQL registry (for server restart scenarios)
+    try:
+        from src.database.session import _initialize_registry_pool
+
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            # Check by ID first (if provided), then by name
+            if project_id:
+                row = await conn.fetchrow(
+                    "SELECT id, name, database_name, description FROM projects WHERE id = $1",
+                    project_id
+                )
+            else:
+                row = await conn.fetchrow(
+                    "SELECT id, name, database_name, description FROM projects WHERE name = $1",
+                    project_name
+                )
+
+            if row:
+                # Found in PostgreSQL - add to in-memory registry and return
+                existing_project = Project(
+                    project_id=row['id'],
+                    name=row['name'],
+                    database_name=row['database_name'],
+                    description=row['description'] or ""
+                )
+                registry.add(existing_project)
+
+                # Update config with project.id if missing
+                if not project_id:
+                    logger.info(
+                        f"Found project in PostgreSQL registry, updating config: {existing_project.project_id}",
+                        extra={
+                            "context": {
+                                "operation": "get_or_create_project",
+                                "project_name": project_name,
+                                "project_id": existing_project.project_id,
+                                "source": "postgresql_registry"
+                            }
+                        },
+                    )
+                    config["project"]["id"] = existing_project.project_id
+                    write_config(config_path, config)
+
+                logger.info(
+                    f"Reusing existing project from PostgreSQL: {project_name}",
+                    extra={
+                        "context": {
+                            "operation": "get_or_create_project",
+                            "project_id": existing_project.project_id,
+                            "database_name": existing_project.database_name,
+                        }
+                    },
+                )
+                return existing_project
+    except Exception as e:
+        # Don't fail if PostgreSQL check fails - continue to create new project
+        logger.debug(
+            f"PostgreSQL registry check failed (continuing): {e}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "project_name": project_name,
+                    "error": str(e),
+                }
+            },
+        )
 
     # Step 4: Create new project
     if not project_id:
