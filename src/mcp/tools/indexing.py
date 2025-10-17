@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import Context
-from pydantic import ValidationError
 
 from src.connection_pool.exceptions import (
     ConnectionValidationError,
@@ -29,7 +28,6 @@ from src.database.session import get_session, resolve_project_id
 from src.mcp.errors import MCPError
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import get_pool_manager, mcp
-from src.models.project_identifier import ProjectIdentifier
 from src.services.indexer import IndexResult
 from src.services.indexer import index_repository as index_repository_service
 
@@ -78,8 +76,8 @@ async def index_repository(
             "files_indexed": 1234,
             "chunks_created": 5678,
             "duration_seconds": 45.2,
-            "project_id": "client-a" or None,
-            "schema_name": "project_client_a" or "project_default",
+            "project_id": "client-a" or "default",
+            "database_name": "cb_proj_client_a_abc123de" or "cb_proj_default_00000000",
             "status": "success",  # or "partial", "failed"
             "errors": []  # List of error messages if any
         }
@@ -114,49 +112,20 @@ async def index_repository(
     if ctx:
         await ctx.info(f"Indexing repository: {repo_path}")
 
-    # 1. Resolve project_id (with 4-tier resolution chain)
-    resolved_id = await resolve_project_id(explicit_id=project_id, ctx=ctx)
+    # 1. Resolve project_id and database_name (with 4-tier resolution chain)
+    resolved_id, database_name = await resolve_project_id(explicit_id=project_id, ctx=ctx)
 
-    # 2. Validate project_id format if provided
-    schema_name: str
-    if resolved_id is not None:
-        try:
-            identifier = ProjectIdentifier(value=resolved_id)
-            schema_name = identifier.to_schema_name()
-            logger.debug(
-                "Using project workspace",
-                extra={
-                    "context": {
-                        "operation": "index_repository",
-                        "project_id": resolved_id,
-                        "schema_name": schema_name,
-                    }
-                },
-            )
-        except ValidationError as e:
-            error_msg = f"Invalid project_id format: {e}"
-            logger.error(
-                "Project identifier validation failed",
-                extra={
-                    "context": {
-                        "operation": "index_repository",
-                        "project_id": resolved_id,
-                        "error": str(e),
-                    }
-                },
-            )
-            raise ValueError(error_msg) from e
-    else:
-        schema_name = "project_default"
-        logger.debug(
-            "Using default workspace",
-            extra={
-                "context": {
-                    "operation": "index_repository",
-                    "schema_name": schema_name,
-                }
-            },
-        )
+    # 2. Log resolved project context
+    logger.debug(
+        "Using project workspace",
+        extra={
+            "context": {
+                "operation": "index_repository",
+                "project_id": resolved_id,
+                "database_name": database_name,
+            }
+        },
+    )
 
     # Derive name from directory name
     path_obj = Path(repo_path)
@@ -171,7 +140,7 @@ async def index_repository(
                 "name": name,
                 "force_reindex": force_reindex,
                 "project_id": resolved_id,
-                "schema_name": schema_name,
+                "database_name": database_name,
             }
         },
     )
@@ -210,6 +179,7 @@ async def index_repository(
                 repo_path=path_obj,
                 name=name,
                 db=db,
+                project_id=resolved_id,
                 force_reindex=force_reindex,
             )
             # Note: get_session auto-commits on success, no manual commit needed
@@ -364,7 +334,7 @@ async def index_repository(
         "chunks_created": result.chunks_created,
         "duration_seconds": result.duration_seconds,
         "project_id": resolved_id,
-        "schema_name": schema_name,
+        "database_name": database_name,
         "status": result.status,
     }
 
@@ -381,7 +351,7 @@ async def index_repository(
                 "chunks_created": result.chunks_created,
                 "duration_seconds": result.duration_seconds,
                 "project_id": resolved_id,
-                "schema_name": schema_name,
+                "database_name": database_name,
                 "status": result.status,
                 "error_count": len(result.errors),
             }

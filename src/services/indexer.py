@@ -382,10 +382,10 @@ async def _create_change_events(
 
         if code_file is not None:
             event = ChangeEvent(
-                code_file_id=code_file.id,
-                event_type="added",
+                repository_id=repository_id,
+                file_path=relative_path,
+                change_type="added",
                 detected_at=datetime.utcnow(),
-                processed=True,  # Already processed by indexer
             )
             db.add(event)
             events_created += 1
@@ -404,10 +404,10 @@ async def _create_change_events(
 
         if code_file is not None:
             event = ChangeEvent(
-                code_file_id=code_file.id,
-                event_type="modified",
+                repository_id=repository_id,
+                file_path=relative_path,
+                change_type="modified",
                 detected_at=datetime.utcnow(),
-                processed=True,
             )
             db.add(event)
             events_created += 1
@@ -425,10 +425,10 @@ async def _create_change_events(
 
         if code_file is not None:
             event = ChangeEvent(
-                code_file_id=code_file.id,
-                event_type="deleted",
+                repository_id=repository_id,
+                file_path=code_file.relative_path,
+                change_type="deleted",
                 detected_at=datetime.utcnow(),
-                processed=True,
             )
             db.add(event)
             events_created += 1
@@ -492,6 +492,7 @@ async def index_repository(
     repo_path: Path,
     name: str,
     db: AsyncSession,
+    project_id: str,
     force_reindex: bool = False,
 ) -> IndexResult:
     """Index or re-index a repository.
@@ -510,6 +511,7 @@ async def index_repository(
         repo_path: Absolute path to repository
         name: Repository display name
         db: Async database session
+        project_id: Project workspace identifier
         force_reindex: If True, reindex all files (default: False)
 
     Returns:
@@ -719,7 +721,10 @@ async def index_repository(
 
             # Chunk files
             try:
-                chunk_files_input = list(zip(file_batch, file_contents, file_ids))
+                # Add project_id to each tuple for chunker
+                chunk_files_input = list(
+                    zip(file_batch, file_contents, file_ids, [project_id] * len(file_ids))
+                )
                 chunk_lists = await chunk_files_batch(chunk_files_input)
             except Exception as e:
                 error_msg = f"Failed to chunk files: {e}"
@@ -735,6 +740,7 @@ async def index_repository(
                 for chunk_create in chunk_list:
                     chunk = CodeChunk(
                         code_file_id=chunk_create.code_file_id,
+                        project_id=chunk_create.project_id,
                         content=chunk_create.content,
                         start_line=chunk_create.start_line,
                         end_line=chunk_create.end_line,
@@ -900,7 +906,9 @@ async def index_repository(
         )
 
 
-async def incremental_update(repository_id: UUID, db: AsyncSession) -> IndexResult:
+async def incremental_update(
+    repository_id: UUID, db: AsyncSession, project_id: str
+) -> IndexResult:
     """Perform incremental update for modified files.
 
     Detects changes since last indexing and only reindexes modified files.
@@ -909,6 +917,7 @@ async def incremental_update(repository_id: UUID, db: AsyncSession) -> IndexResu
     Args:
         repository_id: UUID of repository to update
         db: Async database session
+        project_id: Project workspace identifier
 
     Returns:
         IndexResult with summary statistics
@@ -944,6 +953,7 @@ async def incremental_update(repository_id: UUID, db: AsyncSession) -> IndexResu
         repo_path=repo_path,
         name=repository.name,
         db=db,
+        project_id=project_id,
         force_reindex=False,
     )
 

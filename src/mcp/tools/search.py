@@ -30,7 +30,6 @@ from src.database.session import get_session, resolve_project_id
 from src.mcp.errors import MCPError
 from src.mcp.mcp_logging import get_logger
 from src.mcp.server_fastmcp import get_pool_manager, mcp
-from src.models.project_identifier import ProjectIdentifier
 from src.services import SearchFilter, SearchResult
 from src.services.searcher import search_code as search_code_service
 
@@ -98,8 +97,8 @@ async def search_code(
                 }
             ],
             "total_count": 42,
-            "project_id": "client-a" or None,
-            "schema_name": "project_client_a" or "project_default",
+            "project_id": "client-a" or "default",
+            "database_name": "cb_proj_client_a_abc123de" or "cb_proj_default_00000000",
             "latency_ms": 250
         }
 
@@ -130,8 +129,8 @@ async def search_code(
     """
     start_time = time.perf_counter()
 
-    # Resolve project_id with workflow-mcp fallback (4-tier chain)
-    resolved_project_id = await resolve_project_id(explicit_id=project_id, ctx=ctx)
+    # Resolve project_id and database_name with workflow-mcp fallback (4-tier chain)
+    resolved_project_id, database_name = await resolve_project_id(explicit_id=project_id, ctx=ctx)
 
     # Dual logging: Context logging for MCP client + file logging for server
     if ctx:
@@ -143,6 +142,7 @@ async def search_code(
             "context": {
                 "query": query[:100],  # Truncate for logging
                 "project_id": resolved_project_id,
+                "database_name": database_name,
                 "repository_id": repository_id,
                 "file_type": file_type,
                 "directory": directory,
@@ -160,17 +160,6 @@ async def search_code(
         # Validate limit
         if limit < 1 or limit > 50:
             raise ValueError(f"Limit must be between 1 and 50, got {limit}")
-
-        # Validate project_id format if provided
-        schema_name: str
-        if resolved_project_id is not None:
-            try:
-                identifier = ProjectIdentifier(value=resolved_project_id)
-                schema_name = identifier.to_schema_name()
-            except PydanticValidationError as e:
-                raise ValueError(f"Invalid project_id: {e}") from e
-        else:
-            schema_name = "project_default"
 
         # Validate repository_id format (UUID)
         repo_uuid: UUID | None = None
@@ -376,7 +365,7 @@ async def search_code(
         ],
         "total_count": len(results),
         "project_id": resolved_project_id,
-        "schema_name": schema_name,
+        "database_name": database_name,
         "latency_ms": latency_ms,
     }
 
@@ -386,7 +375,7 @@ async def search_code(
             "context": {
                 "query": query[:100],
                 "project_id": resolved_project_id,
-                "schema_name": schema_name,
+                "database_name": database_name,
                 "results_count": len(results),
                 "latency_ms": latency_ms,
             }
