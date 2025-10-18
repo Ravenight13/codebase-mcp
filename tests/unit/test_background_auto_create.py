@@ -67,9 +67,11 @@ async def test_config_path_capture_success(tmp_path, mock_ctx):
 
     # Setup: Mock background worker to capture arguments
     captured_args = {}
+    worker_called = asyncio.Event()
 
     async def capture_worker_args(**kwargs):
         captured_args.update(kwargs)
+        worker_called.set()
         # Don't actually run worker
         return None
 
@@ -83,6 +85,9 @@ async def test_config_path_capture_success(tmp_path, mock_ctx):
                 project_id=None,
                 ctx=mock_ctx,
             )
+
+            # Wait for background task to start
+            await asyncio.wait_for(worker_called.wait(), timeout=2.0)
 
     # Assert: config_path was captured and passed to worker
     assert "config_path" in captured_args, "Worker should receive config_path parameter"

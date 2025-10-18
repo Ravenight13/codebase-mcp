@@ -84,7 +84,7 @@ async def _background_indexing_worker(
     job_id: UUID,
     repo_path: str,
     project_id: str,
-    ctx: Context | None = None,
+    config_path: Path | None = None,
 ) -> None:
     """Background worker that executes indexing and updates PostgreSQL.
 
@@ -95,7 +95,14 @@ async def _background_indexing_worker(
         job_id: UUID of indexing_jobs row
         repo_path: Absolute path to repository
         project_id: Resolved project identifier
-        ctx: Optional FastMCP Context for session resolution
+        config_path: Optional path to .codebase-mcp/config.json for auto-creation
+                     If provided, worker will attempt to auto-create project database.
+                     If None, worker uses existing database or default database.
+
+    Bug Fix:
+        Resolves Bug 2 - Background indexing auto-creation failure.
+        Previously passed FastMCP Context which becomes stale in background task.
+        Now captures config path in foreground (while ctx valid) and passes path.
 
     State Transitions:
         1. Update status: pending → running (with started_at timestamp)
@@ -123,8 +130,18 @@ async def _background_indexing_worker(
             started_at=datetime.now(),
         )
 
+        # 1.5. Auto-create project database if config provided (Bug 2 fix)
+        if config_path:
+            try:
+                from src.database.auto_create import get_or_create_project_from_config
+                await get_or_create_project_from_config(config_path)
+                logger.debug(f"Auto-created/verified database from {config_path}")
+            except Exception as e:
+                logger.warning(f"Auto-creation failed: {e}, attempting indexing anyway")
+                # Continue - database might exist, or get_session will fail below
+
         # 2. Run existing indexer (NO MODIFICATIONS to indexer.py!)
-        async with get_session(project_id=project_id, ctx=ctx) as session:
+        async with get_session(project_id=project_id, ctx=None) as session:
             result = await index_repository(
                 repo_path=Path(repo_path),
                 name=Path(repo_path).name,
