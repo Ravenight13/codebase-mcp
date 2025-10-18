@@ -132,7 +132,31 @@ async def _background_indexing_worker(
                 project_id=project_id,
             )
 
-        # 3. Check if indexing succeeded (files_indexed > 0 or path exists check)
+        # 3. Check if indexing succeeded by inspecting result.status
+        if result.status == "failed":
+            # Indexer reported failure - extract error message
+            error_message = result.errors[0] if result.errors else "Unknown indexing error"
+
+            logger.error(
+                f"Indexing failed for job {job_id}",
+                extra={
+                    "context": {
+                        "job_id": str(job_id),
+                        "error": error_message,
+                        "errors_count": len(result.errors),
+                    }
+                },
+            )
+
+            await update_job(
+                job_id=job_id,
+                status="failed",
+                error_message=error_message,
+                completed_at=datetime.now(),
+            )
+            return  # Exit early - do not proceed to "completed" update
+
+        # 4. Path validation (defensive checks - should never fail after successful indexing)
         repo_path_obj = Path(repo_path)
         if not repo_path_obj.exists():
             # Path doesn't exist - mark as failed
@@ -142,7 +166,7 @@ async def _background_indexing_worker(
             # Path is not a directory - mark as failed
             raise NotADirectoryError(f"Repository path is not a directory: {repo_path}")
 
-        # 4. Update to completed with results
+        # 5. Update to completed with results (only reached if result.status != "failed")
         await update_job(
             job_id=job_id,
             status="completed",
