@@ -192,6 +192,54 @@ async def index_repository(
                     f"{result.duration_seconds:.1f}s"
                 )
 
+        # Format response according to MCP contract
+        response: dict[str, Any] = {
+            "repository_id": str(result.repository_id),
+            "files_indexed": result.files_indexed,
+            "chunks_created": result.chunks_created,
+            "duration_seconds": result.duration_seconds,
+            "project_id": resolved_id,
+            "database_name": database_name,
+            "status": result.status,
+        }
+
+        # Include errors if any
+        if result.errors:
+            response["errors"] = result.errors
+
+        logger.info(
+            "index_repository completed",
+            extra={
+                "context": {
+                    "repository_id": str(result.repository_id),
+                    "files_indexed": result.files_indexed,
+                    "chunks_created": result.chunks_created,
+                    "duration_seconds": result.duration_seconds,
+                    "project_id": resolved_id,
+                    "database_name": database_name,
+                    "status": result.status,
+                    "error_count": len(result.errors),
+                }
+            },
+        )
+
+        # Performance warning if exceeds target (60s for 10K files)
+        # Extrapolate target based on actual file count
+        target_seconds = (result.files_indexed / 10000) * 60
+        if result.duration_seconds > target_seconds and result.files_indexed > 100:
+            logger.warning(
+                "index_repository duration exceeded target",
+                extra={
+                    "context": {
+                        "duration_seconds": result.duration_seconds,
+                        "target_seconds": target_seconds,
+                        "files_indexed": result.files_indexed,
+                    }
+                },
+            )
+
+        return response
+
     except PoolTimeoutError as e:
         # Connection pool timeout - provide actionable error with pool statistics
         try:
@@ -326,54 +374,6 @@ async def index_repository(
         if ctx:
             await ctx.error(f"Indexing failed: {str(e)[:100]}")
         raise RuntimeError(f"Failed to index repository: {e}") from e
-
-    # Format response according to MCP contract
-    response: dict[str, Any] = {
-        "repository_id": str(result.repository_id),
-        "files_indexed": result.files_indexed,
-        "chunks_created": result.chunks_created,
-        "duration_seconds": result.duration_seconds,
-        "project_id": resolved_id,
-        "database_name": database_name,
-        "status": result.status,
-    }
-
-    # Include errors if any
-    if result.errors:
-        response["errors"] = result.errors
-
-    logger.info(
-        "index_repository completed",
-        extra={
-            "context": {
-                "repository_id": str(result.repository_id),
-                "files_indexed": result.files_indexed,
-                "chunks_created": result.chunks_created,
-                "duration_seconds": result.duration_seconds,
-                "project_id": resolved_id,
-                "database_name": database_name,
-                "status": result.status,
-                "error_count": len(result.errors),
-            }
-        },
-    )
-
-    # Performance warning if exceeds target (60s for 10K files)
-    # Extrapolate target based on actual file count
-    target_seconds = (result.files_indexed / 10000) * 60
-    if result.duration_seconds > target_seconds and result.files_indexed > 100:
-        logger.warning(
-            "index_repository duration exceeded target",
-            extra={
-                "context": {
-                    "duration_seconds": result.duration_seconds,
-                    "target_seconds": target_seconds,
-                    "files_indexed": result.files_indexed,
-                }
-            },
-        )
-
-    return response
 
 
 # ==============================================================================
