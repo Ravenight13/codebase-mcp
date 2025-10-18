@@ -457,8 +457,23 @@ async def get_or_create_project_from_config(
     try:
         from src.database.session import _initialize_registry_pool
 
+        logger.debug(
+            f"Attempting registry sync for {project_id}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "project_id": project_id,
+                    "project_name": project_name,
+                    "database_name": database_name,
+                    "sync_step": "before_insert",
+                }
+            },
+        )
+
         registry_pool = await _initialize_registry_pool()
         async with registry_pool.acquire() as conn:
+            # AsyncPG connections from pool auto-commit statements outside transactions
+            # No explicit transaction needed for single INSERT with ON CONFLICT
             await conn.execute(
                 """
                 INSERT INTO projects (id, name, description, database_name, created_at, updated_at, metadata)
@@ -471,6 +486,19 @@ async def get_or_create_project_from_config(
                 database_name,
                 json.dumps({}),  # metadata as JSON string
             )
+
+        logger.debug(
+            f"✓ Registry sync successful for {project_id}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "project_id": project_id,
+                    "database_name": database_name,
+                    "sync_step": "after_insert",
+                }
+            },
+        )
+
         logger.info(
             f"Synced project to persistent registry: {project_name}",
             extra={
@@ -491,9 +519,13 @@ async def get_or_create_project_from_config(
                 "context": {
                     "operation": "get_or_create_project",
                     "project_id": project_id,
+                    "project_name": project_name,
+                    "database_name": database_name,
                     "error": str(e),
+                    "error_type": type(e).__name__,
                 }
             },
+            exc_info=True,  # Include full stack trace
         )
 
     # Step 5: Update config with project.id
