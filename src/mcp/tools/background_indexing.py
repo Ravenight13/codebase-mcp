@@ -87,6 +87,21 @@ async def start_indexing_background(
         ctx=ctx,
     )
 
+    # Bug 2 Fix: Capture config path while ctx is valid (before background task)
+    # FastMCP Context objects are request-scoped and become stale in background workers.
+    # We capture the config file path here (while ctx is valid) and pass it to the worker.
+    config_path: Path | None = None
+    if ctx:
+        try:
+            from src.auto_switch.discovery import find_config_file
+            from src.auto_switch.session_context import get_session_context_manager
+
+            working_dir = await get_session_context_manager().get_working_directory(ctx.session_id)
+            if working_dir:
+                config_path = find_config_file(Path(working_dir))
+        except Exception:
+            pass  # Fallback to config_path=None
+
     # Validate input (includes path traversal check)
     # This will raise ValueError if validation fails
     job_input = IndexingJobCreate(
@@ -113,7 +128,7 @@ async def start_indexing_background(
             job_id=job_id,
             repo_path=job_input.repo_path,
             project_id=resolved_id,
-            ctx=ctx,
+            config_path=config_path,  # Pass config path, not ctx (Bug 2 fix)
         )
     )
 
