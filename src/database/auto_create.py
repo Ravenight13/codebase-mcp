@@ -346,11 +346,49 @@ async def get_or_create_project_from_config(
                 )
 
             if row:
-                # Found in PostgreSQL - add to in-memory registry and return
+                # Found in PostgreSQL registry
+                database_name = row['database_name']
+
+                # Verify database actually exists
+                db_exists = await conn.fetchval(
+                    "SELECT 1 FROM pg_database WHERE datname = $1",
+                    database_name
+                )
+
+                if not db_exists:
+                    # Database missing - provision it now
+                    logger.warning(
+                        f"Database {database_name} missing for project {row['name']}, provisioning...",
+                        extra={
+                            "context": {
+                                "operation": "get_or_create_project",
+                                "project_id": row['id'],
+                                "project_name": row['name'],
+                                "database_name": database_name,
+                                "recovery": "auto_provision"
+                            }
+                        }
+                    )
+
+                    # Extract project name and ID from row, then provision database
+                    await create_project_database(row['name'], row['id'])
+
+                    logger.info(
+                        f"✓ Database provisioned: {database_name}",
+                        extra={
+                            "context": {
+                                "operation": "get_or_create_project",
+                                "database_name": database_name,
+                                "recovery": "completed"
+                            }
+                        }
+                    )
+
+                # Now safe to return the project
                 existing_project = Project(
                     project_id=row['id'],
                     name=row['name'],
-                    database_name=row['database_name'],
+                    database_name=database_name,
                     description=row['description'] or ""
                 )
                 registry.add(existing_project)
