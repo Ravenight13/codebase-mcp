@@ -69,6 +69,7 @@ class IndexingJob(Base):
         String(20), nullable=False, default="pending"
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Indexing metrics
     files_indexed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -167,6 +168,7 @@ class IndexingJobResponse(BaseModel):
     repo_path: str = Field(description="Repository path being indexed")
     project_id: str = Field(description="Project workspace identifier")
     error_message: str | None = Field(None, description="Error message if failed")
+    status_message: str | None = Field(None, description="Human-readable status message")
     files_indexed: int = Field(0, description="Number of files processed")
     chunks_created: int = Field(0, description="Number of code chunks created")
     started_at: datetime | None = Field(None, description="Job start timestamp")
