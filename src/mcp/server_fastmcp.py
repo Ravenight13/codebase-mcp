@@ -363,7 +363,6 @@ def main() -> None:
         # List expected tools and resources for diagnostics
         expected_tools = [
             "get_indexing_status",
-            "index_repository",
             "search_code",
             "start_indexing_background",
         ]
