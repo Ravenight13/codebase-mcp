@@ -37,9 +37,12 @@ from uuid import UUID
 from fastmcp import Context
 
 from src.database.session import get_session, engine
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.mcp.mcp_logging import get_logger
 from src.models.indexing_job import IndexingJob
+from src.models.code_file import CodeFile
+from src.models.repository import Repository
 from src.services.indexer import index_repository
 
 logger = get_logger(__name__)
@@ -183,12 +186,38 @@ async def _background_indexing_worker(
             # Path is not a directory - mark as failed
             raise NotADirectoryError(f"Repository path is not a directory: {repo_path}")
 
-        # 5. Update to completed with results (only reached if result.status != "failed")
+        # 5. Determine indexing scenario and set appropriate status message
+        status_message = ""
+
+        # Query database to determine if this was incremental or full index
+        async with AsyncSession(engine) as session:
+            # Count total non-deleted files in database for this repository
+            count_result = await session.execute(
+                select(func.count(CodeFile.id)).where(
+                    CodeFile.repository_id == result.repository_id,
+                    CodeFile.is_deleted == False  # noqa: E712
+                )
+            )
+            total_files_in_db = count_result.scalar() or 0
+
+            # Determine scenario based on files_indexed count and total files
+            if result.files_indexed == 0:
+                # No changes detected (incremental with no modifications)
+                status_message = f"Repository up to date - no file changes detected since last index ({total_files_in_db} files already indexed)"
+            elif total_files_in_db == result.files_indexed:
+                # Full index of new repository (all files in DB equal files just indexed)
+                status_message = f"Full repository index completed: {result.files_indexed} files, {result.chunks_created} chunks"
+            else:
+                # Incremental update - some files changed
+                status_message = f"Incremental update completed: {result.files_indexed} files updated"
+
+        # 6. Update to completed with results and status message
         await update_job(
             job_id=job_id,
             status="completed",
             files_indexed=result.files_indexed,
             chunks_created=result.chunks_created,
+            status_message=status_message,
             completed_at=datetime.now(),
         )
 
@@ -199,6 +228,7 @@ async def _background_indexing_worker(
                     "job_id": str(job_id),
                     "files_indexed": result.files_indexed,
                     "chunks_created": result.chunks_created,
+                    "status_message": status_message,
                 }
             },
         )
