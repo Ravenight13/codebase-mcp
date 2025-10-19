@@ -339,7 +339,6 @@ def main() -> None:
     try:
         logger.info("Importing tool modules...")
         import src.mcp.tools.background_indexing  # noqa: F401
-        import src.mcp.tools.indexing  # noqa: F401
         import src.mcp.tools.project  # noqa: F401
         import src.mcp.tools.search  # noqa: F401
         logger.info("✓ Tool modules imported successfully")
