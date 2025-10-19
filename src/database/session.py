@@ -62,9 +62,11 @@ from src.database.provisioning import create_pool
 logger = get_logger(__name__)
 
 # Registry database URL from environment with secure default
+# Note: REGISTRY_DATABASE_URL should NEVER fall back to DATABASE_URL since they serve different purposes
+# DATABASE_URL is for legacy single-database mode, REGISTRY_DATABASE_URL is for project metadata
 REGISTRY_DATABASE_URL: str = os.getenv(
     "REGISTRY_DATABASE_URL",
-    os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/codebase_mcp_registry")
+    "postgresql+asyncpg://localhost/codebase_mcp_registry"
 )
 
 # SQL echo mode for debugging (disabled in production for performance)
