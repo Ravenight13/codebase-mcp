@@ -179,14 +179,16 @@ Development consists of:
 
 ## Background Indexing
 
-Large repositories (10,000+ files) require 5-10 minutes to index. Use background indexing for these repositories to avoid MCP client timeouts.
+**Note**: Foreground `index_repository` tool has been removed. All repository indexing now uses background jobs to prevent MCP client timeouts, regardless of repository size.
 
 ### Usage Pattern: Start and Poll
 
+All indexing operations follow this pattern:
+
 ```python
-# Start indexing
+# Start background indexing job
 result = await start_indexing_background(
-    repo_path="/path/to/large/repo",
+    repo_path="/path/to/repo",
     ctx=ctx
 )
 job_id = result["job_id"]
@@ -198,16 +200,12 @@ while True:
         break
     await asyncio.sleep(2)
 
+# Check result
 if status["status"] == "completed":
-    print(f"✅ Indexed {status['files_indexed']} files!")
+    print(f"✅ Indexed {status['files_indexed']} files, {status['chunks_created']} chunks")
 else:
     print(f"❌ Indexing failed: {status['error_message']}")
 ```
-
-### When to Use
-
-- **Foreground** (`index_repository`): Repositories <5,000 files (completes in <60s)
-- **Background** (`start_indexing_background`): Repositories 10,000+ files (requires 5-10 minutes)
 
 ### MCP Tools Available
 
@@ -220,6 +218,12 @@ else:
 - `running` - Worker actively indexing repository
 - `completed` - Indexing finished successfully
 - `failed` - Indexing encountered an error (see `error_message`)
+
+### Performance Targets
+
+- Small repositories (<5,000 files): Completes in <60 seconds
+- Large repositories (10,000+ files): May require 5-10 minutes
+- Constitutional target: <60s for 10,000 files (Principle IV)
 
 ## Running Database Migrations
 
