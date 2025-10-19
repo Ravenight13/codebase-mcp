@@ -150,6 +150,23 @@ class ProjectRegistry:
             },
         )
 
+    def remove(self, project: Project) -> None:
+        """Remove a project from the in-memory registry.
+
+        Args:
+            project: ProjectInfo to remove
+
+        Example:
+            >>> registry.remove(old_project)
+        """
+        normalized_id = project.project_id.replace("-", "").lower()
+        if normalized_id in self._projects_by_id:
+            del self._projects_by_id[normalized_id]
+            logger.debug(f"Removed project from in-memory registry: {project.project_id}")
+        if project.name in self._projects_by_name:
+            del self._projects_by_name[project.name]
+            logger.debug(f"Removed project name from in-memory registry: {project.name}")
+
 
 # Singleton registry instance
 _registry_instance: ProjectRegistry | None = None
@@ -281,6 +298,19 @@ async def get_or_create_project_from_config(
     project_id = config["project"].get("id")  # Optional
     database_name_override = config["project"].get("database_name")  # Optional
 
+    # Validate project_id is a valid UUID if provided
+    if project_id:
+        try:
+            from uuid import UUID
+            UUID(project_id)  # Will raise ValueError if invalid
+        except ValueError:
+            raise ValueError(
+                f"Invalid project.id in config: '{project_id}'. "
+                f"project.id must be a valid UUID (e.g., 'aabbccdd-eeff-0011-2233-445566778899'), "
+                f"not a human-readable string. "
+                f"Config file: {config_path}"
+            )
+
     # Validate database_name format if provided
     if database_name_override:
         if not database_name_override.startswith("cb_proj_"):
@@ -320,8 +350,40 @@ async def get_or_create_project_from_config(
     # Step 3: Lookup by name (in-memory registry)
     existing = registry.get_by_name(project_name)
     if existing:
+        # ✅ FIX 4: Handle project ID change in config
+        if project_id and existing.project_id != project_id:
+            logger.warning(f"Config changed project ID: {existing.project_id} → {project_id}")
+
+            # Remove from in-memory registry
+            registry.remove(existing)
+
+            # ✅ FIX 4 ENHANCEMENT: Also remove from PostgreSQL registry
+            try:
+                from src.database.session import _initialize_registry_pool
+
+                registry_pool = await _initialize_registry_pool()
+                async with registry_pool.acquire() as conn:
+                    await conn.execute(
+                        "DELETE FROM projects WHERE id = $1",
+                        existing.project_id
+                    )
+
+                logger.info(f"Removed old project {existing.project_id} from all registries")
+            except Exception as e:
+                # Don't fail if PostgreSQL cleanup fails
+                logger.warning(
+                    f"Failed to remove old project from PostgreSQL registry (continuing): {e}",
+                    extra={
+                        "context": {
+                            "operation": "get_or_create_project",
+                            "old_project_id": existing.project_id,
+                            "new_project_id": project_id,
+                            "error": str(e),
+                        }
+                    },
+                )
         # Update config with project.id if missing
-        if not project_id:
+        elif not project_id:
             logger.info(
                 f"Updating config with project ID: {existing.project_id}",
                 extra={
@@ -335,7 +397,10 @@ async def get_or_create_project_from_config(
             config["project"]["id"] = existing.project_id
             write_config(config_path, config)
 
-        return existing
+            return existing
+        else:
+            # Project ID matches, return existing
+            return existing
 
     # Step 3.5: Check PostgreSQL registry (for server restart scenarios)
     try:
@@ -359,11 +424,25 @@ async def get_or_create_project_from_config(
                 # Found in PostgreSQL registry
                 # Respect config's database_name override if present (takes precedence over registry)
                 if database_name_override:
-                    database_name = database_name_override
-                    logger.info(
-                        f"Using database_name from config (overriding registry): {database_name}",
-                        extra={"context": {"operation": "get_or_create_project", "source": "config_override", "registry_database_name": row['database_name']}}
-                    )
+                    if database_name_override != row['database_name']:
+                        # Override differs from registry - sync registry to match config
+                        logger.info(
+                            f"Config database_name override differs from registry, syncing: "
+                            f"{row['database_name']} → {database_name_override}",
+                            extra={"context": {"project_id": row['id'], "source": "config_override"}}
+                        )
+
+                        # Sync PostgreSQL registry
+                        await conn.execute(
+                            "UPDATE projects SET database_name = $1, updated_at = NOW() WHERE id = $2",
+                            database_name_override,
+                            row['id']
+                        )
+
+                        database_name = database_name_override
+                    else:
+                        database_name = database_name_override
+                        logger.debug(f"Config database_name matches registry: {database_name}")
                 else:
                     database_name = row['database_name']
 
@@ -391,8 +470,23 @@ async def get_or_create_project_from_config(
                     # Extract project name and ID from row, then provision database
                     await create_project_database(row['name'], row['id'])
 
+                    # ✅ FIX 3: Validate database actually exists after provisioning
+                    db_exists_after_provision = await conn.fetchval(
+                        "SELECT 1 FROM pg_database WHERE datname = $1",
+                        database_name
+                    )
+                    if not db_exists_after_provision:
+                        logger.error(
+                            f"Database provisioning claimed success but database not found: {database_name}",
+                            extra={"context": {"project_id": row['id'], "database_name": database_name}}
+                        )
+                        raise RuntimeError(
+                            f"Database {database_name} not found after provisioning. "
+                            f"Check PostgreSQL logs for CREATE DATABASE errors."
+                        )
+
                     logger.info(
-                        f"✓ Database provisioned: {database_name}",
+                        f"✓ Database validated and provisioned: {database_name}",
                         extra={
                             "context": {
                                 "operation": "get_or_create_project",
@@ -510,6 +604,28 @@ async def get_or_create_project_from_config(
     # Create database and initialize schema
     try:
         await create_project_database(project_name, project_id, database_name=database_name)
+
+        # ✅ FIX 3: Validate database actually exists after provisioning
+        from src.database.session import _initialize_registry_pool
+
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            db_exists_after_provision = await conn.fetchval(
+                "SELECT 1 FROM pg_database WHERE datname = $1",
+                database_name
+            )
+            if not db_exists_after_provision:
+                logger.error(
+                    f"Database provisioning claimed success but database not found: {database_name}",
+                    extra={"context": {"project_id": project_id, "database_name": database_name}}
+                )
+                raise RuntimeError(
+                    f"Database {database_name} not found after provisioning. "
+                    f"Check PostgreSQL logs for CREATE DATABASE errors."
+                )
+
+        logger.info(f"✓ Database validated: {database_name}")
+
     except Exception as e:
         logger.error(
             f"Failed to create project database: {database_name}",
