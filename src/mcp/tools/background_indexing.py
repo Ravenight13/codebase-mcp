@@ -44,6 +44,7 @@ logger = get_logger(__name__)
 async def start_indexing_background(
     repo_path: str,
     project_id: str | None = None,
+    force_reindex: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Start repository indexing in the background (non-blocking).
@@ -53,6 +54,7 @@ async def start_indexing_background(
     Args:
         repo_path: Absolute path to repository (validated for path traversal)
         project_id: Optional project identifier (resolved via 4-tier chain)
+        force_reindex: If True, re-index all files regardless of changes (default: False)
         ctx: FastMCP Context for session-based project resolution
 
     Returns:
@@ -60,6 +62,7 @@ async def start_indexing_background(
             "job_id": "uuid",
             "status": "pending",
             "message": "Indexing job started",
+            "force_reindex": false,
             "project_id": "resolved_project_id",
             "database_name": "cb_proj_xxx"
         }
@@ -72,7 +75,7 @@ async def start_indexing_background(
         - Principle V: Production Quality (path validation, error handling)
         - Principle XI: FastMCP Foundation (@mcp.tool() decorator)
 
-    Example:
+    Example (incremental indexing):
         >>> result = await start_indexing_background(
         ...     repo_path="/Users/alice/projects/myapp",
         ...     ctx=ctx
@@ -80,12 +83,48 @@ async def start_indexing_background(
         >>> job_id = result["job_id"]
         >>> # Poll status:
         >>> status = await get_indexing_status(job_id=job_id)
+
+    Example (force re-index all files):
+        >>> result = await start_indexing_background(
+        ...     repo_path="/Users/alice/projects/myapp",
+        ...     force_reindex=True,
+        ...     ctx=ctx
+        ... )
+        >>> # Use when: embedding model changed, suspected corruption,
+        >>> # chunking strategy updated, or after database migration
+
+    Use Cases for force_reindex=True:
+        - Changed embedding model (old embeddings incompatible)
+        - Suspect index corruption (rebuild from scratch)
+        - Updated chunking strategy (re-chunk all files)
+        - After database migration (ensure schema compatibility)
+        - Performance testing (reproducible full-index benchmarks)
+
+    Note:
+        Force re-index is significantly slower than incremental indexing.
+        For large repositories (1,000+ files), expect 5-20 minutes.
+        Only use when necessary.
     """
     # Resolve project_id via 4-tier chain
     resolved_id, database_name = await resolve_project_id(
         explicit_id=project_id,
         ctx=ctx,
     )
+
+    # Bug 2 Fix: Capture config path while ctx is valid (before background task)
+    # FastMCP Context objects are request-scoped and become stale in background workers.
+    # We capture the config file path here (while ctx is valid) and pass it to the worker.
+    config_path: Path | None = None
+    if ctx:
+        try:
+            from src.auto_switch.discovery import find_config_file
+            from src.auto_switch.session_context import get_session_context_manager
+
+            working_dir = await get_session_context_manager().get_working_directory(ctx.session_id)
+            if working_dir:
+                config_path = find_config_file(Path(working_dir))
+        except Exception:
+            pass  # Fallback to config_path=None
 
     # Validate input (includes path traversal check)
     # This will raise ValueError if validation fails
@@ -101,6 +140,7 @@ async def start_indexing_background(
             repo_path=job_input.repo_path,
             project_id=resolved_id,
             status="pending",
+            force_reindex=force_reindex,
         )
         session.add(job)
         await session.commit()
@@ -113,7 +153,8 @@ async def start_indexing_background(
             job_id=job_id,
             repo_path=job_input.repo_path,
             project_id=resolved_id,
-            ctx=ctx,
+            config_path=config_path,  # Pass config path, not ctx (Bug 2 fix)
+            force_reindex=force_reindex,
         )
     )
 
@@ -135,6 +176,7 @@ async def start_indexing_background(
         "job_id": str(job_id),
         "status": "pending",
         "message": "Indexing job started",
+        "force_reindex": force_reindex,
         "project_id": resolved_id,
         "database_name": database_name,
     }
@@ -159,9 +201,11 @@ async def get_indexing_status(
         {
             "job_id": "uuid",
             "status": "running",  # pending/running/completed/failed
+            "status_message": "Indexing in progress: 2500 files processed",
             "repo_path": "/path/to/repo",
             "files_indexed": 5000,
             "chunks_created": 45000,
+            "force_reindex": false,
             "error_message": null,
             "created_at": "2025-10-17T10:30:00Z",
             "started_at": "2025-10-17T10:30:01Z",
@@ -180,6 +224,8 @@ async def get_indexing_status(
         >>> status = await get_indexing_status(job_id="550e8400-...")
         >>> if status["status"] == "completed":
         ...     print(f"Indexed {status['files_indexed']} files!")
+        >>> if status["force_reindex"]:
+        ...     print("This was a forced full re-index")
     """
     # Resolve project_id
     resolved_id, _ = await resolve_project_id(
@@ -225,10 +271,12 @@ async def get_indexing_status(
         return {
             "job_id": str(job.id),
             "status": job.status,
+            "status_message": job.status_message,
             "repo_path": job.repo_path,
             "project_id": job.project_id,
             "files_indexed": job.files_indexed,
             "chunks_created": job.chunks_created,
+            "force_reindex": job.force_reindex,
             "error_message": job.error_message,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "started_at": job.started_at.isoformat() if job.started_at else None,

@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project"
+  },
+  "auto_switch": true,
+  "description": "Example with auto-generated project ID and computed database_name (recommended for most use cases)"
+}

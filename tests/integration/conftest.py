@@ -241,3 +241,60 @@ async def clean_database(test_engine: AsyncEngine) -> None:
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
+
+@pytest_asyncio.fixture(autouse=True, scope="function")
+async def cleanup_connection_pools() -> AsyncGenerator[None, None]:
+    """Clean up module-level connection pools after each test.
+
+    **CRITICAL FIX**: Prevents "Event loop is closed" errors by properly
+    closing and resetting module-level connection pools that persist
+    across test function boundaries.
+
+    Problem:
+        - session.py maintains module-level globals: _registry_pool and _project_pools
+        - These pools are bound to the event loop that created them
+        - pytest-asyncio creates a NEW event loop for each function-scoped test
+        - Old pools become invalid when their event loop closes
+        - Next test fails when trying to use pools from closed event loop
+
+    Solution:
+        - Run after EVERY test (autouse=True)
+        - Close all active connection pools
+        - Reset module-level globals to None/empty dict
+        - Next test creates fresh pools with new event loop
+
+    Fixture Pattern:
+        - autouse=True: Runs automatically for all tests
+        - function scope: Runs after each test function
+        - Yield-based cleanup: Ensures pools are closed even if test fails
+
+    Args:
+        None (autouse fixture)
+
+    Yields:
+        None (cleanup happens after yield)
+
+    Note:
+        This fixture is REQUIRED for any test that uses:
+        - src.database.session._initialize_registry_pool()
+        - src.database.session.get_or_create_project_pool()
+        - Any MCP tool that creates database connections
+    """
+    # Run test first (yield allows test to execute)
+    yield
+
+    # Cleanup after test completes
+    import src.database.session as session_module
+
+    # Close registry pool if it exists
+    if session_module._registry_pool is not None:
+        await session_module._registry_pool.close()
+        session_module._registry_pool = None
+
+    # Close all project pools
+    for pool in session_module._project_pools.values():
+        await pool.close()
+
+    # Reset project pools dict
+    session_module._project_pools.clear()

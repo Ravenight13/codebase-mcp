@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 import asyncio
 import logging
 import time
@@ -69,8 +69,8 @@ class ConfigCache:
         self._max_size: int = max_size
         self._lock: asyncio.Lock = asyncio.Lock()
 
-    async def get(self, working_directory: str) -> Optional[Dict[str, Any]]:
-        """Get config from cache with mtime validation.
+    async def get(self, working_directory: str) -> Optional[Tuple[Dict[str, Any], Path]]:
+        """Get config and config_path from cache with mtime validation.
 
         Performs mtime-based validation to detect config file changes.
         Automatically invalidates cache if:
@@ -81,7 +81,8 @@ class ConfigCache:
             working_directory: Working directory path (cache key)
 
         Returns:
-            Cached config dict or None if cache miss/invalidated
+            Tuple of (config dict, config_path) or None if cache miss/invalidated.
+            Returning both values eliminates redundant filesystem searches.
         """
         async with self._lock:
             entry: Optional[CacheEntry] = self._cache.get(working_directory)
@@ -111,7 +112,7 @@ class ConfigCache:
             # Cache hit! Update access time for LRU
             entry.access_time = time.time()
             logger.debug(f"Cache hit: {working_directory}")
-            return entry.config
+            return (entry.config, entry.config_path)
 
     async def set(
         self,

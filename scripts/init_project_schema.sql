@@ -108,6 +108,9 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     -- Code file relationship
     code_file_id UUID NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
 
+    -- Project isolation field (multi-tenant support)
+    project_id VARCHAR(50) NOT NULL,
+
     -- Code content (plain text)
     content TEXT NOT NULL,
 
@@ -138,6 +141,9 @@ CREATE INDEX IF NOT EXISTS idx_code_chunks_embedding_cosine
 
 -- Fast lookup by file
 CREATE INDEX IF NOT EXISTS idx_code_chunks_file ON code_chunks(code_file_id);
+
+-- Fast lookup by project (multi-tenant isolation)
+CREATE INDEX IF NOT EXISTS idx_code_chunks_project ON code_chunks(project_id);
 
 -- Fast lookup by chunk type
 CREATE INDEX IF NOT EXISTS idx_code_chunks_type ON code_chunks(chunk_type);

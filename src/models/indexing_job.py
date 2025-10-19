@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -69,10 +69,14 @@ class IndexingJob(Base):
         String(20), nullable=False, default="pending"
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Indexing metrics
     files_indexed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     chunks_created: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Force reindex flag
+    force_reindex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Lifecycle timestamps
     started_at: Mapped[datetime | None] = mapped_column(
@@ -167,8 +171,10 @@ class IndexingJobResponse(BaseModel):
     repo_path: str = Field(description="Repository path being indexed")
     project_id: str = Field(description="Project workspace identifier")
     error_message: str | None = Field(None, description="Error message if failed")
+    status_message: str | None = Field(None, description="Human-readable status message")
     files_indexed: int = Field(0, description="Number of files processed")
     chunks_created: int = Field(0, description="Number of code chunks created")
+    force_reindex: bool = Field(False, description="Whether full re-index was requested")
     started_at: datetime | None = Field(None, description="Job start timestamp")
     completed_at: datetime | None = Field(None, description="Job completion timestamp")
     created_at: datetime = Field(description="Job creation timestamp")

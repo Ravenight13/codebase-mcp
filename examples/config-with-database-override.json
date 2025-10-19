@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "database_name": "cb_proj_my_project_550e8400"
+  },
+  "auto_switch": true,
+  "description": "Example showing explicit database_name override for precise control over database selection"
+}

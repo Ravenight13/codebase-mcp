@@ -1,0 +1,82 @@
+Foreground Indexing Removal Plan - Documentation Summary
+=========================================================
+
+Created: 2025-10-18
+Location: /Users/cliffclarke/Claude_Code/codebase-mcp/docs/bugs/foreground-indexing-removal/
+
+Documents Created:
+------------------
+
+1. README.md (239 lines)
+   - Project overview and quick decision summary
+   - Links to all other documents
+   - Success criteria checklist
+   - User migration example
+   - START HERE for project overview
+
+2. DELETION-PLAN.md (534 lines) ⭐ MAIN DOCUMENT
+   - Comprehensive removal plan
+   - Files analysis (delete/modify/keep)
+   - 4-phase implementation plan
+   - Migration guide
+   - Risk assessment
+   - Verification steps
+   - READ THIS for complete technical plan
+
+3. QUICK-REFERENCE.md (174 lines)
+   - One-page cheat sheet
+   - Files to delete/modify
+   - Execution commands
+   - Verification commands
+   - USE THIS during implementation
+
+4. DOCUMENTATION-UPDATE-PLAN.md (743 lines)
+   - Documentation-specific plan
+   - 161 markdown files to update
+   - Search-and-replace patterns
+   - Prioritized file list
+   - USE THIS for Phase 3 (docs update)
+
+5. EXECUTION-CHECKLIST.md (405 lines)
+   - Step-by-step checklist
+   - Pre-execution checks
+   - 4 phases with sub-tasks
+   - Time tracking
+   - Sign-off section
+   - USE THIS as implementation guide
+
+6. UPDATE-SUMMARY.md (existing)
+   - Brief update summary
+
+Total Lines: 2,095 lines of comprehensive planning documentation
+
+Key Decisions:
+--------------
+- Remove: src/mcp/tools/indexing.py (388 lines)
+- Remove: tests/unit/mcp/tools/test_indexing.py (258 lines)
+- Remove: tests/contract/test_index_repository_contract.py (298 lines)
+- Modify: 16 integration test files (convert to background)
+- Update: 5+ documentation files
+
+Impact:
+-------
+- Lines deleted: ~944
+- Lines modified: ~600
+- Total files affected: 24
+- Estimated time: 4-5 hours
+- Risk: LOW
+
+Rationale:
+----------
+1. Bug 1 not worth fixing (foreground tool returns None)
+2. Background indexing is superior (non-blocking, observable, scalable)
+3. Constitutional Principle I: Simplicity Over Features
+4. No production users affected (tool is broken)
+
+Next Steps:
+-----------
+1. Review DELETION-PLAN.md
+2. Use EXECUTION-CHECKLIST.md during implementation
+3. Refer to QUICK-REFERENCE.md for commands
+4. Follow DOCUMENTATION-UPDATE-PLAN.md for docs
+

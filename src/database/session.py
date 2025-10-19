@@ -62,9 +62,11 @@ from src.database.provisioning import create_pool
 logger = get_logger(__name__)
 
 # Registry database URL from environment with secure default
+# Note: REGISTRY_DATABASE_URL should NEVER fall back to DATABASE_URL since they serve different purposes
+# DATABASE_URL is for legacy single-database mode, REGISTRY_DATABASE_URL is for project metadata
 REGISTRY_DATABASE_URL: str = os.getenv(
     "REGISTRY_DATABASE_URL",
-    os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/codebase_mcp_registry")
+    "postgresql+asyncpg://localhost/codebase_mcp_registry"
 )
 
 # SQL echo mode for debugging (disabled in production for performance)
@@ -340,13 +342,17 @@ async def _resolve_project_context(
 
     # Check cache first
     cache = get_config_cache()
+    config = None
+    config_path = None
+
     try:
-        config = await cache.get(working_dir)
+        cache_result = await cache.get(working_dir)
+        if cache_result is not None:
+            config, config_path = cache_result
     except Exception as e:
         logger.debug(f"Cache lookup failed for {working_dir}: {e}")
         config = None
-
-    config_path = None
+        config_path = None
 
     if config is None:
         # Cache miss: search for config file
@@ -380,66 +386,41 @@ async def _resolve_project_context(
             logger.debug(f"Failed to cache config for {working_dir}: {e}")
             # Continue anyway (caching is optional)
 
-    # Extract project identifier
-    project_name = config['project']['name']
-    project_id = config['project'].get('id')  # Optional
+    # At this point, we must have both config and config_path
+    # Either from cache hit or from cache miss + filesystem search
+    assert config is not None and config_path is not None, \
+        "Internal error: config and config_path should be set by this point"
 
-    # Use project_id if provided, otherwise use name
-    identifier = project_id if project_id else project_name
-
-    # Look up project in registry to get database_name
+    # Get or create project from config using auto-create module
     try:
-        registry_pool = await _initialize_registry_pool()
-        async with registry_pool.acquire() as conn:
-            # Query registry for project by id or name
-            row = await conn.fetchrow(
-                """
-                SELECT id, database_name
-                FROM projects
-                WHERE id = $1 OR name = $1
-                LIMIT 1
-                """,
-                identifier
-            )
+        from src.database.auto_create import get_or_create_project_from_config
 
-            if row is None:
-                logger.debug(
-                    f"Project not found in registry: {identifier}",
-                    extra={
-                        "context": {
-                            "operation": "_resolve_project_context",
-                            "identifier": identifier,
-                        }
-                    },
-                )
-                return None
+        project = await get_or_create_project_from_config(
+            config_path=config_path,
+            registry=None  # Uses singleton registry
+        )
 
-            resolved_project_id = row['id']
-            database_name = row['database_name']
-
-            logger.debug(
-                f"Resolved from session config: {resolved_project_id} "
-                f"(database: {database_name})",
-                extra={
-                    "context": {
-                        "operation": "_resolve_project_context",
-                        "project_id": resolved_project_id,
-                        "database_name": database_name,
-                    }
-                },
-            )
-
-            return (resolved_project_id, database_name)
-
-    except Exception as e:
-        logger.error(
-            f"Registry lookup failed for project: {identifier}",
+        logger.debug(
+            f"Resolved project from config: {project.name}",
             extra={
                 "context": {
                     "operation": "_resolve_project_context",
-                    "identifier": identifier,
+                    "project_id": project.project_id,
+                    "database_name": project.database_name,
+                }
+            }
+        )
+
+        return (project.project_id, project.database_name)
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get/create project from config: {e}",
+            extra={
+                "context": {
+                    "operation": "_resolve_project_context",
+                    "config_path": str(config_path),
                     "error": str(e),
-                    "error_type": type(e).__name__,
                 }
             },
             exc_info=True,
@@ -530,30 +511,31 @@ async def resolve_project_id(
                     """
                     SELECT id, database_name
                     FROM projects
-                    WHERE id = $1 OR name = $1
+                    WHERE id::text = $1 OR name = $1
                     LIMIT 1
                     """,
                     explicit_id
                 )
 
                 if row is None:
-                    logger.warning(
-                        f"Explicit project_id not found in registry: {explicit_id}, using default",
+                    logger.info(
+                        f"Explicit project_id not found in registry: {explicit_id}, trying other methods",
                         extra={
                             "context": {
                                 "operation": "resolve_project_id",
                                 "project_id": explicit_id,
-                                "resolution_method": "default_fallback",
+                                "resolution_method": "fallthrough_to_tier2",
                             }
                         },
                     )
-                    return ("default", DEFAULT_PROJECT_DB)
-
-                return (row['id'], row['database_name'])
+                    # Don't return - continue to Tier 2, 3, 4
+                else:
+                    # Found in registry - return immediately
+                    return (row['id'], row['database_name'])
 
         except Exception as e:
             logger.error(
-                f"Registry lookup failed for explicit project_id: {explicit_id}",
+                f"Registry lookup failed for explicit project_id: {explicit_id}, trying other methods",
                 extra={
                     "context": {
                         "operation": "resolve_project_id",
@@ -564,7 +546,7 @@ async def resolve_project_id(
                 },
                 exc_info=True,
             )
-            return ("default", DEFAULT_PROJECT_DB)
+            # Don't return - continue to Tier 2, 3, 4
 
     # 2. Try session-based config resolution (if Context provided)
     if ctx is not None:
@@ -622,7 +604,7 @@ async def resolve_project_id(
                         """
                         SELECT id, database_name
                         FROM projects
-                        WHERE id = $1 OR name = $1
+                        WHERE id::text = $1 OR name = $1
                         LIMIT 1
                         """,
                         active_project

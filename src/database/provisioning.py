@@ -163,11 +163,13 @@ async def create_database(database_name: str, db_user: str | None = None) -> Non
         finally:
             await conn.close()
     except asyncpg.DuplicateDatabaseError:
-        logger.warning(
-            f"Database already exists: {database_name}",
+        logger.info(
+            f"Database already exists (idempotent): {database_name}",
             extra={"context": {"operation": "create_database", "database_name": database_name}},
         )
-        raise
+        # Treat as success - idempotent operation
+        # Note: Caller is responsible for schema initialization/migration
+        return
     except asyncpg.PostgresError as e:
         logger.error(
             f"Failed to create database: {database_name}",
@@ -272,12 +274,15 @@ async def initialize_project_schema(database_name: str, db_user: str | None = No
 
 
 async def create_project_database(
-    project_name: str, project_uuid: str, db_user: str | None = None
+    project_name: str,
+    project_uuid: str,
+    db_user: str | None = None,
+    database_name: str | None = None,
 ) -> str:
     """Create and initialize a complete project database.
 
     High-level function that:
-    1. Generates database name from project name and UUID
+    1. Generates database name from project name and UUID (or uses provided name)
     2. Creates the physical database
     3. Initializes schema (repositories, code_files, code_chunks)
 
@@ -285,6 +290,7 @@ async def create_project_database(
         project_name: Human-readable project name
         project_uuid: Project UUID (with or without hyphens)
         db_user: Database user (defaults to environment or current user)
+        database_name: Optional explicit database name (overrides computed name)
 
     Returns:
         Database name (cb_proj_*)
@@ -302,8 +308,9 @@ async def create_project_database(
         >>> print(db_name)
         'cb_proj_my_project_abc123de'
     """
-    # Generate database name
-    database_name = generate_database_name(project_name, project_uuid)
+    # Use provided database name or generate from project metadata
+    if database_name is None:
+        database_name = generate_database_name(project_name, project_uuid)
 
     logger.info(
         f"Creating project database: {database_name}",
