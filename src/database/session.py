@@ -493,6 +493,19 @@ async def resolve_project_id(
     """
     # 1. Explicit ID takes precedence (highest priority)
     if explicit_id is not None:
+        logger.info(
+            "Attempting Tier 1: Explicit ID resolution",
+            extra={
+                "context": {
+                    "operation": "resolve_project_id",
+                    "tier_name": "explicit_id",
+                    "tier_number": 1,
+                    "explicit_id": explicit_id,
+                    "session_id": ctx.session_id if ctx else None,
+                }
+            },
+        )
+
         logger.debug(
             "Using explicit project_id, looking up in registry",
             extra={
@@ -518,24 +531,35 @@ async def resolve_project_id(
                 )
 
                 if row is None:
+                    raise ValueError(
+                        f"Project '{explicit_id}' not found in registry. "
+                        f"To create this project:\n"
+                        f"1. Add .codebase-mcp/config.json with project.id = '{explicit_id}'\n"
+                        f"2. Call set_working_directory() to enable auto-creation"
+                    )
+                else:
+                    # Found in registry - return immediately
                     logger.info(
-                        f"Explicit project_id not found in registry: {explicit_id}, trying other methods",
+                        "✓ Tier 1 success: Resolved via explicit ID",
                         extra={
                             "context": {
                                 "operation": "resolve_project_id",
-                                "project_id": explicit_id,
-                                "resolution_method": "fallthrough_to_tier2",
+                                "tier_name": "explicit_id",
+                                "tier_number": 1,
+                                "project_id": row['id'],
+                                "database_name": row['database_name'],
                             }
                         },
                     )
-                    # Don't return - continue to Tier 2, 3, 4
-                else:
-                    # Found in registry - return immediately
                     return (row['id'], row['database_name'])
 
+        except ValueError:
+            # Re-raise ValueError from not-found check above
+            raise
         except Exception as e:
+            # Registry lookup error - re-raise as ValueError with clear message
             logger.error(
-                f"Registry lookup failed for explicit project_id: {explicit_id}, trying other methods",
+                f"Registry lookup failed for explicit project_id: {explicit_id}",
                 extra={
                     "context": {
                         "operation": "resolve_project_id",
@@ -546,14 +570,41 @@ async def resolve_project_id(
                 },
                 exc_info=True,
             )
-            # Don't return - continue to Tier 2, 3, 4
+            raise ValueError(
+                f"Failed to look up project '{explicit_id}' in registry: {e}"
+            ) from e
 
     # 2. Try session-based config resolution (if Context provided)
     if ctx is not None:
+        logger.info(
+            "Attempting Tier 2: Session config resolution",
+            extra={
+                "context": {
+                    "operation": "resolve_project_id",
+                    "tier_name": "session_config",
+                    "tier_number": 2,
+                    "session_id": ctx.session_id,
+                    "explicit_id": explicit_id,
+                }
+            },
+        )
+
         try:
             result = await _resolve_project_context(ctx)
             if result is not None:
                 project_id, database_name = result
+                logger.info(
+                    "✓ Tier 2 success: Resolved via session config",
+                    extra={
+                        "context": {
+                            "operation": "resolve_project_id",
+                            "tier_name": "session_config",
+                            "tier_number": 2,
+                            "project_id": project_id,
+                            "database_name": database_name,
+                        }
+                    }
+                )
                 logger.debug(
                     "Resolved project via session config",
                     extra={
@@ -569,11 +620,65 @@ async def resolve_project_id(
         except Exception as e:
             logger.debug(f"Session-based resolution failed: {e}")
 
+    # ✅ FIX 2 + BUG 9: Prevent fallthrough when config exists
+    # If config file exists but resolution failed, raise exception instead of falling through
+    if ctx is not None and ctx.session_id:
+        try:
+            working_dir = await get_session_context_manager().get_working_directory(ctx.session_id)
+            if working_dir:
+                config_path = find_config_file(Path(working_dir))
+                if config_path:
+                    logger.error(
+                        f"Config exists but project resolution failed: {config_path}",
+                        extra={
+                            "context": {
+                                "config_path": str(config_path),
+                                "session_id": ctx.session_id,
+                                "operation": "resolve_project_id"
+                            }
+                        }
+                    )
+                    raise ValueError(
+                        f"Project resolution failed despite config at {config_path}. "
+                        f"Check config file for errors (project.id or project.name required)."
+                    )
+                else:
+                    logger.info(
+                        "No config file found, allowing fallthrough to Tier 3 (workflow-mcp)",
+                        extra={
+                            "context": {
+                                "operation": "resolve_project_id",
+                                "working_directory": str(working_dir),
+                                "session_id": ctx.session_id
+                            }
+                        }
+                    )
+        except ValueError:
+            # Re-raise ValueError from config validation check above
+            raise
+        except Exception as e:
+            # Graceful fallthrough if session context lookup fails
+            logger.debug(f"Config existence check failed, allowing fallthrough: {e}")
+
     # 3. Try workflow-mcp integration (if configured)
     if settings is None:
         settings = get_settings()
 
     if settings.workflow_mcp_url is not None:
+        logger.info(
+            "Attempting Tier 3: workflow-mcp fallback",
+            extra={
+                "context": {
+                    "operation": "resolve_project_id",
+                    "tier_name": "workflow_mcp",
+                    "tier_number": 3,
+                    "workflow_mcp_url": str(settings.workflow_mcp_url),
+                    "session_id": ctx.session_id if ctx else None,
+                    "explicit_id": explicit_id,
+                }
+            },
+        )
+
         logger.debug(
             "Querying workflow-mcp for active project",
             extra={
@@ -611,6 +716,18 @@ async def resolve_project_id(
                     )
 
                     if row is not None:
+                        logger.info(
+                            "✓ Tier 3 success: Resolved via workflow-mcp",
+                            extra={
+                                "context": {
+                                    "operation": "resolve_project_id",
+                                    "tier_name": "workflow_mcp",
+                                    "tier_number": 3,
+                                    "project_id": row['id'],
+                                    "database_name": row['database_name'],
+                                }
+                            },
+                        )
                         logger.info(
                             "Resolved project from workflow-mcp",
                             extra={
@@ -662,6 +779,19 @@ async def resolve_project_id(
             await client.close()
 
     # 4. Fallback to default workspace
+    logger.info(
+        "Attempting Tier 4: Default project",
+        extra={
+            "context": {
+                "operation": "resolve_project_id",
+                "tier_name": "default_project",
+                "tier_number": 4,
+                "session_id": ctx.session_id if ctx else None,
+                "explicit_id": explicit_id,
+            }
+        },
+    )
+
     logger.debug(
         "Using default workspace (no explicit ID, session config unavailable, workflow-mcp unavailable/disabled)",
         extra={
@@ -671,6 +801,20 @@ async def resolve_project_id(
             }
         },
     )
+
+    logger.info(
+        "✓ Tier 4 success: Resolved via default project",
+        extra={
+            "context": {
+                "operation": "resolve_project_id",
+                "tier_name": "default_project",
+                "tier_number": 4,
+                "project_id": "default",
+                "database_name": DEFAULT_PROJECT_DB,
+            }
+        },
+    )
+
     return ("default", DEFAULT_PROJECT_DB)
 
 
