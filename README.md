@@ -8,7 +8,8 @@ Version 2.0 represents a major architectural refactoring focused exclusively on 
 
 **Breaking Changes**:
 - 14 tools removed (project management, entity tracking, work item features extracted to workflow-mcp)
-- 2 tools remaining: `index_repository` and `search_code` with multi-project support
+- 3 tools remaining: `start_indexing_background`, `get_indexing_status`, and `search_code` with multi-project support
+- Foreground `index_repository` removed (all indexing now uses background jobs to prevent timeouts)
 - Database schema simplified (9 tables dropped, `project_id` parameter added)
 - New environment variables for optional workflow-mcp integration
 
@@ -22,14 +23,20 @@ Version 2.0 represents a major architectural refactoring focused exclusively on 
 
 ## Features
 
-The Codebase MCP Server provides exactly 2 MCP tools for semantic code search with multi-project workspace support:
+The Codebase MCP Server provides exactly 3 MCP tools for semantic code search with multi-project workspace support:
 
-1. **`index_repository`**: Index a code repository for semantic search
+1. **`start_indexing_background`**: Start a background indexing job for a repository
+   - Returns job_id immediately to prevent MCP client timeouts
    - Accepts optional `project_id` parameter for workspace isolation
    - Default behavior: indexes to default project workspace if `project_id` not specified
    - Performance target: 60-second indexing for 10,000 files
 
-2. **`search_code`**: Semantic code search with natural language queries
+2. **`get_indexing_status`**: Poll the status of a background indexing job
+   - Query job progress using job_id from start_indexing_background
+   - Returns files_indexed, chunks_created, and completion status
+   - Enables responsive UIs with progress indicators
+
+3. **`search_code`**: Semantic code search with natural language queries
    - Accepts optional `project_id` parameter to restrict search scope
    - Default behavior: searches default project workspace if `project_id` not specified
    - Performance target: 500ms p95 search latency
@@ -40,8 +47,16 @@ The v2.0 architecture supports isolated project workspaces through the optional 
 
 **Single Project Workflow** (default):
 ```python
-# Index without project_id - uses default workspace
-index_repository(repo_path="/path/to/repo")
+# Start background indexing job - uses default workspace
+job = await start_indexing_background(repo_path="/path/to/repo")
+job_id = job["job_id"]
+
+# Poll for completion
+while True:
+    status = await get_indexing_status(job_id=job_id)
+    if status["status"] in ["completed", "failed"]:
+        break
+    await asyncio.sleep(2)
 
 # Search without project_id - searches default workspace
 search_code(query="authentication logic")
@@ -50,7 +65,18 @@ search_code(query="authentication logic")
 **Multi-Project Workflow**:
 ```python
 # Index to specific project workspace
-index_repository(repo_path="/path/to/client-a-repo", project_id="client-a")
+job = await start_indexing_background(
+    repo_path="/path/to/client-a-repo",
+    project_id="client-a"
+)
+job_id = job["job_id"]
+
+# Poll for completion
+while True:
+    status = await get_indexing_status(job_id=job_id, project_id="client-a")
+    if status["status"] in ["completed", "failed"]:
+        break
+    await asyncio.sleep(2)
 
 # Search specific project workspace
 search_code(query="authentication logic", project_id="client-a")
@@ -131,15 +157,12 @@ uv run python tests/test_embeddings.py
 
 ## Current Status
 
-### Working Tools (6/6) ✅
+### Working Tools (3/3) ✅
 
 | Tool | Status | Description |
 |------|--------|-------------|
-| `create_task` | ✅ Working | Create development tasks with planning references |
-| `get_task` | ✅ Working | Retrieve task by ID |
-| `list_tasks` | ✅ Working | List tasks with filters (status, branch) |
-| `update_task` | ✅ Working | Update tasks with git tracking (branch, commit) |
-| `index_repository` | ✅ Working | Index code repositories with semantic chunking |
+| `start_indexing_background` | ✅ Working | Start background indexing job, returns job_id immediately |
+| `get_indexing_status` | ✅ Working | Poll indexing job status with files_indexed/chunks_created |
 | `search_code` | ✅ Working | Semantic code search with pgvector similarity |
 
 ### Recent Fixes (Oct 6, 2025)
@@ -158,37 +181,40 @@ uv run python tests/test_embeddings.py
 
 ## Tool Usage Examples
 
-### Create a Task
+### Index a Repository (Background Job)
 In Claude Desktop:
-```
-Create a task called "Implement user authentication" with description "Add JWT-based authentication to the API"
-```
-
-Response:
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Implement user authentication",
-  "description": "Add JWT-based authentication to the API",
-  "status": "need to be done",
-  "created_at": "2025-10-06T21:30:00",
-  "planning_references": []
-}
-```
-
-### Index a Repository
 ```
 Index the repository at /Users/username/projects/myapp
 ```
 
-Response:
+Initial Response (immediate):
 ```json
 {
-  "repository_id": "abc123...",
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "message": "Indexing job started",
+  "project_id": "default",
+  "database_name": "cb_proj_default_00000000"
+}
+```
+
+Poll for Status:
+```
+Check the status of indexing job 550e8400-e29b-41d4-a716-446655440000
+```
+
+Completed Response:
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "repo_path": "/Users/username/projects/myapp",
   "files_indexed": 234,
   "chunks_created": 1456,
-  "duration_seconds": 12.5,
-  "status": "success"
+  "error_message": null,
+  "created_at": "2025-10-18T10:30:00Z",
+  "started_at": "2025-10-18T10:30:01Z",
+  "completed_at": "2025-10-18T10:30:15Z"
 }
 ```
 
@@ -210,21 +236,6 @@ Response:
   ],
   "total_count": 5,
   "latency_ms": 250
-}
-```
-
-### Track Task with Git
-```
-Update task abc123 to status "in-progress" and link it to branch "feature/auth"
-```
-
-Response:
-```json
-{
-  "id": "abc123...",
-  "status": "in-progress",
-  "branches": ["feature/auth"],
-  "commits": []
 }
 ```
 
@@ -419,9 +430,21 @@ await mcpClient.callTool("set_working_directory", {
 3. **Use tools normally** - they'll automatically use your project:
 ```javascript
 // Automatically uses "my-project" workspace
-await mcpClient.callTool("index_repository", {
+const result = await mcpClient.callTool("start_indexing_background", {
   repo_path: "/path/to/repo"
 });
+const jobId = result.job_id;
+
+// Poll for completion
+while (true) {
+  const status = await mcpClient.callTool("get_indexing_status", {
+    job_id: jobId
+  });
+  if (status.status === "completed" || status.status === "failed") {
+    break;
+  }
+  await sleep(2000);
+}
 ```
 
 ### Config File Format
@@ -454,7 +477,7 @@ When you call MCP tools, the server resolves the project workspace using this 4-
 
 1. **Explicit `project_id` parameter** (highest priority)
    ```javascript
-   await mcpClient.callTool("index_repository", {
+   await mcpClient.callTool("start_indexing_background", {
      repo_path: "/path/to/repo",
      project_id: "explicit-project-id"  // Always takes priority
    });
@@ -670,11 +693,8 @@ python -m src.mcp.stdio_server
 
 **Available Methods:**
 - `search_code` - Semantic code search
-- `index_repository` - Index a repository
-- `get_task` - Get task by ID
-- `list_tasks` - List tasks with filters
-- `create_task` - Create new task
-- `update_task` - Update task status
+- `start_indexing_background` - Start background indexing job
+- `get_indexing_status` - Poll indexing job status
 
 **Logging:**
 All logs go to `/tmp/codebase-mcp.log` (configurable via `LOG_FILE` env var). No stdout/stderr pollution - only JSON-RPC protocol messages on stdout.
@@ -696,26 +716,45 @@ curl http://localhost:3000/health
 
 ## Usage Examples
 
-### 1. Index a Repository
+### 1. Index a Repository (Background Job)
 
 ```python
-# Via MCP protocol
+# Start indexing job via MCP protocol
 {
-  "tool": "index_repository",
+  "tool": "start_indexing_background",
   "arguments": {
-    "path": "/path/to/your/repo",
-    "name": "My Project",
-    "force_reindex": false
+    "repo_path": "/path/to/your/repo"
   }
 }
 
-# Response
+# Immediate response
 {
-  "repository_id": "uuid-here",
+  "job_id": "uuid-here",
+  "status": "pending",
+  "message": "Indexing job started",
+  "project_id": "default",
+  "database_name": "cb_proj_default_00000000"
+}
+
+# Poll for status
+{
+  "tool": "get_indexing_status",
+  "arguments": {
+    "job_id": "uuid-here"
+  }
+}
+
+# Completed response
+{
+  "job_id": "uuid-here",
+  "status": "completed",
+  "repo_path": "/path/to/your/repo",
   "files_indexed": 150,
   "chunks_created": 1200,
-  "duration_seconds": 45.3,
-  "status": "success"
+  "error_message": null,
+  "created_at": "2025-10-18T10:30:00Z",
+  "started_at": "2025-10-18T10:30:01Z",
+  "completed_at": "2025-10-18T10:30:45Z"
 }
 ```
 
@@ -737,31 +776,6 @@ curl http://localhost:3000/health
   "results": [...],
   "total_count": 25,
   "latency_ms": 230
-}
-```
-
-### 3. Task Management
-
-```python
-# Create a task
-{
-  "tool": "create_task",
-  "arguments": {
-    "title": "Implement rate limiting",
-    "description": "Add rate limiting to API endpoints",
-    "planning_references": ["specs/rate-limiting.md"]
-  }
-}
-
-# Update task with git integration
-{
-  "tool": "update_task",
-  "arguments": {
-    "task_id": "task-uuid",
-    "status": "complete",
-    "branch": "feature/rate-limiting",
-    "commit": "abc123..."
-  }
 }
 ```
 
@@ -1035,36 +1049,73 @@ MIT License (LICENSE file pending).
 
 ### Basic Usage (Default Project)
 
-For most users, the default project workspace is sufficient:
+For most users, the default project workspace is sufficient. All indexing now uses background jobs to prevent MCP client timeouts:
 
-```bash
-# Index a repository (uses default project)
-codebase-mcp index /path/to/your/repo
+```python
+# Start background indexing job (returns immediately)
+job = await start_indexing_background(repo_path="/path/to/your/repo")
+job_id = job["job_id"]
+
+# Poll for completion
+while True:
+    status = await get_indexing_status(job_id=job_id)
+    if status["status"] in ["completed", "failed"]:
+        break
+    await asyncio.sleep(2)
+
+# Check result
+if status["status"] == "completed":
+    print(f"✅ Indexed {status['files_indexed']} files, {status['chunks_created']} chunks")
+else:
+    print(f"❌ Indexing failed: {status['error_message']}")
 
 # Search code
-codebase-mcp search "function to handle authentication"
+results = await search_code(query="function to handle authentication")
 
 # Search with filters
-codebase-mcp search "database query" --file-type py --limit 20
+results = await search_code(
+    query="database query",
+    file_type="py",
+    limit=20
+)
 ```
 
-The CLI automatically uses a default project workspace (`project_default`) if no project ID is specified.
+The server automatically uses a default project workspace (`project_default`) if no project ID is specified.
 
 ### Multi-Project Usage
 
-For users managing multiple codebases or client projects, use the `--project-id` flag to isolate repositories:
+For users managing multiple codebases or client projects, use the `project_id` parameter to isolate repositories:
 
-```bash
+```python
 # Index repositories with project_id
-codebase-mcp index /path/to/client-a-repo --project-id client-a
-codebase-mcp index /path/to/client-b-repo --project-id client-b
+job_a = await start_indexing_background(
+    repo_path="/path/to/client-a-repo",
+    project_id="client-a"
+)
+
+job_b = await start_indexing_background(
+    repo_path="/path/to/client-b-repo",
+    project_id="client-b"
+)
+
+# Poll both jobs
+for job in [job_a, job_b]:
+    while True:
+        status = await get_indexing_status(job_id=job["job_id"])
+        if status["status"] in ["completed", "failed"]:
+            break
+        await asyncio.sleep(2)
 
 # Search within specific project
-codebase-mcp search "authentication logic" --project-id client-a
-codebase-mcp search "payment processing" --project-id client-b
+results_a = await search_code(
+    query="authentication logic",
+    project_id="client-a"
+)
 
-# List all projects
-codebase-mcp projects list
+results_b = await search_code(
+    query="payment processing",
+    project_id="client-b"
+)
 ```
 
 Each project has its own isolated database schema, ensuring repositories and embeddings are completely separated.
@@ -1077,10 +1128,10 @@ The Codebase MCP Server can **optionally** integrate with [workflow-mcp](https:/
 
 By default, Codebase MCP operates independently:
 
-```bash
+```python
 # Works out of the box without workflow-mcp
-codebase-mcp index /path/to/repo
-codebase-mcp search "search query"
+job = await start_indexing_background(repo_path="/path/to/repo")
+results = await search_code(query="search query")
 ```
 
 ### Integration with workflow-mcp
@@ -1090,10 +1141,12 @@ If you're using workflow-mcp to manage development projects, Codebase MCP can au
 ```bash
 # Set workflow-mcp URL in environment
 export WORKFLOW_MCP_URL=http://localhost:8001
+```
 
+```python
 # Now project_id is automatically resolved from workflow-mcp's active project
-codebase-mcp index /path/to/repo  # Uses active project from workflow-mcp
-codebase-mcp search "query"       # Searches in active project's context
+job = await start_indexing_background(repo_path="/path/to/repo")  # Uses active project
+results = await search_code(query="search query")  # Searches in active project's context
 ```
 
 **How It Works:**
