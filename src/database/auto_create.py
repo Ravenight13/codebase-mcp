@@ -346,7 +346,7 @@ async def get_or_create_project_from_config(
             # Check by ID first (if provided), then by name
             if project_id:
                 row = await conn.fetchrow(
-                    "SELECT id, name, database_name, description FROM projects WHERE id = $1",
+                    "SELECT id, name, database_name, description FROM projects WHERE id::text = $1",
                     project_id
                 )
             else:

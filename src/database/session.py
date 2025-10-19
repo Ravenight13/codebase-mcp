@@ -511,7 +511,7 @@ async def resolve_project_id(
                     """
                     SELECT id, database_name
                     FROM projects
-                    WHERE id = $1 OR name = $1
+                    WHERE id::text = $1 OR name = $1
                     LIMIT 1
                     """,
                     explicit_id
@@ -604,7 +604,7 @@ async def resolve_project_id(
                         """
                         SELECT id, database_name
                         FROM projects
-                        WHERE id = $1 OR name = $1
+                        WHERE id::text = $1 OR name = $1
                         LIMIT 1
                         """,
                         active_project
