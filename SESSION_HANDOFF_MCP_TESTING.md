@@ -94,53 +94,71 @@ set_working_directory(
 
 ---
 
-### Phase 2: Index Repository (Foreground)
+### Phase 2: Index Repository (Background Only)
 
-**Tool**: `mcp__codebase-mcp__index_repository`
+**Note**: Foreground `index_repository` tool has been removed. All indexing now uses background jobs to prevent MCP client timeouts.
+
+**Tool**: `mcp__codebase-mcp__start_indexing_background`
 
 **Action**:
 ```
-index_repository(
-    repo_path="/Users/cliffclarke/Claude_Code/codebase-mcp",
-    force_reindex=false
+start_indexing_background(
+    repo_path="/Users/cliffclarke/Claude_Code/codebase-mcp"
 )
 ```
 
-**Expected Behavior**:
-- Auto-discovers project from session config (set in Phase 1)
-- Creates project in PostgreSQL registry if doesn't exist
-- Creates project-specific database: `cb_proj_codebase_mcp_<hash>`
-- Indexes all Python files in repository
-- Returns indexing statistics
-
-**Expected Result**:
+**Expected Immediate Result**:
 ```json
 {
-    "repository_id": "uuid",
+    "job_id": "uuid",
+    "status": "pending",
+    "message": "Indexing job started",
+    "project_id": "uuid",
+    "database_name": "cb_proj_codebase_mcp_<hash>"
+}
+```
+
+**Poll for Status**:
+```
+get_indexing_status(job_id="uuid-from-above")
+```
+
+**Expected Status Progression**:
+- Initial: `status: "pending"`
+- After ~1-2s: `status: "running"`
+- After indexing completes: `status: "completed"`
+
+**Final Completed Status**:
+```json
+{
+    "job_id": "uuid",
+    "status": "completed",
+    "repo_path": "/Users/cliffclarke/Claude_Code/codebase-mcp",
     "files_indexed": 50-100,  // approximately
     "chunks_created": 500-1000,  // approximately
-    "duration_seconds": 10-30,  // <60s target
-    "project_id": "uuid",
-    "database_name": "cb_proj_codebase_mcp_<hash>",
-    "status": "success",
-    "errors": []
+    "error_message": null,
+    "created_at": "2025-10-18T...",
+    "started_at": "2025-10-18T...",
+    "completed_at": "2025-10-18T..."
 }
 ```
 
 **Success Criteria**:
-- ✅ `status: "success"`
+- ✅ Job starts with `status: "pending"`
+- ✅ Status progresses to `"running"` within 5 seconds
+- ✅ Eventually reaches `"completed"`
 - ✅ `files_indexed` > 0 (should be 50+)
 - ✅ `chunks_created` > 0 (should be 500+)
-- ✅ `duration_seconds` < 60 (constitutional performance target)
+- ✅ `error_message` is null
 - ✅ `database_name` contains "codebase_mcp" (not "default")
-- ✅ `errors` is empty array
 
 **What This Tests**:
 - Tier 2 project resolution (session config)
 - Auto-create module integration
 - PostgreSQL registry sync (bug we just fixed)
 - Database provisioning
-- Indexing pipeline
+- Background indexing pipeline
+- Job state management
 
 ---
 
@@ -249,15 +267,16 @@ search_code(
 
 ---
 
-### Phase 5: Background Indexing (Optional)
+### Phase 5: Additional Repository Indexing (Optional)
 
 **Tool**: `mcp__codebase-mcp__start_indexing_background`
+
+**Purpose**: Test indexing a second repository to verify multi-project isolation.
 
 **Action**:
 ```
 start_indexing_background(
-    repo_path="/Users/cliffclarke/Claude_Code/workflow-mcp",
-    force_reindex=false
+    repo_path="/Users/cliffclarke/Claude_Code/workflow-mcp"
 )
 ```
 
@@ -287,8 +306,9 @@ get_indexing_status(job_id="uuid-from-above")
 - ✅ Status progresses to `"running"` within 5 seconds
 - ✅ Eventually reaches `"completed"`
 - ✅ `files_indexed` matches repository size (~350 files for workflow-mcp)
+- ✅ Different `database_name` than Phase 2 (project isolation)
 
-**What This Tests**: Background indexing infrastructure (separate worker process)
+**What This Tests**: Multi-project isolation, background worker scalability
 
 ---
 
@@ -400,12 +420,12 @@ cat /Users/cliffclarke/Claude_Code/codebase-mcp/.codebase-mcp/config.json
 2. ✅ Project auto-created from config (not default)
 3. ✅ Project persists in PostgreSQL registry (survives server restart)
 4. ✅ Project-specific database created (`cb_proj_codebase_mcp_*`)
-5. ✅ Repository indexed successfully (50+ files, 500+ chunks)
-6. ✅ Indexing completes in <60 seconds
-7. ✅ Semantic search returns relevant results
-8. ✅ Search latency <500ms
-9. ✅ No errors in any operation
-10. ✅ Background indexing works (if tested)
+5. ✅ Background indexing job starts (`status: "pending"`)
+6. ✅ Job progresses to running and completes (`status: "completed"`)
+7. ✅ Repository indexed successfully (50+ files, 500+ chunks)
+8. ✅ Semantic search returns relevant results
+9. ✅ Search latency <500ms
+10. ✅ No errors in any operation
 
 ---
 
