@@ -125,7 +125,9 @@ async def create_database(database_name: str, db_user: str | None = None) -> Non
     if not re.match(r"^cb_proj_[a-z0-9_]+_[a-f0-9]{8}$", database_name):
         raise ValueError(
             f"Invalid database name format: {database_name}. "
-            "Must match: cb_proj_{{name}}_{{hash}}"
+            "Must match: cb_proj_{{name}}_{{hash}} where {{hash}} is 8 hexadecimal characters. "
+            "Common cause: project.id in config must be a valid UUID, "
+            "not a human-readable string like 'my-project-name'."
         )
 
     # Build DSN for postgres database

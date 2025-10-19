@@ -298,6 +298,19 @@ async def get_or_create_project_from_config(
     project_id = config["project"].get("id")  # Optional
     database_name_override = config["project"].get("database_name")  # Optional
 
+    # Validate project_id is a valid UUID if provided
+    if project_id:
+        try:
+            from uuid import UUID
+            UUID(project_id)  # Will raise ValueError if invalid
+        except ValueError:
+            raise ValueError(
+                f"Invalid project.id in config: '{project_id}'. "
+                f"project.id must be a valid UUID (e.g., 'aabbccdd-eeff-0011-2233-445566778899'), "
+                f"not a human-readable string. "
+                f"Config file: {config_path}"
+            )
+
     # Validate database_name format if provided
     if database_name_override:
         if not database_name_override.startswith("cb_proj_"):
