@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 from src.auto_switch.validation import validate_config_syntax
@@ -172,7 +172,7 @@ def get_registry() -> ProjectRegistry:
 # ==============================================================================
 
 
-def read_config(config_path: Path) -> dict[str, any]:
+def read_config(config_path: Path) -> dict[str, Any]:
     """Read and parse config file.
 
     Args:
@@ -188,7 +188,7 @@ def read_config(config_path: Path) -> dict[str, any]:
     return validate_config_syntax(config_path)
 
 
-def write_config(config_path: Path, config: dict[str, any]) -> None:
+def write_config(config_path: Path, config: dict[str, Any]) -> None:
     """Write config file atomically.
 
     Uses atomic write pattern (write to temp, then rename) to prevent
@@ -279,6 +279,15 @@ async def get_or_create_project_from_config(
 
     project_name = config["project"]["name"]
     project_id = config["project"].get("id")  # Optional
+    database_name_override = config["project"].get("database_name")  # Optional
+
+    # Validate database_name format if provided
+    if database_name_override:
+        if not database_name_override.startswith("cb_proj_"):
+            raise ValueError(
+                f"Invalid database_name in config: {database_name_override}. "
+                f"Database names must start with 'cb_proj_'"
+            )
 
     logger.info(
         f"Processing config for project: {project_name}",
@@ -287,6 +296,7 @@ async def get_or_create_project_from_config(
                 "operation": "get_or_create_project",
                 "project_name": project_name,
                 "has_project_id": project_id is not None,
+                "has_database_name_override": database_name_override is not None,
             }
         },
     )
@@ -447,8 +457,35 @@ async def get_or_create_project_from_config(
             },
         )
 
-    # Generate database name
-    database_name = generate_database_name(project_name, project_id)
+    # Determine database name (explicit override or computed)
+    if database_name_override:
+        database_name = database_name_override
+        logger.info(
+            f"Using explicit database_name from config: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "database_name": database_name,
+                    "source": "config_override",
+                    "project_name": project_name,
+                    "project_id": project_id,
+                }
+            },
+        )
+    else:
+        database_name = generate_database_name(project_name, project_id)
+        logger.info(
+            f"Computed database_name from project: {database_name}",
+            extra={
+                "context": {
+                    "operation": "get_or_create_project",
+                    "database_name": database_name,
+                    "source": "computed",
+                    "project_name": project_name,
+                    "project_id": project_id,
+                }
+            },
+        )
 
     logger.info(
         f"Creating new project database: {database_name}",
@@ -464,7 +501,7 @@ async def get_or_create_project_from_config(
 
     # Create database and initialize schema
     try:
-        await create_project_database(project_name, project_id)
+        await create_project_database(project_name, project_id, database_name=database_name)
     except Exception as e:
         logger.error(
             f"Failed to create project database: {database_name}",
