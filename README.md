@@ -454,7 +454,8 @@ while (true) {
   "version": "1.0",
   "project": {
     "name": "my-project-name",
-    "id": "optional-project-uuid"
+    "id": "optional-project-uuid",
+    "database_name": "optional-database-override"
   },
   "auto_switch": true,
   "strict_mode": false,
@@ -467,9 +468,56 @@ while (true) {
 - `version` (required): Config version (currently "1.0")
 - `project.name` (required): Project identifier (used if no ID provided)
 - `project.id` (optional): Explicit project UUID (takes priority over name)
+- `project.database_name` (optional): Override computed database name (see Database Name Resolution below)
 - `auto_switch` (optional, default true): Enable automatic project switching
 - `strict_mode` (optional, default false): Reject operations if project mismatch
 - `dry_run` (optional, default false): Log intended switches without executing
+
+**Database Name Resolution:**
+
+The server determines which database to use in this order:
+
+1. **Explicit `database_name` in config** - Uses exact database name specified
+   ```json
+   {"project": {"database_name": "cb_proj_my_project_550e8400"}}
+   ```
+
+2. **Computed from `name` + `id`** - Automatically generates database name
+   ```
+   Format: cb_proj_{sanitized_name}_{id_prefix}
+   Example: cb_proj_my_project_550e8400
+   ```
+
+**Use Cases for `database_name` Override:**
+- Recovering from database name mismatches
+- Migrating from old database naming schemes
+- Explicit control over database selection
+- Debugging and troubleshooting
+
+**Example - Auto-generated (default):**
+```json
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "id": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+Database used: `cb_proj_my_project_550e8400` (auto-computed)
+
+**Example - Explicit override:**
+```json
+{
+  "version": "1.0",
+  "project": {
+    "name": "my-project",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "database_name": "cb_proj_legacy_database_12345678"
+  }
+}
+```
+Database used: `cb_proj_legacy_database_12345678` (explicit override)
 
 ### Project Resolution Priority
 

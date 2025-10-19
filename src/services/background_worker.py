@@ -162,8 +162,9 @@ async def generate_database_suggestion(error_message: str, project_id: str | Non
 
     msg += "🔧 Recommended actions:\n"
     msg += "1. Update .codebase-mcp/config.json with a valid database name\n"
+    msg += "   Add: \"database_name\": \"cb_proj_your_project_xxxxx\" to project config\n"
     if available_dbs:
-        msg += f"   Example: Use database '{available_dbs[0]}' if it matches your project\n"
+        msg += f"   Example: \"database_name\": \"{available_dbs[0]}\"\n"
     msg += "2. Or, remove the 'id' field from config to auto-create a new database\n"
     msg += "3. Or, create the database manually: createdb " + missing_db + "\n"
 

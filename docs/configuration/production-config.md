@@ -76,6 +76,8 @@ LOG_FILE=/var/log/codebase-mcp/server.log
 
 Multi-project variables control workspace isolation and connection pool behavior. These settings determine how many concurrent projects can be active and how connections are allocated.
 
+**Note**: For `.codebase-mcp/config.json` configuration (including the optional `database_name` field for explicit database control), see the [Multi-Project Configuration](../../README.md#multi-project-configuration) section in the main README.
+
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
 | `MAX_PROJECTS` | Optional | `10` | Maximum number of concurrent project workspaces. Each project maintains its own database connection pool. Higher values increase PostgreSQL connection requirements. See [Connection Pool Tuning](#connection-pool-tuning) for capacity planning. | `10` |
