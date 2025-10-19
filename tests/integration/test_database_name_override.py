@@ -447,3 +447,110 @@ async def test_database_name_with_existing_project_id(tmp_path: Path) -> None:
     updated_config = json.loads(config_path.read_text())
     assert updated_config["project"]["id"] == explicit_project_id
     assert updated_config["project"]["database_name"] == explicit_db_name
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_database_name_override_takes_precedence_over_registry(tmp_path: Path) -> None:
+    """Verify config's database_name overrides registry's database_name.
+
+    This is the critical test for the database_name override fix.
+
+    Scenario:
+    1. Project exists in PostgreSQL registry with database_name = "cb_proj_old_name"
+    2. Config file specifies database_name = "cb_proj_new_name"
+    3. get_or_create_project_from_config is called
+
+    Expected:
+    - The returned Project should have database_name = "cb_proj_new_name" (from config)
+    - NOT "cb_proj_old_name" (from registry)
+    - This validates the fix in auto_create.py lines 360-368
+
+    Args:
+        tmp_path: Pytest temporary directory fixture
+    """
+    from src.database.session import _initialize_registry_pool
+
+    # Step 1: Create project in PostgreSQL registry with OLD database_name
+    project_id = "dd0e8400-e29b-41d4-a716-446655440011"
+    project_name = "test-registry-override"
+    old_db_name = "cb_proj_old_name_dd0e8400"
+    new_db_name = "cb_proj_new_name_dd0e8400"
+
+    # Insert directly into PostgreSQL registry
+    registry_pool = await _initialize_registry_pool()
+    async with registry_pool.acquire() as conn:
+        # Ensure clean state (delete if exists from previous runs)
+        await conn.execute(
+            "DELETE FROM projects WHERE id = $1",
+            project_id
+        )
+
+        # Insert project with OLD database_name
+        await conn.execute(
+            """
+            INSERT INTO projects (id, name, description, database_name, created_at, updated_at, metadata)
+            VALUES ($1, $2, $3, $4, NOW(), NOW(), $5::jsonb)
+            """,
+            project_id,
+            project_name,
+            "Test project for database_name override",
+            old_db_name,  # OLD database_name in registry
+            json.dumps({})
+        )
+
+        # Verify registry has OLD database_name
+        row = await conn.fetchrow(
+            "SELECT database_name FROM projects WHERE id = $1",
+            project_id
+        )
+        assert row["database_name"] == old_db_name, "Setup failed: registry should have old_db_name"
+
+    # Step 2: Create config with NEW database_name (different from registry)
+    config_dir = tmp_path / ".codebase-mcp"
+    config_dir.mkdir(parents=True)
+    config_path = config_dir / "config.json"
+
+    config = {
+        "version": "1.0",
+        "project": {
+            "name": project_name,
+            "id": project_id,
+            "database_name": new_db_name  # NEW database_name in config
+        }
+    }
+    write_config(config_path, config)
+
+    # Step 3: Call get_or_create_project_from_config
+    project = await get_or_create_project_from_config(config_path)
+
+    # Step 4: CRITICAL ASSERTION - Config's database_name takes precedence
+    assert project.database_name == new_db_name, (
+        f"FAILED: Config's database_name should override registry's database_name.\n"
+        f"Expected: {new_db_name} (from config)\n"
+        f"Got: {project.database_name}\n"
+        f"Registry had: {old_db_name}\n"
+        f"This indicates the fix in auto_create.py lines 360-368 is not working correctly."
+    )
+
+    # Verify other fields are correct
+    assert project.project_id == project_id
+    assert project.name == project_name
+
+    # Step 5: Verify the NEW database exists in PostgreSQL
+    async with registry_pool.acquire() as conn:
+        db_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1",
+            new_db_name
+        )
+        assert db_exists == 1, f"Database {new_db_name} should exist (auto-provisioned)"
+
+        # Verify OLD database was NOT created
+        old_db_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1",
+            old_db_name
+        )
+        assert old_db_exists is None, (
+            f"Database {old_db_name} should NOT exist. "
+            f"Only the config's database_name ({new_db_name}) should be provisioned."
+        )

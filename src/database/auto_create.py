@@ -357,7 +357,15 @@ async def get_or_create_project_from_config(
 
             if row:
                 # Found in PostgreSQL registry
-                database_name = row['database_name']
+                # Respect config's database_name override if present (takes precedence over registry)
+                if database_name_override:
+                    database_name = database_name_override
+                    logger.info(
+                        f"Using database_name from config (overriding registry): {database_name}",
+                        extra={"context": {"operation": "get_or_create_project", "source": "config_override", "registry_database_name": row['database_name']}}
+                    )
+                else:
+                    database_name = row['database_name']
 
                 # Verify database actually exists
                 db_exists = await conn.fetchval(
