@@ -174,6 +174,7 @@ async def get_indexing_status(
         {
             "job_id": "uuid",
             "status": "running",  # pending/running/completed/failed
+            "status_message": "Indexing in progress: 2500 files processed",
             "repo_path": "/path/to/repo",
             "files_indexed": 5000,
             "chunks_created": 45000,
@@ -240,6 +241,7 @@ async def get_indexing_status(
         return {
             "job_id": str(job.id),
             "status": job.status,
+            "status_message": job.status_message,
             "repo_path": job.repo_path,
             "project_id": job.project_id,
             "files_indexed": job.files_indexed,
