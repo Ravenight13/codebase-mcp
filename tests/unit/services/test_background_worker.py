@@ -5,8 +5,9 @@ Uses mocks to isolate worker logic from dependencies.
 """
 
 import pytest
+import re
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import UUID, uuid4
 
 from src.services.indexer import IndexResult
@@ -106,3 +107,90 @@ async def test_worker_completes_successful_indexing():
         "Worker must preserve chunks_created metric"
     assert "error_message" not in final_update, \
         "Successful indexing must NOT set error_message"
+
+
+@pytest.mark.asyncio
+async def test_generate_database_suggestion_with_available_databases():
+    """Test database suggestion with available alternatives."""
+    from src.services.background_worker import generate_database_suggestion
+
+    error_msg = 'database "cb_proj_missing_db" does not exist'
+    available_dbs = ["cb_proj_default_00000000", "cb_proj_test_abc123"]
+
+    with patch("src.services.background_worker.get_available_databases", new=AsyncMock(return_value=available_dbs)):
+        result = await generate_database_suggestion(error_msg, "missing-project")
+
+    # Verify the enhanced error message contains all expected elements
+    assert "cb_proj_missing_db" in result, "Must mention the missing database name"
+    assert "Available databases:" in result, "Must list available databases"
+    assert "cb_proj_default_00000000" in result, "Must include first available database"
+    assert "cb_proj_test_abc123" in result, "Must include second available database"
+    assert "Update .codebase-mcp/config.json" in result, "Must suggest config update"
+    assert "remove the 'id' field" in result, "Must suggest auto-creation"
+    assert "createdb" in result, "Must suggest manual database creation"
+
+
+@pytest.mark.asyncio
+async def test_generate_database_suggestion_no_databases():
+    """Test database suggestion when no databases exist."""
+    from src.services.background_worker import generate_database_suggestion
+
+    error_msg = 'database "cb_proj_first_db" does not exist'
+
+    with patch("src.services.background_worker.get_available_databases", new=AsyncMock(return_value=[])):
+        result = await generate_database_suggestion(error_msg, "first-project")
+
+    # Verify the message for first-time setup
+    assert "cb_proj_first_db" in result, "Must mention the missing database name"
+    assert "No codebase-mcp databases found" in result, "Must indicate this is the first project"
+    assert "first project" in result, "Must suggest this is the first project"
+    assert "remove the 'id' field" in result, "Must suggest auto-creation"
+
+
+@pytest.mark.asyncio
+async def test_generate_database_suggestion_non_matching_error():
+    """Test database suggestion with non-matching error format."""
+    from src.services.background_worker import generate_database_suggestion
+
+    error_msg = "Some other database error"
+
+    with patch("src.services.background_worker.get_available_databases", new=AsyncMock(return_value=[])):
+        result = await generate_database_suggestion(error_msg, None)
+
+    # Should return original error unchanged
+    assert result == error_msg, "Non-matching error should be returned unchanged"
+
+
+@pytest.mark.asyncio
+async def test_worker_enhances_database_error():
+    """Test that worker enhances database existence errors."""
+    from src.services.background_worker import _background_indexing_worker
+
+    job_id = uuid4()
+
+    # Simulate database connection error
+    db_error = Exception('connection failed: database "cb_proj_test" does not exist')
+
+    with patch("src.services.background_worker.get_session", side_effect=db_error):
+        with patch("src.services.background_worker.update_job", new=AsyncMock()) as mock_update:
+            with patch("src.services.background_worker.get_available_databases",
+                      new=AsyncMock(return_value=["cb_proj_default_00000000"])):
+                with patch("src.services.background_worker.Path") as mock_path:
+                    mock_path.return_value.exists.return_value = True
+                    mock_path.return_value.is_dir.return_value = True
+
+                    await _background_indexing_worker(
+                        job_id=job_id,
+                        repo_path="/tmp/test-repo",
+                        project_id="test-project",
+                    )
+
+    # Verify enhanced error message was used
+    calls = [call.kwargs for call in mock_update.call_args_list]
+    final_update = calls[-1]
+
+    assert final_update["status"] == "failed", "Job must be marked as failed"
+    error_msg = final_update.get("error_message", "")
+    assert "Available databases:" in error_msg, "Error message must include available databases"
+    assert "cb_proj_default_00000000" in error_msg, "Error message must list available database"
+    assert "config.json" in error_msg, "Error message must mention config file"

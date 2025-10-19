@@ -29,6 +29,7 @@ Error Handling:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -81,6 +82,92 @@ async def update_job(
                 logger.warning(f"Invalid field for job update: {key}")
 
         await session.commit()
+
+
+async def get_available_databases(prefix: str = "cb_proj_") -> list[str]:
+    """Query PostgreSQL for available databases matching prefix.
+
+    Args:
+        prefix: Database name prefix to search for (default: cb_proj_)
+
+    Returns:
+        List of database names matching the prefix, sorted alphabetically
+
+    Example:
+        >>> databases = await get_available_databases()
+        >>> print(databases)
+        ['cb_proj_client_a_abc123de', 'cb_proj_default_00000000']
+    """
+    from src.database.session import _initialize_registry_pool
+
+    try:
+        registry_pool = await _initialize_registry_pool()
+        async with registry_pool.acquire() as conn:
+            databases = await conn.fetch(
+                "SELECT datname FROM pg_database WHERE datname LIKE $1 ORDER BY datname",
+                f"{prefix}%"
+            )
+            return [db['datname'] for db in databases]
+    except Exception as e:
+        logger.debug(f"Could not query available databases: {e}")
+        return []
+
+
+async def generate_database_suggestion(error_message: str, project_id: str | None) -> str:
+    """Generate helpful error message with database suggestions.
+
+    Parses database connection errors to extract the missing database name
+    and provides actionable suggestions including available alternatives.
+
+    Args:
+        error_message: Original database error message
+        project_id: Project ID that was attempted (if any)
+
+    Returns:
+        Enhanced error message with actionable suggestions
+
+    Example:
+        >>> error = 'database "cb_proj_test" does not exist'
+        >>> suggestion = await generate_database_suggestion(error, "test-project")
+        >>> print(suggestion)
+        ❌ Database 'cb_proj_test' does not exist.
+
+        📋 Available databases:
+          • cb_proj_default_00000000
+
+        🔧 Recommended actions:
+        1. Update .codebase-mcp/config.json with a valid database name
+        ...
+    """
+    # Extract database name from error (e.g., "database \"cb_proj_xxx\" does not exist")
+    db_match = re.search(r'database "([^"]+)" does not exist', error_message)
+    if not db_match:
+        return error_message  # Can't enhance, return original
+
+    missing_db = db_match.group(1)
+
+    # Get available databases
+    available_dbs = await get_available_databases()
+
+    # Build enhanced error message
+    msg = f"❌ Database '{missing_db}' does not exist.\n\n"
+
+    if available_dbs:
+        msg += "📋 Available databases:\n"
+        for db in available_dbs:
+            msg += f"  • {db}\n"
+        msg += "\n"
+    else:
+        msg += "⚠️  No codebase-mcp databases found. This may be the first project.\n\n"
+
+    msg += "🔧 Recommended actions:\n"
+    msg += "1. Update .codebase-mcp/config.json with a valid database name\n"
+    if available_dbs:
+        msg += f"   Example: Use database '{available_dbs[0]}' if it matches your project\n"
+    msg += "2. Or, remove the 'id' field from config to auto-create a new database\n"
+    msg += "3. Or, create the database manually: createdb " + missing_db + "\n"
+
+    return msg
 
 
 async def _background_indexing_worker(
@@ -274,12 +361,22 @@ async def _background_indexing_worker(
 
     except Exception as e:
         # Catch-all for unexpected errors
+        error_str = str(e)
+
+        # Check if this is a database existence error and enhance the message
+        if "database" in error_str.lower() and "does not exist" in error_str.lower():
+            error_message = await generate_database_suggestion(error_str, project_id)
+        else:
+            error_message = error_str
+
         logger.error(
             f"Unexpected error in job {job_id}",
             extra={
                 "context": {
                     "job_id": str(job_id),
-                    "error": str(e),
+                    "repo_path": repo_path,
+                    "project_id": project_id,
+                    "error": error_message,
                     "error_type": type(e).__name__,
                 }
             },
@@ -291,7 +388,7 @@ async def _background_indexing_worker(
             await update_job(
                 job_id=job_id,
                 status="failed",
-                error_message=str(e),
+                error_message=error_message,  # Use enhanced message
                 completed_at=datetime.now(),
             )
         except Exception as update_error:
@@ -304,4 +401,6 @@ async def _background_indexing_worker(
 __all__ = [
     "_background_indexing_worker",
     "update_job",
+    "get_available_databases",
+    "generate_database_suggestion",
 ]
