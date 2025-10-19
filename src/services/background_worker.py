@@ -88,6 +88,7 @@ async def _background_indexing_worker(
     repo_path: str,
     project_id: str,
     config_path: Path | None = None,
+    force_reindex: bool = False,
 ) -> None:
     """Background worker that executes indexing and updates PostgreSQL.
 
@@ -101,6 +102,7 @@ async def _background_indexing_worker(
         config_path: Optional path to .codebase-mcp/config.json for auto-creation
                      If provided, worker will attempt to auto-create project database.
                      If None, worker uses existing database or default database.
+        force_reindex: If True, re-index all files regardless of changes (default: False)
 
     Bug Fix:
         Resolves Bug 2 - Background indexing auto-creation failure.
@@ -122,7 +124,13 @@ async def _background_indexing_worker(
     """
     logger.info(
         f"Background worker started for job {job_id}",
-        extra={"context": {"job_id": str(job_id), "project_id": project_id}},
+        extra={
+            "context": {
+                "job_id": str(job_id),
+                "project_id": project_id,
+                "force_reindex": force_reindex,
+            }
+        },
     )
 
     try:
@@ -150,6 +158,7 @@ async def _background_indexing_worker(
                 name=Path(repo_path).name,
                 db=session,
                 project_id=project_id,
+                force_reindex=force_reindex,
             )
 
         # 3. Check if indexing succeeded by inspecting result.status
@@ -200,8 +209,11 @@ async def _background_indexing_worker(
             )
             total_files_in_db = count_result.scalar() or 0
 
-            # Determine scenario based on files_indexed count and total files
-            if result.files_indexed == 0:
+            # Determine scenario based on force_reindex flag, files_indexed count, and total files
+            if force_reindex:
+                # Force reindex mode - all files re-indexed regardless of changes
+                status_message = f"Force reindex completed: {result.files_indexed} files, {result.chunks_created} chunks"
+            elif result.files_indexed == 0:
                 # No changes detected (incremental with no modifications)
                 status_message = f"Repository up to date - no file changes detected since last index ({total_files_in_db} files already indexed)"
             elif total_files_in_db == result.files_indexed:
@@ -229,6 +241,7 @@ async def _background_indexing_worker(
                     "files_indexed": result.files_indexed,
                     "chunks_created": result.chunks_created,
                     "status_message": status_message,
+                    "force_reindex": force_reindex,
                 }
             },
         )
