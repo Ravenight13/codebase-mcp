@@ -287,7 +287,7 @@ async def _background_indexing_worker(
         status_message = ""
 
         # Query database to determine if this was incremental or full index
-        async with AsyncSession(engine) as session:
+        async with get_session(project_id=project_id, ctx=None) as session:
             # Count total non-deleted files in database for this repository
             count_result = await session.execute(
                 select(func.count(CodeFile.id)).where(
