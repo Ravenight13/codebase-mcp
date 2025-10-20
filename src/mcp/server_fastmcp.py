@@ -220,27 +220,33 @@ async def lifespan(app: FastMCP) -> AsyncGenerator[None, None]:
         logger.info("Session manager started")
         sys.stderr.write("INFO: Session manager started\n")
 
-        # Initialize connection pool
-        logger.info("Initializing connection pool...")
-        sys.stderr.write("INFO: Initializing connection pool...\n")
-
-        # Load settings and create pool configuration
+        # Initialize connection pool (LEGACY - only if DATABASE_URL is set)
+        # Modern database-per-project architecture uses registry pools instead
         settings = get_settings()
-        pool_config = PoolConfig(
-            min_size=settings.db_pool_size,
-            max_size=settings.db_pool_size + settings.db_max_overflow,
-            timeout=30.0,
-            command_timeout=60.0,
-            max_queries=50000,
-            max_idle_time=300.0,  # 5 minutes
-            max_connection_lifetime=3600.0,  # 1 hour
-            leak_detection_timeout=30.0,
-            enable_leak_detection=True,
-            database_url=str(settings.database_url),
-        )
 
-        # Initialize pool (BLOCKING - wait for completion)
-        await pool_manager.initialize(pool_config)
+        if settings.database_url is not None:
+            logger.info("Initializing legacy connection pool...")
+            sys.stderr.write("INFO: Initializing legacy connection pool...\n")
+
+            pool_config = PoolConfig(
+                min_size=settings.db_pool_size,
+                max_size=settings.db_pool_size + settings.db_max_overflow,
+                timeout=30.0,
+                command_timeout=60.0,
+                max_queries=50000,
+                max_idle_time=300.0,  # 5 minutes
+                max_connection_lifetime=3600.0,  # 1 hour
+                leak_detection_timeout=30.0,
+                enable_leak_detection=True,
+                database_url=str(settings.database_url),
+            )
+
+            # Initialize pool (BLOCKING - wait for completion)
+            await pool_manager.initialize(pool_config)
+            logger.info("✓ Legacy connection pool initialized")
+        else:
+            logger.info("Skipping legacy pool (using database-per-project architecture)")
+            sys.stderr.write("INFO: Using database-per-project architecture (no legacy pool)\n")
 
         # Store pool_manager in module-level variable for tool access
         _pool_manager = pool_manager

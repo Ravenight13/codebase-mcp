@@ -37,6 +37,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from datetime import datetime
@@ -167,6 +168,41 @@ class Project(BaseModel):
                 "Must match pattern: cb_proj_{{name}}_{{hash}}"
             )
         return v
+
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+
+def _parse_metadata(metadata_value: Any) -> dict[str, Any]:
+    """
+    Parse metadata from asyncpg JSONB column.
+
+    AsyncPG can return JSONB values as either dict objects or JSON strings
+    depending on the database configuration. This helper safely handles both.
+
+    Args:
+        metadata_value: Raw metadata value from asyncpg (dict, str, or None)
+
+    Returns:
+        Parsed metadata dictionary (empty dict if None or empty)
+    """
+    if not metadata_value:
+        return {}
+
+    if isinstance(metadata_value, dict):
+        return metadata_value
+
+    if isinstance(metadata_value, str):
+        try:
+            parsed = json.loads(metadata_value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse metadata JSON string: {metadata_value}")
+            return {}
+
+    return {}
 
 
 # ==============================================================================
@@ -335,7 +371,7 @@ class ProjectRegistry:
                     database_name=row["database_name"],
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
-                    metadata=dict(row["metadata"]) if row["metadata"] else {},
+                    metadata=_parse_metadata(row["metadata"]),
                 )
 
                 logger.info(
@@ -420,7 +456,7 @@ class ProjectRegistry:
                 database_name=row["database_name"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
-                metadata=dict(row["metadata"]) if row["metadata"] else {},
+                metadata=_parse_metadata(row["metadata"]),
             )
 
     async def get_project_by_name(self, name: str) -> Project | None:
@@ -466,7 +502,7 @@ class ProjectRegistry:
                 database_name=row["database_name"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
-                metadata=dict(row["metadata"]) if row["metadata"] else {},
+                metadata=_parse_metadata(row["metadata"]),
             )
 
     async def list_projects(self) -> list[Project]:
@@ -502,7 +538,7 @@ class ProjectRegistry:
                     database_name=row["database_name"],
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
-                    metadata=dict(row["metadata"]) if row["metadata"] else {},
+                    metadata=_parse_metadata(row["metadata"]),
                 )
                 for row in rows
             ]
