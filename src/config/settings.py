@@ -141,16 +141,18 @@ class Settings(BaseSettings):
     # ============================================================================
 
     database_url: Annotated[
-        PostgresDsn,
+        PostgresDsn | None,
         Field(
+            default=None,
             description=(
-                "PostgreSQL connection URL with asyncpg driver. "
+                "LEGACY: PostgreSQL connection URL with asyncpg driver. "
                 "Format: postgresql+asyncpg://user:password@host:port/database. "
-                "NOTE: In database-per-project architecture, this is the DEFAULT database. "
+                "NOTE: This is OPTIONAL and only used for backward compatibility. "
+                "Modern deployments use database-per-project architecture via REGISTRY_DATABASE_URL. "
                 "Each project uses its own isolated database (cb_proj_*)."
             ),
         ),
-    ]
+    ] = None
 
     registry_database_url: Annotated[
         PostgresDsn,
@@ -344,27 +346,31 @@ class Settings(BaseSettings):
 
     @field_validator("database_url", "registry_database_url")
     @classmethod
-    def validate_asyncpg_driver(cls, v: PostgresDsn) -> PostgresDsn:
+    def validate_asyncpg_driver(cls, v: PostgresDsn | None) -> PostgresDsn | None:
         """
         Ensure database URLs use asyncpg driver for async SQLAlchemy.
 
         Args:
-            v: PostgreSQL DSN to validate
+            v: PostgreSQL DSN to validate (or None for optional database_url)
 
         Returns:
-            Validated PostgreSQL DSN
+            Validated PostgreSQL DSN or None
 
         Raises:
             ValueError: If scheme is not postgresql+asyncpg
         """
+        # Allow None for optional database_url (legacy support)
+        if v is None:
+            return None
+
         if v.scheme != "postgresql+asyncpg":
             error_msg = (
                 "Database URL must use asyncpg driver for async operations.\n"
                 f"Found: {v.scheme}\n"
                 "Expected: postgresql+asyncpg\n\n"
                 "Fix: Update .env file:\n"
-                "  DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp\n"
-                "  REGISTRY_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp_registry"
+                "  DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp (optional, legacy)\n"
+                "  REGISTRY_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/codebase_mcp_registry (required)"
             )
             raise ValueError(error_msg)
         return v
@@ -463,8 +469,9 @@ class Settings(BaseSettings):
             >>> settings.pool_config.min_size
             5
         """
-        if self.pool_config is None:
+        if self.pool_config is None and self.database_url is not None:
             # Convert PostgresDsn to string for PoolConfig
+            # Only initialize if database_url is provided (legacy support)
             database_url_str = str(self.database_url)
 
             try:
