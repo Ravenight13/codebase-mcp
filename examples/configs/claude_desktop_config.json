@@ -8,9 +8,9 @@
       ],
       "cwd": "/Users/cliffclarke/Claude_Code/codebase-mcp",
       "env": {
-        "DATABASE_URL": "postgresql+asyncpg://cliffclarke@localhost:5432/codebase_mcp",
+        "REGISTRY_DATABASE_URL": "postgresql+asyncpg://cliffclarke@localhost:5432/codebase_mcp_registry",
         "OLLAMA_BASE_URL": "http://localhost:11434",
-        "OLLAMA_EMBEDDING_MODEL": "embeddinggemma:latest",
+        "OLLAMA_EMBEDDING_MODEL": "nomic-embed-text:latest",
         "LOG_LEVEL": "INFO",
         "LOG_FILE": "/tmp/codebase-mcp.log"
       }
