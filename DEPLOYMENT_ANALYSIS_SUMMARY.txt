@@ -1,0 +1,409 @@
+================================================================================
+CODEBASE MCP SERVER - DEPLOYMENT ANALYSIS SUMMARY
+================================================================================
+
+ANALYSIS COMPLETED: 2025-11-06
+SCOPE: Complete codebase architecture review for containerization planning
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+The Codebase MCP Server is a production-grade semantic code search application
+currently deployed as a CLI tool with no containerization for production.
+
+Current State:
+- Entry Point: src/mcp/server_fastmcp.py::main() (FastMCP server)
+- Transport: Stdio (for Claude Desktop integration)
+- Python: 3.11+ required
+- Database: PostgreSQL 14+ with pgvector extension
+- Embedding: Ollama (local model server)
+- Status: Development-ready, production-deployment lacking
+
+Key Architecture:
+- Async-first (asyncio + asyncpg)
+- Multi-tenant capable (database-per-project)
+- Background job processing (non-blocking indexing)
+- Health monitoring & metrics built-in
+- Graceful shutdown pattern established
+
+================================================================================
+2. CRITICAL FINDINGS
+================================================================================
+
+PRODUCTION READINESS:
+✓ Application code: Production-ready
+✓ Type safety: mypy --strict compliant
+✓ Error handling: Comprehensive with fail-fast validation
+✓ Architecture: Clean, modular, async-first
+✗ Containerization: Missing entirely
+✗ Docker deployment: No Dockerfile or compose
+✗ Database initialization: Manual setup required
+✗ Health checks: No container-level checks
+✗ Logging persistence: Logs in /tmp/ only
+
+DEPENDENCIES:
+✓ All pinned in pyproject.toml
+✓ Clear separation: requirements.txt for production
+✓ Development tools: Included in optional groups
+✓ External services: PostgreSQL & Ollama (well-documented)
+
+CONFIGURATION:
+✓ Environment-based (Pydantic-settings)
+✓ Fail-fast validation with actionable errors
+✓ .env support (loaded automatically)
+✓ Type-safe settings singleton
+
+DATABASE:
+✓ Database-per-project architecture
+✓ Alembic migrations (7 versions)
+✓ Registry database for project tracking
+✓ Schema supports isolation & scaling
+
+================================================================================
+3. DEPLOYMENT MODEL ANALYSIS
+================================================================================
+
+CURRENT ARCHITECTURE:
+Claude Desktop → codebase-mcp (Python) → PostgreSQL + Ollama
+
+DEPLOYMENT GAP:
+┌─────────────────────────────────────────────────────────────┐
+│ What's Missing for Production Deployment:                   │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Production Dockerfile (base: python:3.11-slim)           │
+│ 2. Docker Compose stack (app + PostgreSQL + Ollama)         │
+│ 3. Database initialization scripts (pgvector setup)         │
+│ 4. Health check configuration (Docker health checks)        │
+│ 5. Volume management (persistent data & logs)               │
+│ 6. Environment variable injection (compose variables)       │
+│ 7. Network configuration (internal Docker network)          │
+│ 8. Graceful shutdown hooks (SIGTERM handling)               │
+└─────────────────────────────────────────────────────────────┘
+
+KEY CONSTRAINT:
+This is a Stdio server (MCP protocol), NOT HTTP.
+- Cannot expose ports
+- No reverse proxy needed
+- Health checks must be internal
+- Container isolation primarily for reproducibility
+
+================================================================================
+4. DEPENDENCIES SUMMARY
+================================================================================
+
+PYTHON VERSION: 3.11+ (tested: 3.11, 3.12, 3.13)
+
+CRITICAL PACKAGES (from requirements.txt):
+- FastAPI + uvicorn (web framework)
+- SQLAlchemy[asyncpg] (async ORM)
+- asyncpg (PostgreSQL driver)
+- alembic (database migrations)
+- pgvector (vector similarity)
+- fastmcp (MCP protocol framework)
+- mcp (MCP SDK)
+- tree-sitter* (code parsing)
+- pydantic (validation)
+- httpx (HTTP client for Ollama)
+- python-dotenv (env file support)
+
+EXTERNAL SERVICES:
+- PostgreSQL 14+ (with pgvector extension)
+- Ollama (embedding service, port 11434)
+
+TOTAL DEPENDENCIES: 20+ Python packages (well-maintained)
+
+================================================================================
+5. CONFIGURATION MANAGEMENT
+================================================================================
+
+REQUIRED ENVIRONMENT VARIABLES:
+REGISTRY_DATABASE_URL=postgresql+asyncpg://user:pass@host/registry
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+OPTIONAL VARIABLES:
+- DATABASE_URL (legacy, for backward compatibility)
+- EMBEDDING_BATCH_SIZE, MAX_CONCURRENT_REQUESTS (performance tuning)
+- POOL_* variables (connection pool advanced config)
+- LOG_LEVEL, LOG_FILE (logging config)
+- WORKFLOW_MCP_URL (optional multi-project integration)
+- MAX_CONCURRENT_INDEXING_JOBS (background job tuning)
+
+CONFIGURATION APPROACH:
+- Environment variables sourced from .env file
+- Pydantic-based settings (src/config/settings.py)
+- Fail-fast validation: missing/invalid config halts startup
+- Type-safe singleton pattern: get_settings()
+
+================================================================================
+6. DATABASE ARCHITECTURE
+================================================================================
+
+SCHEMA PATTERN: Database-per-project isolation
+
+REGISTRY DATABASE (codebase_mcp_registry):
+- Tracks all projects and their isolated databases
+- Metadata about workspaces and configurations
+
+PROJECT DATABASES (cb_proj_*):
+- Isolated per project (namespace cb_proj_<project_id>)
+- Tables: repositories, code_files, code_chunks, indexing_jobs
+- Vectors: 384-dimensional embeddings (nomic-embed-text)
+- Indexes: HNSW for fast similarity search
+
+MIGRATIONS:
+- Tool: Alembic
+- Location: migrations/versions/
+- Current: 7 migrations (database refactoring, project registry, etc.)
+- Command: DATABASE_URL=... alembic upgrade head
+
+================================================================================
+7. DEVELOPMENT VS PRODUCTION
+================================================================================
+
+DEVELOPMENT (Current):
+- Devcontainer-based (VS Code)
+- Editable install: pip install -e .
+- Local PostgreSQL + Ollama
+- pytest with markers (unit, integration, contract)
+- mypy --strict type checking
+- ruff linting & formatting
+
+PRODUCTION (Needed):
+- Containerized application (Dockerfile)
+- Containerized services (Docker Compose)
+- Persistent volumes for data & logs
+- Health checks at container level
+- Process manager or orchestrator (Docker)
+- Structured logging to persistent storage
+- Network isolation (internal Docker network)
+- Resource limits & constraints
+
+KEY DIFFERENCES:
+- Dev: Editable install allows hot-reload
+- Prod: Fixed image version for reproducibility
+- Dev: /tmp/ logs acceptable
+- Prod: Persistent log volumes required
+- Dev: Direct database access
+- Prod: Service discovery via container names
+
+================================================================================
+8. CONTAINERIZATION ROADMAP
+================================================================================
+
+PHASE 1 - APPLICATION CONTAINER:
+- Create Dockerfile (python:3.11-slim base)
+- Install requirements
+- Copy source code
+- Non-root user (security)
+- Entry point: codebase-mcp
+- Volume mounts: /tmp (logs)
+
+PHASE 2 - DOCKER COMPOSE STACK:
+- postgres service: PostgreSQL 14 with pgvector
+- ollama service: Ollama with model persistence
+- codebase-mcp service: Application container
+- Health checks for each service
+- Volumes for persistent data
+- Internal network configuration
+- Environment variable injection
+
+PHASE 3 - PRODUCTION HARDENING:
+- Multi-stage builds (reduce image size)
+- Image scanning & vulnerability checks
+- Resource limits (CPU, memory)
+- Graceful shutdown (SIGTERM handling)
+- Structured JSON logging
+- Security context (read-only filesystem where possible)
+
+ESTIMATED EFFORT:
+- Phase 1: 2-3 hours
+- Phase 2: 1-2 hours
+- Phase 3: 2-3 hours
+
+================================================================================
+9. KEY FILES & CONTACT POINTS
+================================================================================
+
+SERVER STARTUP:
+- Entry: src/mcp/server_fastmcp.py::main()
+- Lifespan: async context manager (startup/shutdown)
+- Tools: Registered via @mcp.tool() decorators
+- Resources: Health & metrics endpoints
+
+CONFIGURATION:
+- Settings: src/config/settings.py (Pydantic BaseSettings)
+- Reads: .env file (python-dotenv)
+- Validation: Fail-fast with actionable errors
+
+DATABASE:
+- Session: src/database/session.py
+- Pooling: src/connection_pool/manager.py
+- Registry: src/database/registry.py
+- Migrations: migrations/versions/
+
+SERVICES:
+- Indexing: src/services/indexer.py
+- Search: src/services/searcher.py
+- Embedding: src/services/embedder.py (Ollama integration)
+- Background: src/services/background_worker.py
+- Health: src/services/health_service.py
+- Metrics: src/services/metrics_service.py
+
+================================================================================
+10. KNOWN CONSTRAINTS & CONSIDERATIONS
+================================================================================
+
+STDIO TRANSPORT CONSTRAINT:
+This is an MCP Stdio server, NOT an HTTP service.
+- Output is MCP protocol (not HTTP)
+- Cannot expose via reverse proxy
+- Cannot be accessed via standard HTTP tools
+- Health checks must be internal (not HTTP probes)
+- Container use case: isolation, reproducibility, orchestration
+
+MULTI-CONTAINER COORDINATION:
+- App must reach PostgreSQL (via REGISTRY_DATABASE_URL)
+- App must reach Ollama (via OLLAMA_BASE_URL)
+- Internal Docker network sufficient (no external ports needed)
+- Service discovery via container names (postgres, ollama)
+
+DATABASE INITIALIZATION:
+- Two-phase setup:
+  1. Create registry database + pgvector extension
+  2. Run Alembic migrations
+- Timing: Must complete before app startup
+- Approach: Init container or entrypoint script
+
+PERFORMANCE TARGETS:
+- Indexing: <60s p95 for 10,000 files
+- Search: <500ms p95 latency
+- Health check: <50ms
+- Connection pool: 2-10 connections (configurable)
+- Background jobs: 2 concurrent (configurable)
+
+================================================================================
+11. PRODUCTION DEPLOYMENT CHECKLIST
+================================================================================
+
+PRE-DEPLOYMENT:
+☐ Dockerfile created and tested
+☐ Docker Compose stack defined
+☐ Database initialization scripts ready
+☐ Environment variables documented
+☐ Health checks configured
+☐ Logging volume mount defined
+☐ Network configuration reviewed
+☐ Resource limits specified
+
+DEPLOYMENT:
+☐ PostgreSQL container running
+☐ Ollama container running with model pulled
+☐ Application container running
+☐ All health checks passing
+☐ Logs accessible in persistent storage
+☐ Configuration validated
+☐ Performance verified against targets
+
+POST-DEPLOYMENT:
+☐ Application responding to queries
+☐ Background indexing working
+☐ Search functionality verified
+☐ Monitoring in place
+☐ Graceful shutdown tested
+☐ Container restart recovery verified
+
+================================================================================
+12. DOCUMENTATION GENERATED
+================================================================================
+
+Two comprehensive documents have been created:
+
+1. DEPLOYMENT_ARCHITECTURE_ANALYSIS.md (612 lines, 20.1 KB)
+   - Complete server architecture breakdown
+   - Detailed dependency analysis with version info
+   - Database schema explanation
+   - Development vs production differences
+   - Recommended containerization approach with examples
+   - Implementation patterns and constraints
+   
+   BEST FOR: Deep understanding of architecture, planning implementation
+
+2. DEPLOYMENT_QUICK_REFERENCE.md (250 lines, 8.9 KB)
+   - One-page summary of key facts
+   - Critical dependencies table
+   - Environment variables reference
+   - Common tasks and commands
+   - Containerization checklist
+   - Important constraints summary
+   
+   BEST FOR: Quick lookup, daily reference, implementation guidance
+
+================================================================================
+13. RECOMMENDATIONS
+================================================================================
+
+IMMEDIATE ACTIONS (Next Sprint):
+1. Create production Dockerfile
+   - Base: python:3.11-slim
+   - Install: pip install -r requirements.txt
+   - Entry: codebase-mcp
+   - Test: Build and verify
+
+2. Create Docker Compose stack
+   - postgres: PostgreSQL 14 with pgvector
+   - ollama: Ollama with model setup
+   - codebase-mcp: Application (depends_on)
+   - Volumes: postgres-data, ollama-models, logs
+
+3. Write database init script
+   - PostgreSQL schema creation
+   - pgvector extension
+   - Alembic migrations
+
+4. Document environment setup
+   - Required variables
+   - Optional tuning variables
+   - Example .env files
+
+MEDIUM-TERM (Following Sprint):
+1. Implement container health checks
+2. Add structured JSON logging
+3. Create monitoring/metrics dashboard
+4. Document operational procedures
+
+LONG-TERM (Future):
+1. Kubernetes manifests (if needed)
+2. Helm charts (if needed)
+3. CI/CD pipeline for image building
+4. Image scanning & vulnerability management
+
+================================================================================
+14. CONCLUSION
+================================================================================
+
+The Codebase MCP Server is a mature, well-architected application ready for
+containerization. The application code is production-ready; what's missing is
+the container infrastructure.
+
+The codebase demonstrates:
+- Professional error handling
+- Async-first architecture
+- Type-safe code (mypy --strict)
+- Comprehensive logging
+- Built-in health checks
+- Graceful shutdown patterns
+
+Containerization effort is moderate (5-8 hours for full production readiness)
+and straightforward given the existing architecture.
+
+The application's Stdio transport (MCP protocol) should not be confused with
+HTTP services - containerization here is for isolation, reproducibility, and
+orchestration with supporting services (PostgreSQL, Ollama), not for exposing
+HTTP endpoints.
+
+See DEPLOYMENT_ARCHITECTURE_ANALYSIS.md for complete details and
+DEPLOYMENT_QUICK_REFERENCE.md for quick lookup.
+
+================================================================================

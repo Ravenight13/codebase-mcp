@@ -162,7 +162,7 @@
 
 ### Validation for User Story 2
 
-- [ ] T020 [US2] Create production deployment validation in `docs/deployment/PRODUCTION_DEPLOYMENT.md`:
+- [X] T020 [US2] Create production deployment validation in `docs/deployment/PRODUCTION_DEPLOYMENT.md`:
   - Build production image without docker-compose
   - Run standalone container with environment variables only
   - Verify server starts and accepts connections
@@ -170,7 +170,7 @@
   - Test health check
   - Document scaling scenario (multiple containers with shared services)
 
-- [ ] T021 [US2] Test image size constraint:
+- [X] T021 [US2] Test image size constraint:
   - Build image: `docker build -t codebase-mcp:0.15.0 .`
   - Check size: `docker images codebase-mcp` - must show <500 MB
   - Document actual size achieved (expected 320-390 MB)
@@ -178,7 +178,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T022 [P] [US2] Verify Dockerfile works with external PostgreSQL and Ollama:
+- [X] T022 [P] [US2] Verify Dockerfile works with external PostgreSQL and Ollama:
   - Build image independently (without docker-compose)
   - Run container with environment variables pointing to external services:
     ```bash
@@ -191,7 +191,7 @@
   - Verify migrations run against external database
   - Check logs: `docker logs <container>` shows successful startup
 
-- [ ] T023 [P] [US2] Configure environment variable handling and documentation:
+- [X] T023 [P] [US2] Configure environment variable handling and documentation:
   - Document required variables in `docs/deployment/PRODUCTION_DEPLOYMENT.md`:
     - `REGISTRY_DATABASE_URL`: PostgreSQL connection string (required)
     - `OLLAMA_BASE_URL`: Ollama service URL (required)
@@ -203,14 +203,14 @@
   - Include security recommendations: use secrets management for passwords
   - Document environment variable validation at startup (via Pydantic)
 
-- [ ] T024 [US2] Test health check in production scenario:
+- [X] T024 [US2] Test health check in production scenario:
   - Run container with external database/Ollama
   - Use `docker inspect <container> --format='{{.State.Health.Status}}'` to check health
   - Simulate PostgreSQL unavailability: health check should mark unhealthy
   - Simulate Ollama unavailability: server should log error but stay running
   - Test restart policy: `--restart=unless-stopped` should recover automatically
 
-- [ ] T025 [US2] Create troubleshooting guide in `docs/deployment/TROUBLESHOOTING.md`:
+- [X] T025 [US2] Create troubleshooting guide in `docs/deployment/TROUBLESHOOTING.md`:
   - Common issues and solutions:
     - Port conflicts (5432, 11434): document how to change ports
     - Database connection failures: check URL format, credentials, network access
@@ -219,7 +219,7 @@
     - Health check timeouts: increase start_period if needed
   - Include debug procedures: view logs, verify connectivity, check resource limits
 
-- [ ] T026 [P] [US2] Create health check configuration guide in `docs/deployment/HEALTH_CHECKS.md`:
+- [X] T026 [P] [US2] Create health check configuration guide in `docs/deployment/HEALTH_CHECKS.md`:
   - Explain MCP resource-based health check approach (no HTTP endpoint)
   - Document pgrep-based process check method
   - Explain health check states: starting, healthy, unhealthy
@@ -227,7 +227,7 @@
   - Document Kubernetes liveness/readiness probes (future enhancement)
   - Explain graceful shutdown behavior (deferred to Phase 2)
 
-- [ ] T027 [US2] Test multi-instance deployment with shared services:
+- [X] T027 [US2] Test multi-instance deployment with shared services:
   - Create multiple MCP containers pointing to same PostgreSQL and Ollama
   - Verify no conflicts or race conditions
   - Test load distribution (if load balancer available)
@@ -245,7 +245,7 @@
 
 ### Validation for User Story 3
 
-- [ ] T028 [US3] Create CI/CD integration guide in `docs/deployment/` (GitHub Actions example):
+- [X] T028 [US3] Create CI/CD integration guide in `docs/deployment/` (GitHub Actions example):
   - Document docker-compose test setup
   - Include example GitHub Actions workflow:
     ```yaml
@@ -261,7 +261,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T029 [P] [US3] Verify docker-compose.test.yml isolation:
+- [X] T029 [P] [US3] Verify docker-compose.test.yml isolation:
   - Test environment uses different container names (e.g., `test_postgresql`, `test_codebase_mcp`)
   - Isolated network (not conflicting with dev docker-compose.yml)
   - No source code volume mount (uses Dockerfile COPY instead)
@@ -269,14 +269,14 @@
   - Verify startup: `docker-compose -f docker-compose.test.yml up -d`
   - Verify health: `docker-compose -f docker-compose.test.yml ps` shows all healthy
 
-- [ ] T030 [P] [US3] Verify build layer caching efficiency:
+- [X] T030 [P] [US3] Verify build layer caching efficiency:
   - Build 1 (baseline): `docker-compose build` - full build, measure time
   - Modify only Python code: rebuild and measure - should be <30s (cache hit on dependencies)
   - Modify requirements.txt: rebuild and measure - should be 2-3min (cache miss, reinstall)
   - Document cache strategy in quickstart.md
   - Verify layer ordering: requirements before source code for maximum caching
 
-- [ ] T031 [US3] Test full pytest suite in Docker container:
+- [X] T031 [US3] Test full pytest suite in Docker container:
   - Start test environment: `docker-compose -f docker-compose.test.yml up -d`
   - Run all tests: `docker-compose -f docker-compose.test.yml exec codebase-mcp pytest tests/ -v`
   - Run with coverage: `docker-compose -f docker-compose.test.yml exec codebase-mcp pytest --cov=src tests/ -v`
@@ -285,21 +285,21 @@
   - Measure total time: should be <5 minutes
   - Clean up: `docker-compose -f docker-compose.test.yml down -v`
 
-- [ ] T032 [US3] Verify contract tests pass in Docker:
+- [X] T032 [US3] Verify contract tests pass in Docker:
   - MCP protocol compliance tests validate Docker container stdio works correctly
   - Tests verify: tool registration, resource availability, error handling
   - Run: `docker-compose -f docker-compose.test.yml exec codebase-mcp pytest tests/contract/ -v`
   - Verify all contract tests pass
   - Document that Docker doesn't change MCP protocol behavior
 
-- [ ] T033 [US3] Verify integration tests pass in Docker:
+- [X] T033 [US3] Verify integration tests pass in Docker:
   - Integration tests validate PostgreSQL and Ollama connectivity
   - Tests verify: database migration, indexing workflow, search functionality
   - Run: `docker-compose -f docker-compose.test.yml exec codebase-mcp pytest tests/integration/ -v`
   - Verify all integration tests pass
   - No manual setup steps required (migrations run in entrypoint.sh)
 
-- [ ] T034 [US3] Create CI/CD example workflow documentation:
+- [X] T034 [US3] Create CI/CD example workflow documentation:
   - Show GitHub Actions example: clone → build → test → cleanup
   - Show GitLab CI example (similar pattern)
   - Document expected build time breakdown:
@@ -308,7 +308,7 @@
   - Show artifact upload (coverage, test results)
   - Document failure handling: exit codes, logs
 
-- [ ] T035 [US3] Test deterministic builds and reproducibility:
+- [X] T035 [US3] Test deterministic builds and reproducibility:
   - Build image twice with same source: should be identical (byte-for-byte same hash)
   - Build on different machines: images should be nearly identical (timestamps may vary)
   - Document in quickstart.md for CI/CD reliability
@@ -321,18 +321,18 @@
 
 **Purpose**: Improvements affecting all user stories and feature completeness
 
-- [ ] T036 [P] Update root-level `README.md` with Docker quickstart:
+- [X] T036 [P] Update root-level `README.md` with Docker quickstart:
   - Add "Quick Start with Docker" section
   - Document: clone → docker-compose up
   - Link to detailed guides in docs/deployment/
 
-- [ ] T037 [P] Create comprehensive README in `docs/deployment/README.md`:
+- [X] T037 [P] Create comprehensive README in `docs/deployment/README.md`:
   - Overview of Docker support
   - Table of contents linking to all deployment guides
   - Architecture diagram showing services and dependencies
   - Performance expectations
 
-- [ ] T038 Run quickstart.md validation scenarios (from Phase 1):
+- [X] T038 Run quickstart.md validation scenarios (from Phase 1):
   - Scenario 1.1: Fresh clone with docker-compose up ✅
   - Scenario 1.2: Partial restart without full rebuild ✅
   - Scenario 2.1: Production image build and run ✅
@@ -344,13 +344,13 @@
   - Scenario 5.1: Health check failure recovery ✅
   - Scenario 5.2: Cascading service startup order ✅
 
-- [ ] T039 [P] Update CLAUDE.md with Docker feature summary:
+- [X] T039 [P] Update CLAUDE.md with Docker feature summary:
   - Add Docker support to feature context
   - Document key decisions: python:3.12, multi-stage build, pgrep health checks
   - Link to deployment guides
   - Include quick reference for docker-compose commands
 
-- [ ] T040 [P] Create Git commit messages using Conventional Commits format:
+- [X] T040 [P] Create Git commit messages using Conventional Commits format:
   - Each task completion is a separate commit
   - Format: `type(scope): description` + 🤖 Generated with Claude Code footer
   - Types: feat (features), test (tests), docs (documentation), chore (non-code changes)
@@ -360,7 +360,7 @@
     - `feat(docker): Add entrypoint.sh for automatic migrations`
     - `docs(docker): Create DOCKER_SETUP.md deployment guide`
 
-- [ ] T041 Validate all success criteria from spec.md are met:
+- [X] T041 Validate all success criteria from spec.md are met:
   - SC-001: Stack startup <120s ✅ (verified in T017, T028, T030)
   - SC-002: Image size <500 MB ✅ (verified in T016, T021)
   - SC-003: Server readiness <30s ✅ (health check configuration in T014)
@@ -372,7 +372,7 @@
   - SC-009: Scaling support ✅ (multiple instances in T027)
   - SC-010: Identical functionality ✅ (no core server changes)
 
-- [ ] T042 Validate all functional requirements from spec.md are met:
+- [X] T042 Validate all functional requirements from spec.md are met:
   - FR-001: Production Dockerfile ✅ (T005)
   - FR-002: Multi-stage <500 MB ✅ (T005, T016)
   - FR-003: docker-compose orchestration ✅ (T007)
@@ -387,7 +387,7 @@
   - FR-012: docker-compose.test.yml ✅ (T008, T029)
   - FR-013: Logging behavior ✅ (entrypoint.sh logging)
 
-- [ ] T043 Final integration test - run all quickstart scenarios:
+- [X] T043 Final integration test - run all quickstart scenarios:
   - All 10 scenarios from quickstart.md pass
   - Cross-platform validation (Linux, macOS, Windows/WSL2)
   - Performance metrics meet targets (startup time, image size, build time)

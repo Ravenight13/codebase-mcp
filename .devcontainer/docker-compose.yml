@@ -1,0 +1,80 @@
+---
+name: transformia-codebase
+
+volumes:
+  alpine-cache:
+    name: alpine-cache
+    external: true
+
+services:
+  claude:
+    container_name: transformia-codebase-claude
+    hostname: transformia-codebase-claude
+    working_dir: /workspace
+    build:
+      pull: false
+      context: ./
+      dockerfile: Dockerfile
+      tags:
+        - transformia-codebase-claude
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    volumes:
+      - ..:/workspace:cached
+      - alpine-cache:/var/cache/apk
+      - ${HOME}/.ssh:/home/code/.ssh:ro
+      - ${HOME}/.claude:/home/code/.claude
+      - ${HOME}/.claude.json:/home/code/.claude.json
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: /bin/bash
+    command: -c "sleep 10000h"
+    restart: unless-stopped
+    environment:
+      LANG: ${LANG}
+      TZ: America/Toronto
+
+  jsonlint:
+    container_name: transformia-codebase-jsonlint
+    hostname: transformia-codebase-jsonlint
+    working_dir: /code
+    pull_policy: missing
+    image: pipelinecomponents/jsonlint:0.22.7
+    volumes:
+      - ..:/code:ro
+    tmpfs:
+      - /tmp
+    entrypoint: /bin/sh
+    command: -c "sleep 10000h"
+    read_only: true
+    restart: unless-stopped
+
+  markdownlint:
+    container_name: transformia-codebase-markdownlint
+    hostname: transformia-codebase-markdownlint
+    working_dir: /code
+    pull_policy: missing
+    image: pipelinecomponents/markdownlint:0.14.5
+    volumes:
+      - ..:/code:ro
+    tmpfs:
+      - /tmp
+    entrypoint: /bin/sh
+    command: -c "sleep 10000h"
+    read_only: true
+    restart: unless-stopped
+
+  yamllint:
+    container_name: transformia-codebase-yamllint
+    hostname: transformia-codebase-yamllint
+    working_dir: /code
+    pull_policy: missing
+    image: pipelinecomponents/yamllint:0.35.6
+    volumes:
+      - ..:/code:ro
+    tmpfs:
+      - /tmp
+    entrypoint: /bin/sh
+    command: -c "sleep 10000h"
+    read_only: true
+    restart: unless-stopped

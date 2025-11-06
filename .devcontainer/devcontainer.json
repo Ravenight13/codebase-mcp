@@ -1,0 +1,26 @@
+{
+  "name": "Codebase MCP",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "claude",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "code",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash"
+          }
+        }
+      },
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml"
+      ]
+    }
+  },
+  "shutdownAction": "stopCompose"
+}

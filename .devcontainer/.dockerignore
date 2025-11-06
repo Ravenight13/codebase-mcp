@@ -1,0 +1,3 @@
+# Devcontainer configuration (not needed in image)
+devcontainer.json
+docker-compose.yml

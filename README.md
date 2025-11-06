@@ -88,6 +88,48 @@ search_code(query="authentication logic", project_id="client-a")
 
 **Optional Integration**: The `project_id` can be automatically resolved from Git repository context when the optional [workflow-mcp](https://github.com/workflow-mcp) server is configured. Without workflow-mcp, all operations default to a single shared workspace.
 
+## Quick Start with Docker
+
+The easiest way to get started with Codebase MCP Server is using Docker. Start the entire stack with one command:
+
+```bash
+# Clone repository
+git clone https://github.com/cliffclarke/codebase-mcp.git
+cd codebase-mcp
+
+# Copy environment configuration
+cp .env.example .env
+
+# Start all services (PostgreSQL, Ollama, Codebase MCP)
+docker-compose up
+
+# In another terminal, run integration tests
+docker-compose exec codebase-mcp pytest tests/integration/ -v
+
+# When done, clean up
+docker-compose down -v
+```
+
+**What this gives you:**
+- ✅ PostgreSQL 14 database with pgvector extension
+- ✅ Ollama service with nomic-embed-text model
+- ✅ Codebase MCP Server running and ready for indexing
+- ✅ Automatic database migrations
+- ✅ Hot reload development (code changes reflect immediately)
+- ✅ All services healthy within 2 minutes
+
+**For detailed Docker setup instructions, see:**
+- [Docker Setup Guide](docs/deployment/DOCKER_SETUP.md) - Local development with Docker Compose
+- [Production Deployment](docs/deployment/PRODUCTION_DEPLOYMENT.md) - Running in production with external services
+- [Troubleshooting](docs/deployment/TROUBLESHOOTING.md) - Common issues and solutions
+- [CI/CD Integration](docs/deployment/CI_CD_INTEGRATION.md) - Docker in GitHub Actions and other CI/CD
+
+**Without Docker (Manual Setup)**:
+
+If you prefer manual setup, follow the traditional installation steps below.
+
+---
+
 ## Quick Start
 
 ### 1. Database Setup
