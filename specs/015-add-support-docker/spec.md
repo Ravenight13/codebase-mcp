@@ -39,7 +39,7 @@ A DevOps engineer has production servers and wants to deploy the Codebase MCP Se
 
 1. **Given** a production server with Docker installed, **When** a DevOps engineer builds the Docker image using `docker build -t codebase-mcp:latest .` and runs it with required environment variables (REGISTRY_DATABASE_URL, OLLAMA_BASE_URL), **Then** the server starts successfully and is ready to accept indexing and search requests.
 
-2. **Given** the production container is running, **When** a health check endpoint is called (Docker HEALTHCHECK or HTTP endpoint), **Then** the container reports healthy status.
+2. **Given** the production container is running, **When** a Docker health check script queries the `health://status` MCP resource, **Then** the container reports healthy status within 5 seconds.
 
 3. **Given** the container is running indexing operations, **When** the container receives a SIGTERM signal, **Then** it gracefully shuts down, waiting for in-flight operations to complete (with a timeout) before exiting.
 
@@ -91,13 +91,15 @@ A CI/CD system (GitHub Actions, GitLab CI, etc.) needs to run automated tests wi
 
 - **FR-008**: docker-compose.yml MUST include a .env.example file documenting all required and optional environment variables with sensible defaults.
 
-- **FR-009**: System MUST implement health checks for all services (PostgreSQL, Ollama, MCP server) with appropriate timeouts and retry logic.
+- **FR-009**: System MUST implement health checks for all services (PostgreSQL, Ollama, MCP server) with appropriate timeouts and retry logic. MCP server health checks MUST use the existing `health://status` MCP resource accessed via a custom health check script.
 
-- **FR-010**: Dockerfile MUST support multiple Python versions (3.11, 3.12, 3.13) either through build arguments or separate image variants.
+- **FR-010**: Dockerfile MUST use Python 3.12 as the base Python version. Multi-version support (3.11, 3.13) deferred to future enhancements.
 
 - **FR-011**: System MUST provide comprehensive deployment documentation including: setup instructions, configuration guide, troubleshooting, and example deployment scenarios (local, staging, production).
 
 - **FR-012**: System MUST support running tests in Docker using `docker-compose -f docker-compose.test.yml up` without requiring additional setup.
+
+- **FR-013**: Logging MUST use the existing application logging configuration. Container logs are captured via `docker logs` command. No changes to logging format or structure required for this feature.
 
 ### Key Entities
 
@@ -131,14 +133,23 @@ A CI/CD system (GitHub Actions, GitLab CI, etc.) needs to run automated tests wi
 
 - **SC-010**: All existing functionality (indexing, searching, health checks, metrics) works identically in containerized and non-containerized deployments.
 
+## Clarifications
+
+### Session 2025-11-06
+
+- Q1: Health check mechanism for Docker? → A: Use MCP resources only (`health://status` MCP resource). Docker health checks via custom script that queries the resource. No HTTP endpoint required.
+- Q2: Python version strategy? → A: Use Python 3.12 only for initial implementation. Multi-version support deferred to future feature.
+- Q3: Observability and logging? → A: Use existing application logging as-is. Container logs captured via `docker logs`. Structured logging and metrics endpoints deferred to future observability feature.
+
 ## Assumptions
 
 - Docker and Docker Compose are installed on the user's machine.
 - PostgreSQL 14+ and Ollama services are either containerized as part of the docker-compose stack OR available as external services via environment variables.
-- The MCP server code is compatible with Python 3.11+ (already verified by the project).
+- The MCP server uses Python 3.12 for container image (existing support for 3.11, 3.12, 3.13 maintained in codebase for non-containerized deployments).
 - Signal handling (SIGTERM) for graceful shutdown is implemented or can be added without breaking existing functionality.
 - Developers are familiar with basic Docker and docker-compose concepts.
 - The project uses environment variables for configuration (already the case with Pydantic BaseSettings).
+- Docker health checks access the MCP server via the existing `health://status` resource (not via HTTP endpoint).
 
 ## Scope & Boundaries
 
