@@ -1,0 +1,71 @@
+# Git and version control
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+ENV/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.iml
+
+# Logs
+*.log
+*.logs
+/tmp/
+/logs/
+
+# Environment files (never include .env in Docker build)
+.env
+.env.local
+.env.*.local
+
+# Documentation (don't need in runtime image)
+README.md
+docs/
+*.md
+.specify/
+specs/
+
+# Testing
+tests/
+test/
+.pytest_cache/
+coverage/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Misc
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+.pre-commit-config.yaml
+pyproject.toml
+setup.py
+setup.cfg
+requirements*.txt

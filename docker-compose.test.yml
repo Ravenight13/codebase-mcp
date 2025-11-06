@@ -1,0 +1,101 @@
+version: "3.9"
+
+# Codebase MCP Server - Docker Compose for Testing
+# Isolated environment for running tests
+# Start: docker-compose -f docker-compose.test.yml up -d
+# Run tests: docker-compose -f docker-compose.test.yml exec codebase-mcp pytest
+# Cleanup: docker-compose -f docker-compose.test.yml down -v
+
+services:
+  # =========================================================================
+  # PostgreSQL 14+ (Test Instance)
+  # =========================================================================
+  postgresql:
+    image: postgres:14
+    container_name: test-postgresql
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codebase_test}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-test-password}
+    # No port mapping - only accessible from test container
+    volumes:
+      # tmpfs for faster test database (not persisted)
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # =========================================================================
+  # Ollama (Test Instance)
+  # =========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: test-ollama
+    environment:
+      OLLAMA_MODELS: /root/.ollama/models
+    # No port mapping - only accessible from test container
+    volumes:
+      # tmpfs for faster test model caching (not persisted)
+      - /root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - test-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # =========================================================================
+  # Codebase MCP Server (Test Instance)
+  # =========================================================================
+  codebase-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: test-codebase-mcp
+    environment:
+      # Test database configuration
+      REGISTRY_DATABASE_URL: ${REGISTRY_DATABASE_URL:-postgresql+asyncpg://postgres:test-password@postgresql:5432/codebase_test}
+      # Ollama service
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # Database
+      DB_HOST: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-test-password}
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+    stdin_open: true
+    tty: true
+    # No volume mounts - use Dockerfile COPY instead
+    # This ensures tests run against deployed code, not live source
+    networks:
+      - test-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*server_fastmcp"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# ============================================================================
+# Networks (Isolated from Development)
+# ============================================================================
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,119 @@
+version: "3.9"
+
+# Codebase MCP Server - Docker Compose for Local Development
+# Start the entire stack: docker-compose up
+# Clean reset: docker-compose down -v
+
+services:
+  # =========================================================================
+  # PostgreSQL 14+ with pgvector extension
+  # =========================================================================
+  postgresql:
+    image: postgres:14
+    container_name: codebase-postgresql
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codebase_mcp}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume for persistent data across restarts
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codebase-network
+
+  # =========================================================================
+  # Ollama - Embedding service for semantic search
+  # =========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: codebase-ollama
+    environment:
+      # Models are stored in ollama_data volume
+      OLLAMA_MODELS: /root/.ollama/models
+    ports:
+      - "11434:11434"
+    volumes:
+      # Named volume for model caching (large, persistent)
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - codebase-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # =========================================================================
+  # Codebase MCP Server
+  # =========================================================================
+  codebase-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codebase-mcp
+    environment:
+      # Required: Database connection
+      REGISTRY_DATABASE_URL: ${REGISTRY_DATABASE_URL:-postgresql+asyncpg://postgres:dev-password@postgresql:5432/codebase_mcp}
+      # Required: Ollama service
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Optional: Embedding model
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # Database configuration
+      DB_HOST: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-password}
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    stdin_open: true
+    tty: true
+    volumes:
+      # Source code volume with :cached mode for macOS performance
+      # Enable hot reload: changes to src/ are reflected immediately
+      - .:/workspace:cached
+      # Exclude volumes to prevent syncing
+      - /workspace/.git
+      - /workspace/.venv
+      - /workspace/__pycache__
+    networks:
+      - codebase-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*server_fastmcp"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# ============================================================================
+# Named Volumes for Persistence
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+# ============================================================================
+# Network Configuration
+# ============================================================================
+# Services discover each other by hostname on this network
+networks:
+  codebase-network:
+    driver: bridge
