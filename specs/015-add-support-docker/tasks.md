@@ -15,12 +15,12 @@
 
 **Purpose**: Create Docker-related directory structure and configuration templates
 
-- [ ] T001 Create `scripts/docker/` directory structure for entrypoint script
-- [ ] T002 Create `docs/deployment/` directory structure for Docker documentation
-- [ ] T003 Create `.dockerignore` file to exclude unnecessary files from Docker build context
-- [ ] T004 [P] Create `.env.example` template with all required and optional environment variables
+- [X] T001 Create `scripts/docker/` directory structure for entrypoint script
+- [X] T002 Create `docs/deployment/` directory structure for Docker documentation
+- [X] T003 Create `.dockerignore` file to exclude unnecessary files from Docker build context
+- [X] T004 [P] Create `.env.example` template with all required and optional environment variables
 
-**Checkpoint**: Directory structure and configuration templates ready
+**Checkpoint**: Directory structure and configuration templates ready ✅
 
 ---
 
@@ -30,21 +30,21 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 Create `Dockerfile` with two-stage build using `python:3.12-slim` base image in repository root
+- [X] T005 Create `Dockerfile` with two-stage build using `python:3.12-slim` base image in repository root
   - Stage 1 (builder): Install dependencies from requirements.txt
   - Stage 2 (runtime): Copy only necessary files and dependencies
   - Target final image size: <500 MB (SC-002)
   - Include non-root user for security
   - Entry point configured for `/app/src/mcp/server_fastmcp.py`
 
-- [ ] T006 Create `scripts/docker/entrypoint.sh` startup script in repository root:
+- [X] T006 Create `scripts/docker/entrypoint.sh` startup script in repository root:
   - Wait for PostgreSQL availability with exponential backoff (up to 30s)
   - Run `alembic upgrade head` for automatic migrations
   - Handle migration failures gracefully with logging
   - Start MCP server via `python src/mcp/server_fastmcp.py`
   - Exit with proper error codes (0=success, 1=failure)
 
-- [ ] T007 [P] Create base `docker-compose.yml` for development environment in repository root:
+- [X] T007 [P] Create base `docker-compose.yml` for development environment in repository root:
   - PostgreSQL 14 service: port 5432, health check via `pg_isready`
   - Ollama service: port 11434, health check via curl
   - Codebase MCP service: depends on postgresql and ollama, uses built Dockerfile
@@ -52,19 +52,19 @@
   - Networks: Single bridge network with service discovery by hostname
   - Environment file: `.env` (created from `.env.example`)
 
-- [ ] T008 [P] Create `docker-compose.test.yml` for testing environment:
+- [X] T008 [P] Create `docker-compose.test.yml` for testing environment:
   - Same services as docker-compose.yml but without source code volume mount
   - Use `COPY src/ /app/src/` from Dockerfile (no live reload)
   - Isolated network and container names (e.g., `test_postgresql`, `test_codebase_mcp`)
   - Environment variables for testing (test database, test model)
   - No volume persistence (clean state per test run)
 
-- [ ] T009 Configure entrypoint.sh to be executable:
+- [X] T009 Configure entrypoint.sh to be executable:
   - Set executable permission on `scripts/docker/entrypoint.sh` (chmod +x)
   - Verify shell script syntax with `bash -n`
   - Test in isolated container that it runs without errors
 
-**Checkpoint**: Dockerfile, docker-compose files, and entrypoint script ready - foundation complete
+**Checkpoint**: Dockerfile, docker-compose files, and entrypoint script ready - foundation complete ✅
 
 ---
 
@@ -76,13 +76,13 @@
 
 ### Validation for User Story 1
 
-- [ ] T010 [US1] Validate docker-compose.yml structure and configuration in `specs/015-add-support-docker/contracts/docker-compose.schema.json`
+- [X] T010 [US1] Validate docker-compose.yml structure and configuration in `specs/015-add-support-docker/contracts/docker-compose.schema.json`
   - Define JSON schema for docker-compose syntax
   - Validate services: postgresql, ollama, codebase-mcp
   - Validate depends_on, health checks, volumes, ports
   - Schema includes environment variable requirements
 
-- [ ] T011 [US1] Create integration test scenario in `docs/deployment/DOCKER_SETUP.md`:
+- [X] T011 [US1] Create integration test scenario in `docs/deployment/DOCKER_SETUP.md`:
   - Step-by-step: clone → copy .env.example → docker-compose up
   - Verify all services start within 120 seconds
   - Check health status with `docker-compose ps`
@@ -92,20 +92,20 @@
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Create health check script in `scripts/docker/healthcheck.sh`:
+- [X] T012 [P] [US1] Create health check script in `scripts/docker/healthcheck.sh`:
   - Simple process check: `pgrep -f "python.*server_fastmcp"`
   - Returns exit code 0 (healthy) or 1 (unhealthy)
   - Used by Docker HEALTHCHECK directive in Dockerfile
   - Timeout target: <1 second, <100 bytes
 
-- [ ] T013 [US1] Update Dockerfile to include health check configuration:
+- [X] T013 [US1] Update Dockerfile to include health check configuration:
   - Add HEALTHCHECK instruction with `test: ["CMD", "pgrep", "-f", "python.*server_fastmcp"]`
   - start_period: 20s (grace period after container start)
   - interval: 30s (check frequency)
   - timeout: 5s (max execution time)
   - retries: 3 (fail after 3 consecutive failures)
 
-- [ ] T014 [P] [US1] Update docker-compose.yml with proper health check configuration:
+- [X] T014 [P] [US1] Update docker-compose.yml with proper health check configuration:
   - PostgreSQL health check: `test: ["CMD-SHELL", "pg_isready -U postgres"]`
     - start_period: 10s, interval: 10s, timeout: 5s, retries: 5
   - Ollama health check: `test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]`
@@ -113,7 +113,7 @@
   - MCP server health check: pgrep-based (T012)
     - start_period: 20s, interval: 30s, timeout: 5s, retries: 3
 
-- [ ] T015 [P] [US1] Create `.env` file from `.env.example` template for development:
+- [X] T015 [P] [US1] Create `.env` file from `.env.example` template for development:
   - `REGISTRY_DATABASE_URL=postgresql+asyncpg://postgres:dev-password@postgresql:5432/codebase_mcp`
   - `OLLAMA_BASE_URL=http://ollama:11434`
   - `OLLAMA_EMBEDDING_MODEL=nomic-embed-text`
@@ -121,14 +121,14 @@
   - `POSTGRES_DB=codebase_mcp`
   - Document in `.env.example` with comments for each variable
 
-- [ ] T016 [US1] Verify Dockerfile builds successfully and meets constraints:
+- [X] T016 [US1] Verify Dockerfile builds successfully and meets constraints:
   - Build image: `docker build -t codebase-mcp:latest .`
   - Check image size: `docker images codebase-mcp` - must be <500 MB
   - Verify layer caching works: rebuild with code-only change should be <30s
   - Test first build: should complete in <5 minutes
   - Verify no errors or warnings in build output
 
-- [ ] T017 [US1] Test docker-compose.yml orchestration end-to-end:
+- [X] T017 [US1] Test docker-compose.yml orchestration end-to-end:
   - Start stack: `docker-compose up -d`
   - Monitor startup: `docker-compose ps` shows all services starting
   - Wait for health: all services should be "healthy" within 120s
@@ -136,21 +136,21 @@
   - Verify connectivity: `docker-compose exec codebase-mcp curl http://ollama:11434/api/tags`
   - Clean shutdown: `docker-compose down -v` removes containers and volumes
 
-- [ ] T018 [US1] Test volume mount hot reload functionality:
+- [X] T018 [US1] Test volume mount hot reload functionality:
   - Start stack with `docker-compose up`
   - Modify `src/mcp/server_fastmcp.py` (add comment/docstring)
   - Verify change reflected immediately (no container restart needed)
   - Test from container: `docker-compose exec codebase-mcp cat /workspace/src/mcp/server_fastmcp.py`
   - Document in DOCKER_SETUP.md for developers
 
-- [ ] T019 [US1] Test database persistence and clean reset:
+- [X] T019 [US1] Test database persistence and clean reset:
   - Create database state: `docker-compose exec codebase-mcp some-indexing-command`
   - Verify data persisted: `docker-compose exec postgresql psql -U postgres -c "SELECT COUNT(*) FROM code_files;"`
   - Stop and restart: `docker-compose restart postgresql` - data should persist
   - Clean reset: `docker-compose down -v` should remove all volumes
   - Restart: `docker-compose up -d` should start with empty database
 
-**Checkpoint**: User Story 1 complete - developers can use `docker-compose up` for local development, tests pass
+**Checkpoint**: User Story 1 complete - developers can use `docker-compose up` for local development, tests pass ✅
 
 ---
 

@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Docker Compose Validation Schema for Codebase MCP Server",
+  "description": "JSON Schema for validating docker-compose.yml structure and configuration",
+  "type": "object",
+  "required": ["version", "services"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["3.9", "3.8"],
+      "description": "Docker Compose file format version"
+    },
+    "services": {
+      "type": "object",
+      "required": ["postgresql", "ollama", "codebase-mcp"],
+      "properties": {
+        "postgresql": {
+          "type": "object",
+          "required": ["image", "environment"],
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "^postgres:14"
+            },
+            "environment": {
+              "type": "object",
+              "required": ["POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"]
+            },
+            "healthcheck": {
+              "type": "object",
+              "required": ["test"]
+            }
+          }
+        },
+        "ollama": {
+          "type": "object",
+          "required": ["image"],
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "^ollama/ollama"
+            },
+            "healthcheck": {
+              "type": "object"
+            }
+          }
+        },
+        "codebase-mcp": {
+          "type": "object",
+          "required": ["build", "environment"],
+          "properties": {
+            "build": {
+              "type": "object",
+              "required": ["context", "dockerfile"]
+            },
+            "environment": {
+              "type": "object",
+              "required": ["REGISTRY_DATABASE_URL", "OLLAMA_BASE_URL"]
+            },
+            "depends_on": {
+              "type": "object",
+              "required": ["postgresql", "ollama"]
+            },
+            "volumes": {
+              "type": "array"
+            }
+          }
+        }
+      }
+    }
+  }
+}
